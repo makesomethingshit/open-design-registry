@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageTypes, maxImageBytes, projectSchema, projectUpdateSchema, slugify } from "./project-validation";
+import { imageTypes, maxImageBytes, projectSchema, projectUpdateSchema, revisionUrlSchema, slugify } from "./project-validation";
 
 describe("project validation", () => {
   it("accepts a valid project and creates a stable slug", () => {
@@ -15,5 +15,9 @@ describe("project validation", () => {
     const existing = { title: "old", description: "keep this", license: "MIT", isPublic: false };
     const update = projectUpdateSchema.parse({ title: "renamed" });
     expect({ ...existing, ...update }).toEqual({ title: "renamed", description: "keep this", license: "MIT", isPublic: false });
+  });
+  it("only accepts HTTP(S) revision sources", () => {
+    expect(revisionUrlSchema.safeParse("https://example.com/design.zip").success).toBe(true);
+    expect(revisionUrlSchema.safeParse("ftp://example.com/design.zip").success).toBe(false);
   });
 });

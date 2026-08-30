@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const bucket = process.env.S3_BUCKET ?? "open-design-registry";
 const client = new S3Client({
@@ -11,8 +11,20 @@ const client = new S3Client({
 });
 
 export async function putCover(file: File, key: string) {
+  return putObject(file, key);
+}
+
+export async function putObject(file: File, key: string) {
   const body = Buffer.from(await file.arrayBuffer());
   await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: file.type }));
+  return objectUrl(key);
+}
+
+export async function deleteObject(key: string) {
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+function objectUrl(key: string) {
   const endpoint = process.env.S3_ENDPOINT;
   return endpoint ? `${endpoint.replace(/\/$/, "")}/${bucket}/${key}` : `https://${bucket}.s3.${process.env.S3_REGION ?? "us-east-1"}.amazonaws.com/${key}`;
 }
