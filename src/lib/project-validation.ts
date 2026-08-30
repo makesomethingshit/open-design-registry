@@ -7,6 +7,13 @@ export const projectSchema = z.object({
   isPublic: z.boolean().default(true),
 });
 
+export const projectUpdateSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(2000).optional(),
+  license: z.string().trim().min(1).max(80).optional(),
+  isPublic: z.boolean().optional(),
+}).strict();
+
 export const imageTypes = new Set(["image/png", "image/jpeg"]);
 export const maxImageBytes = 10 * 1024 * 1024;
 

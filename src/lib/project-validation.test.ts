@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageTypes, maxImageBytes, projectSchema, slugify } from "./project-validation";
+import { imageTypes, maxImageBytes, projectSchema, projectUpdateSchema, slugify } from "./project-validation";
 
 describe("project validation", () => {
   it("accepts a valid project and creates a stable slug", () => {
@@ -10,5 +10,10 @@ describe("project validation", () => {
     expect(imageTypes.has("image/png")).toBe(true);
     expect(imageTypes.has("image/svg+xml")).toBe(false);
     expect(maxImageBytes).toBe(10 * 1024 * 1024);
+  });
+  it("does not add defaults during a partial project update", () => {
+    const existing = { title: "old", description: "keep this", license: "MIT", isPublic: false };
+    const update = projectUpdateSchema.parse({ title: "renamed" });
+    expect({ ...existing, ...update }).toEqual({ title: "renamed", description: "keep this", license: "MIT", isPublic: false });
   });
 });
