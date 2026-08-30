@@ -1,0 +1,18 @@
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
+const bucket = process.env.S3_BUCKET ?? "open-design-registry";
+const client = new S3Client({
+  region: process.env.S3_REGION ?? "us-east-1",
+  endpoint: process.env.S3_ENDPOINT || undefined,
+  forcePathStyle: Boolean(process.env.S3_ENDPOINT),
+  credentials: process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY
+    ? { accessKeyId: process.env.S3_ACCESS_KEY_ID, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY }
+    : undefined,
+});
+
+export async function putCover(file: File, key: string) {
+  const body = Buffer.from(await file.arrayBuffer());
+  await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: file.type }));
+  const endpoint = process.env.S3_ENDPOINT;
+  return endpoint ? `${endpoint.replace(/\/$/, "")}/${bucket}/${key}` : `https://${bucket}.s3.${process.env.S3_REGION ?? "us-east-1"}.amazonaws.com/${key}`;
+}

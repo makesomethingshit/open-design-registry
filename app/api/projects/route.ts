@@ -1,0 +1,34 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/src/lib/auth";
+import { prisma } from "@/src/lib/prisma";
+import { getSession } from "@/src/lib/session";
+import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/project-validation";
+import { putCover } from "@/src/lib/storage";
+
+export async function GET() {
+  const session = await getSession();
+  const projects = await prisma.project.findMany({
+    where: session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true },
+    orderBy: { createdAt: "desc" },
+    select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
+  });
+  return NextResponse.json(projects);
+}
+
+export async function POST(request: Request) {
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const form = await request.formData();
+  const parsed = projectSchema.safeParse({
+    title: form.get("title"), description: form.get("description") ?? "", license: form.get("license"), isPublic: form.get("isPublic") === "on" || form.get("isPublic") === "true",
+  });
+  const cover = form.get("cover");
+  if (!parsed.success || !(cover instanceof File) || !imageTypes.has(cover.type) || cover.size > maxImageBytes) {
+    return NextResponse.json({ error: "제목, 라이선스와 10MB 이하 PNG/JPG 대표 이미지를 확인하세요." }, { status: 400 });
+  }
+  const baseSlug = slugify(parsed.data.title);
+  const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
+  const coverUrl = await putCover(cover, `covers/${session.user.id}/${slug}`);
+  const project = await prisma.project.create({ data: { ...parsed.data, slug, coverUrl, ownerId: session.user.id } });
+  return NextResponse.json(project, { status: 201 });
+}
