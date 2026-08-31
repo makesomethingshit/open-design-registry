@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { imageTypes, maxImageBytes, previewAltText, projectSchema, projectUpdateSchema, reportSchema, revisionChangeDescription, revisionTitle, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
+import { imageTypes, maxImageBytes, previewAltText, previewTypes, projectSchema, projectUpdateSchema, reportSchema, revisionChangeDescription, revisionTitle, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
 
 describe("project validation", () => {
   it("accepts a valid project and creates a stable slug", () => {
@@ -11,6 +11,8 @@ describe("project validation", () => {
   it("keeps image rules intentionally narrow", () => {
     expect(imageTypes.has("image/png")).toBe(true);
     expect(imageTypes.has("image/svg+xml")).toBe(false);
+    expect(previewTypes.has("text/html")).toBe(true);
+    expect(previewTypes.has("text/javascript")).toBe(false);
     expect(maxImageBytes).toBe(10 * 1024 * 1024);
   });
   it("does not add defaults during a partial project update", () => {
@@ -55,5 +57,10 @@ describe("project validation", () => {
     expect(sql).toContain("No change description provided.");
     expect(sql).toContain('Revision_title_non_empty');
     expect(sql).toContain('Preview_altText_non_empty');
+  });
+  it("limits stored preview MIME types to supported formats", () => {
+    const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260831070000_html_previews/migration.sql"), "utf8");
+    expect(sql).toContain('Preview_mime_type_check');
+    expect(sql).toContain("'text/html'");
   });
 });

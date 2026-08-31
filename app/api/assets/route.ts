@@ -43,6 +43,9 @@ export async function GET(request: Request) {
     if (!object.Body) return notFound();
     const headers = new Headers({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
     if (object.ContentType) headers.set("Content-Type", object.ContentType);
+    if (object.ContentType?.split(";", 1)[0].trim().toLowerCase() === "text/html") {
+      headers.set("Content-Security-Policy", "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' https:; img-src data: https:; font-src data: https:; object-src 'none'; base-uri 'none'; form-action 'none'; connect-src 'none'");
+    }
     if (object.ContentLength !== undefined) headers.set("Content-Length", String(object.ContentLength));
     if (revisions.length) headers.set("Content-Disposition", "attachment");
     const body = object.Body as typeof object.Body & { transformToWebStream?: () => ReadableStream };

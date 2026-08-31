@@ -72,6 +72,20 @@ describe("revision publishing route", () => {
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceKey: undefined, sourceUrl: "https://example.com/design.zip" }) }));
   });
 
+  it("publishes an HTML preview through the same atomic pipeline", async () => {
+    const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["<script>window.ran = true</script>"], "preview.html", { type: "text/html" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.putObject).toHaveBeenCalledTimes(1);
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ previews: { create: [expect.objectContaining({ mimeType: "text/html" })] } }) }));
+  });
+
+  it("rejects executable preview types", async () => {
+    const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["alert(1)"], "preview.js", { type: "text/javascript" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/PNG\/JPG\/HTML/i) });
+    expect(mocks.putObject).not.toHaveBeenCalled();
+  });
+
   it("ignores an empty optional source input when a source URL is provided", async () => {
     const response = await POST(request({ source: new File([], "", { type: "application/octet-stream" }), sourceUrl: "https://example.com/design.zip", previews: new File(["jpg"], "preview.jpg", { type: "image/jpeg" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
