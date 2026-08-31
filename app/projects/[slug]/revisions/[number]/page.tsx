@@ -23,6 +23,6 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <h1>Revision {revision.number}</h1>
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
     <p>{revision.changeDescription || "No change description provided."}</p>
-    <RevisionDiff current={revision.previews} previous={previous?.previews} currentNumber={revision.number} previousNumber={previous?.number} /><ReportForm projectSlug={project.slug} revisionId={revision.id} />
+    <RevisionDiff current={revision.previews} previous={previous?.previews} currentNumber={revision.number} previousNumber={previous?.number} /><ReportForm revisionId={revision.id} />
   </article>;
 }
