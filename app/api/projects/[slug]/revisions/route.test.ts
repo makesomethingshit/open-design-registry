@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   findProject: vi.fn(),
   transaction: vi.fn(),
   createRevision: vi.fn(),
+  updateRevision: vi.fn(),
   findLatest: vi.fn(),
   putObject: vi.fn(),
   deleteObject: vi.fn(),
@@ -38,9 +39,10 @@ describe("revision publishing route", () => {
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner" });
     mocks.findLatest.mockResolvedValue(undefined);
     mocks.createRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
+    mocks.updateRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.transaction.mockImplementation(async (callback) => callback({
       $queryRaw: vi.fn(),
-      revision: { findFirst: mocks.findLatest, create: mocks.createRevision },
+      revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
     }));
     mocks.putObject.mockImplementation(async (_file: File, key: string) => `https://cdn/${key}`);
   });
@@ -59,7 +61,8 @@ describe("revision publishing route", () => {
     const response = await POST(request({ source: new File(["source"], name, { type }), previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
     expect(mocks.putObject).toHaveBeenCalledTimes(2);
-    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: "Landing page update", changeDescription: "Updated the landing page layout", sourceUrl: undefined, sourceKey: expect.stringMatching(/^revisions\/project\//), previews: { create: [expect.objectContaining({ altText: "Preview 1" })] } }) }));
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: "Landing page update", changeDescription: "Updated the landing page layout", sourceUrl: undefined, sourceKey: expect.stringMatching(/^revisions\/project\//), isPublished: false, previews: { create: [expect.objectContaining({ altText: "Preview 1" })] } }) }));
+    expect(mocks.updateRevision).toHaveBeenCalledWith({ where: { id: "revision" }, data: { isPublished: true }, include: { previews: true } });
   });
 
   it("publishes an HTTP(S) source URL without a source key", async () => {
