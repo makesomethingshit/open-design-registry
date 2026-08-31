@@ -15,7 +15,7 @@ describe("revision fork route", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "forker" } });
     mocks.findProject.mockResolvedValue({ id: "project", title: "Design", description: "Notes", license: "CC BY 4.0", coverUrl: "https://cdn/cover", isPublic: true, owner: { id: "owner", name: "Author" }, revisions: [{ id: "revision", number: 1 }] });
-    mocks.createProject.mockResolvedValue({ slug: "design-fork" });
+    mocks.createProject.mockResolvedValue({ slug: "design-fork", coverUrl: "/api/assets?key=covers/forker/design-fork" });
   });
 
   it.each([undefined, false])("rejects missing or false rights confirmation (%s)", async (rightsConfirmed) => {

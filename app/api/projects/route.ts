@@ -3,7 +3,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/project-validation";
-import { putCover } from "@/src/lib/storage";
+import { publicAssetUrl, putCover } from "@/src/lib/storage";
 
 export async function GET() {
   const session = await getSession();
@@ -12,7 +12,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
   });
-  return NextResponse.json(projects);
+  return NextResponse.json(projects.map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) })));
 }
 
 export async function POST(request: Request) {
@@ -31,5 +31,5 @@ export async function POST(request: Request) {
   const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
   const coverUrl = await putCover(cover, `covers/${session.user.id}/${slug}`);
   const project = await prisma.project.create({ data: { ...parsed.data, slug, coverUrl, ownerId: session.user.id, ...(parsed.data.isPublic ? { publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id } : {}) } });
-  return NextResponse.json(project, { status: 201 });
+  return NextResponse.json({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }, { status: 201 });
 }
