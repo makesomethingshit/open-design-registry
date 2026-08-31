@@ -8,10 +8,8 @@ import {
   maxRevisionPreviewTotalBytes,
   maxRevisionPreviews,
   maxRevisionSourceBytes,
-  revisionUrlSchema,
+  validateRevisionSource,
 } from "@/src/lib/project-validation";
-
-const keyPattern = /^[\w./-]{1,512}$/;
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -43,12 +41,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const sourceUrlValue = form.get("sourceUrl");
   const sourceKeyValue = form.get("sourceKey");
   const sourceUrl = typeof sourceUrlValue === "string" && sourceUrlValue.trim() ? sourceUrlValue.trim() : undefined;
-  const sourceKey = typeof sourceKeyValue === "string" && sourceKeyValue.trim() ? sourceKeyValue.trim() : undefined;
-  if (Number(Boolean(sourceFile)) + Number(Boolean(sourceUrl)) + Number(Boolean(sourceKey)) !== 1) {
-    return error("Provide exactly one source file, sourceUrl, or sourceKey");
-  }
-  if (sourceUrl && !revisionUrlSchema.safeParse(sourceUrl).success) return error("sourceUrl must be a valid HTTP(S) URL");
-  if (sourceKey && (!keyPattern.test(sourceKey) || sourceKey.includes("..") || (!sourceKey.startsWith(`staging/${session.user.id}/`) && !sourceKey.startsWith(`revisions/${project.id}/`)))) return error("Invalid sourceKey");
+  const sourceError = validateRevisionSource({ hasFile: Boolean(sourceFile), sourceUrl, sourceKey: typeof sourceKeyValue === "string" ? sourceKeyValue : undefined });
+  if (sourceError) return error(sourceError);
   if (sourceFile && sourceFile.size > maxRevisionSourceBytes) return error("Source file exceeds the 100MB limit");
 
   const previews = [...form.getAll("previews"), ...form.getAll("preview")].filter((value): value is File => value instanceof File);
@@ -59,7 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const uploadedKeys: string[] = [];
   try {
-    let publishedSourceKey = sourceKey;
+    let publishedSourceKey: string | undefined;
     if (sourceFile) {
       publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/source-${safeName(sourceFile.name)}`;
       await putObject(sourceFile, publishedSourceKey);
