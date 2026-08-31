@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { imageTypes, maxImageBytes, projectSchema, projectUpdateSchema, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
+import { imageTypes, maxImageBytes, projectSchema, projectUpdateSchema, reportSchema, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
 
 describe("project validation", () => {
   it("accepts a valid project and creates a stable slug", () => {
@@ -21,6 +21,10 @@ describe("project validation", () => {
   it("only accepts HTTP(S) revision sources", () => {
     expect(revisionUrlSchema.safeParse("https://example.com/design.zip").success).toBe(true);
     expect(revisionUrlSchema.safeParse("ftp://example.com/design.zip").success).toBe(false);
+  });
+  it("requires a concise report reason", () => {
+    expect(reportSchema.safeParse({ reason: "Copyright concern" }).success).toBe(true);
+    expect(reportSchema.safeParse({ reason: "" }).success).toBe(false);
   });
   it("requires one trusted source and never accepts a client object key", () => {
     expect(validateRevisionSource({ hasFile: true })).toBeUndefined();

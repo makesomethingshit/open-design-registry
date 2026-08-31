@@ -12,7 +12,13 @@ export const projectUpdateSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   license: z.string().trim().min(1).max(80).optional(),
   isPublic: z.boolean().optional(),
+  rightsConfirmed: z.boolean().optional(),
 }).strict();
+
+export const reportSchema = z.object({
+  reason: z.string().trim().min(1).max(120),
+  details: z.string().trim().max(2000).default(""),
+});
 
 export const imageTypes = new Set(["image/png", "image/jpeg"]);
 export const maxImageBytes = 10 * 1024 * 1024;

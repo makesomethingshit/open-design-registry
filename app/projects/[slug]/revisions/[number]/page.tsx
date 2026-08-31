@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import RevisionDiff from "../../revision-diff";
+import ReportForm from "../../../../reports/report-form";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,6 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <h1>Revision {revision.number}</h1>
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
     <p>{revision.changeDescription || "No change description provided."}</p>
-    <RevisionDiff current={revision.previews} previous={previous?.previews} currentNumber={revision.number} previousNumber={previous?.number} />
+    <RevisionDiff current={revision.previews} previous={previous?.previews} currentNumber={revision.number} previousNumber={previous?.number} /><ReportForm revisionId={revision.id} />
   </article>;
 }

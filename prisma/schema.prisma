@@ -13,11 +13,13 @@ model User {
   email         String    @unique
   emailVerified Boolean   @default(false)
   image         String?
+  role          String    @default("user")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
   projects      Project[]
+  reports       Report[]
 }
 
 model Session {
@@ -70,14 +72,44 @@ model Project {
   description String
   license     String
   isPublic    Boolean  @default(true)
+  publicationConfirmedAt DateTime?
+  publicationConfirmedBy String?
   coverUrl    String
   ownerId     String
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   revisions   Revision[]
+  reports     Report[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([ownerId])
   @@index([isPublic, createdAt])
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id             String       @id @default(cuid())
+  projectId      String?
+  revisionId     String?
+  reporterId     String
+  reason         String
+  details        String       @default("")
+  status         ReportStatus @default(OPEN)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime     @default(now())
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revision       Revision?    @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  reporter       User         @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([projectId])
+  @@index([revisionId])
 }
 
 model Revision {
@@ -93,6 +125,7 @@ model Revision {
   parent     Revision? @relation("RevisionParent", fields: [parentId], references: [id], onDelete: Restrict)
   children   Revision[] @relation("RevisionParent")
   previews   Preview[]
+  reports    Report[]
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])

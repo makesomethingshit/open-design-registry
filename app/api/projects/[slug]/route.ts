@@ -21,5 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
   if (session.user.id !== project.ownerId) return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: project.isPublic ? 403 : 404 });
   const parsed = projectUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success || !Object.keys(parsed.data).length) return NextResponse.json({ error: "변경할 값을 확인하세요." }, { status: 400 });
-  return NextResponse.json(await prisma.project.update({ where: { slug }, data: parsed.data }));
+  const { rightsConfirmed, ...data } = parsed.data;
+  if (data.isPublic === true && !project.isPublic && !rightsConfirmed) return NextResponse.json({ error: "공개 전 라이선스와 원본 공개 책임을 확인하세요." }, { status: 400 });
+  return NextResponse.json(await prisma.project.update({ where: { slug }, data: { ...data, ...(data.isPublic === true && !project.isPublic ? { publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id } : {}) } }));
 }

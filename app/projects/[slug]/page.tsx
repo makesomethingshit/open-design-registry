@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
+import ReportForm from "../../reports/report-form";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     <img src={project.coverUrl} alt={`${project.title} cover`} />
     <section aria-labelledby="revision-history"><h2 id="revision-history">Revision history</h2>{project.revisions.length ? <ol className="history">{project.revisions.map((revision) => <li key={revision.id}>
       <div className="history-entry"><Link href={`/projects/${project.slug}/revisions/${revision.number}`}><strong>Revision {revision.number}</strong></Link><span className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></span><p>{revision.changeDescription || "No change description provided."}</p></div>
-    </li>)}</ol> : <p>No revisions published yet.</p>}</section>
+    </li>)}</ol> : <p>No revisions published yet.</p>}</section><ReportForm projectSlug={project.slug} />
   </article>;
 }

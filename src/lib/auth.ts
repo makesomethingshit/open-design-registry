@@ -8,6 +8,7 @@ const socialProviders = process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIEN
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
+  user: { additionalFields: { role: { type: "string", required: false, input: false } } },
   emailAndPassword: { enabled: true, autoSignIn: true, requireEmailVerification: false },
   ...(socialProviders ? { socialProviders } : {}),
 });
