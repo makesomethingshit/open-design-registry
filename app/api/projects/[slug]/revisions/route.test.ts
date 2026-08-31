@@ -63,6 +63,12 @@ describe("revision publishing route", () => {
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceKey: undefined, sourceUrl: "https://example.com/design.zip" }) }));
   });
 
+  it("persists preview positions for stable multi-preview pairing", async () => {
+    const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["one"], "one.png", { type: "image/png" }), preview: new File(["two"], "two.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ previews: { create: expect.arrayContaining([expect.objectContaining({ position: 0 }), expect.objectContaining({ position: 1 })]) } }) }));
+  });
+
   it("cleans staged objects and leaves the database untouched on partial upload failure", async () => {
     mocks.putObject.mockResolvedValueOnce("https://cdn/source").mockResolvedValueOnce("https://cdn/preview-0").mockRejectedValueOnce(new Error("storage down"));
     const response = await POST(request({ source: new File(["source"], "source.zip", { type: "application/zip" }), previews: new File(["one"], "one.png", { type: "image/png" }), preview: new File(["two"], "two.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });

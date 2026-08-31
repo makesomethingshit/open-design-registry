@@ -85,6 +85,7 @@ model Revision {
   projectId  String
   number     Int
   parentId   String?
+  changeDescription String @default("")
   sourceKey  String?
   sourceUrl  String?
   createdAt  DateTime  @default(now())
@@ -101,6 +102,7 @@ model Revision {
 model Preview {
   id         String   @id @default(cuid())
   revisionId String
+  position   Int      @default(0)
   key        String
   url        String
   mimeType   String

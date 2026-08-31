@@ -8,6 +8,7 @@ import {
   maxRevisionPreviewTotalBytes,
   maxRevisionPreviews,
   maxRevisionSourceBytes,
+  revisionChangeDescription,
   validateRevisionSource,
 } from "@/src/lib/project-validation";
 
@@ -22,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const session = await auth.api.getSession({ headers: request.headers });
   if (!project.isPublic && session?.user.id !== project.ownerId) return error("Project not found", 404);
   const revisions = await prisma.revision.findMany({
-    where: { projectId: project.id }, orderBy: { number: "asc" }, include: { previews: true },
+    where: { projectId: project.id }, orderBy: { number: "asc" }, include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } },
   });
   return NextResponse.json(revisions);
 }
@@ -36,6 +37,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (project.ownerId !== session.user.id) return error("Only the project owner can publish revisions", 403);
 
   const form = await request.formData();
+  const changeDescriptionValue = form.get("changeDescription") ?? form.get("description");
+  const descriptionResult = revisionChangeDescription.safeParse(typeof changeDescriptionValue === "string" ? changeDescriptionValue : "");
+  if (!descriptionResult.success) return error("Change description must be 500 characters or fewer");
+  const changeDescription = descriptionResult.data;
   const sourceEntry = form.get("source");
   const sourceFile = sourceEntry instanceof File ? sourceEntry : undefined;
   const sourceUrlValue = form.get("sourceUrl");
@@ -59,12 +64,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       await putObject(sourceFile, publishedSourceKey);
       uploadedKeys.push(publishedSourceKey);
     }
-    const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number }>;
+    const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number; position: number }>;
     for (const [index, file] of previews.entries()) {
       const key = `revisions/${project.id}/${crypto.randomUUID()}/preview-${index}-${safeName(file.name)}`;
       const url = await putObject(file, key);
       uploadedKeys.push(key);
-      uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size });
+      uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index });
     }
 
     const revision = await prisma.$transaction(async (tx) => {
@@ -76,6 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return tx.revision.create({
         data: {
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId,
+          changeDescription,
           sourceKey: publishedSourceKey, sourceUrl,
           previews: { create: uploadedPreviews },
         }, include: { previews: true },
