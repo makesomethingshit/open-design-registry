@@ -132,6 +132,7 @@ model Revision {
   changeDescription String
   sourceKey  String?
   sourceUrl  String?
+  isPublished Boolean   @default(true)
   createdAt  DateTime  @default(now())
   project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent     Revision? @relation("RevisionParent", fields: [parentId], references: [id], onDelete: Restrict)

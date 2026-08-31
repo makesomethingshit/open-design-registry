@@ -39,4 +39,40 @@ describePostgres("Revision PostgreSQL constraints", () => {
     await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "title", "changeDescription", "sourceUrl") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 101, '', 'Invalid', 'https://example.test/empty-title')`).rejects.toThrow();
     await expect(prisma.$executeRaw`INSERT INTO "Preview" ("id", "revisionId", "position", "key", "url", "mimeType", "size", "altText") VALUES (${`preview-test-${crypto.randomUUID()}`}, ${revisions[0].id}, 99, ${`preview-test-${crypto.randomUUID()}`}, 'https://example.test/preview.png', 'image/png', 1, '')`).rejects.toThrow();
   });
+
+  it("allows preview inserts only until the atomic publish transition", async () => {
+    const revision = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      const latest = await tx.revision.findFirst({ where: { projectId }, orderBy: { number: "desc" } });
+      const staged = await tx.revision.create({
+        data: {
+          id: `revision-test-${crypto.randomUUID()}`,
+          projectId,
+          number: (latest?.number ?? 0) + 1,
+          parentId: latest?.id,
+          title: "Atomic publish",
+          changeDescription: "Insert previews before publishing",
+          sourceUrl: "https://example.test/atomic.zip",
+          isPublished: false,
+        },
+      });
+      await tx.preview.create({
+        data: {
+          id: `preview-test-${crypto.randomUUID()}`,
+          revisionId: staged.id,
+          position: 0,
+          key: `preview-test-${crypto.randomUUID()}`,
+          url: "https://example.test/atomic.png",
+          mimeType: "image/png",
+          size: 1,
+          altText: "Atomic preview",
+        },
+      });
+      return tx.revision.update({ where: { id: staged.id }, data: { isPublished: true }, include: { previews: true } });
+    });
+
+    expect(revision.isPublished).toBe(true);
+    expect(revision.previews).toHaveLength(1);
+    await expect(prisma.$executeRaw`INSERT INTO "Preview" ("id", "revisionId", "position", "key", "url", "mimeType", "size", "altText") VALUES (${`preview-test-${crypto.randomUUID()}`}, ${revision.id}, 1, ${`preview-test-${crypto.randomUUID()}`}, 'https://example.test/late.png', 'image/png', 1, 'Late preview')`).rejects.toThrow();
+  });
 });

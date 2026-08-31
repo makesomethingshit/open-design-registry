@@ -91,14 +91,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
       if ((latest && parentId !== latest.id) || (!latest && parentId)) throw new PublishError("parentId must be the latest revision", 409);
-      return tx.revision.create({
+      const stagedRevision = await tx.revision.create({
         data: {
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,
           changeDescription,
           sourceKey: publishedSourceKey, sourceUrl,
+          isPublished: false,
           previews: { create: uploadedPreviews },
-        }, include: { previews: true },
+        },
       });
+      return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
     });
     return NextResponse.json(exposeRevision(revision), { status: 201 });
   } catch (cause) {
@@ -117,8 +119,8 @@ function safeName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-100) || "file";
 }
 
-function exposeRevision<T extends { sourceKey?: string | null; sourceUrl?: string | null; previews?: Array<{ url: string }> }>(revision: T) {
-  const { sourceKey, previews, ...rest } = revision;
+function exposeRevision<T extends { sourceKey?: string | null; sourceUrl?: string | null; isPublished?: boolean; previews?: Array<{ url: string }> }>(revision: T) {
+  const { sourceKey, isPublished: _isPublished, previews, ...rest } = revision;
   return {
     ...rest,
     sourceUrl: revision.sourceUrl ?? (sourceKey ? publicAssetUrl(sourceKey) : revision.sourceUrl),
