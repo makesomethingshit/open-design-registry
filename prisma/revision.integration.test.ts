@@ -1,7 +1,10 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 
-const describePostgres = process.env.DATABASE_URL ? describe : describe.skip;
+const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+if (process.env.CI && !testDatabaseUrl) throw new Error("TEST_DATABASE_URL is required in CI");
+if (testDatabaseUrl) process.env.DATABASE_URL = testDatabaseUrl;
+const describePostgres = testDatabaseUrl ? describe : describe.skip;
 
 describePostgres("Revision PostgreSQL constraints", () => {
   const prisma = new PrismaClient();
@@ -14,14 +17,7 @@ describePostgres("Revision PostgreSQL constraints", () => {
     await prisma.project.create({ data: { id: projectId, slug: projectId, title: "Revision test", description: "", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: userId } });
   });
 
-  afterAll(async () => {
-    await prisma.$executeRaw`ALTER TABLE "Revision" DISABLE TRIGGER "Revision_immutable"`;
-    await prisma.revision.deleteMany({ where: { projectId } });
-    await prisma.$executeRaw`ALTER TABLE "Revision" ENABLE TRIGGER "Revision_immutable"`;
-    await prisma.project.delete({ where: { id: projectId } });
-    await prisma.user.delete({ where: { id: userId } });
-    await prisma.$disconnect();
-  });
+  afterAll(() => prisma.$disconnect());
 
   it("serializes concurrent publishes and rejects both-null/both-present sources", async () => {
     const publish = (number: number) => prisma.$transaction(async (tx) => {
