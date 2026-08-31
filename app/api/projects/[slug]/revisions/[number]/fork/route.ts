@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { slugify } from "@/src/lib/project-validation";
+import { publicAssetUrl } from "@/src/lib/storage";
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string; number: string }> }) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -18,6 +19,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const titleValue = requestedTitle || `Fork of ${source.title}`.slice(0, 120);
   if (titleValue.length > 120) return NextResponse.json({ error: "Title must be 120 characters or fewer" }, { status: 400 });
   const slug = `${slugify(titleValue)}-${crypto.randomUUID().slice(0, 8)}`;
-  const fork = await prisma.project.create({ data: { slug, title: titleValue, description: source.description, license: source.license, forkedFromLicense: source.license, isPublic: true, publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id, coverUrl: source.coverUrl, ownerId: session.user.id, forkedFromProjectId: source.id, forkedFromRevisionId: revision.id }, include: { owner: { select: { name: true } }, forkedFrom: { include: { owner: { select: { name: true } } } }, forkedFromRevision: { select: { number: true } } } });
-  return NextResponse.json(fork, { status: 201 });
+  const fork = await prisma.project.create({ data: { slug, title: titleValue, description: source.description, license: source.license, forkedFromLicense: source.license, isPublic: true, publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id, coverUrl: source.coverUrl, ownerId: session.user.id, forkedFromProjectId: source.id, forkedFromRevisionId: revision.id }, include: { owner: { select: { name: true } }, forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } }, forkedFromRevision: { select: { number: true } } } });
+  return NextResponse.json({ ...fork, coverUrl: publicAssetUrl(fork.coverUrl) }, { status: 201 });
 }

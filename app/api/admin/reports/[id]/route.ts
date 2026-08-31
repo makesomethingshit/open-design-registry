@@ -13,7 +13,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const report = await tx.report.findUnique({ where: { id }, select: { id: true, projectId: true, revisionId: true } });
     if (!report) return null;
     const projectId = report.projectId ?? (report.revisionId ? (await tx.revision.findUnique({ where: { id: report.revisionId }, select: { projectId: true } }))?.projectId : null);
-    if (body?.hide === true && projectId) await tx.project.update({ where: { id: projectId }, data: { isPublic: false } });
+    if (body?.hide === true && projectId) {
+      const project = await tx.project.findUnique({ where: { id: projectId }, select: { coverUrl: true } });
+      if (project) await tx.project.updateMany({ where: { coverUrl: project.coverUrl }, data: { isPublic: false } });
+    }
     return tx.report.update({ where: { id: report.id }, data: { status: status as "RESOLVED" | "DISMISSED", reviewedBy: session.user.id, reviewedAt: new Date(), resolutionNote: typeof body?.resolutionNote === "string" ? body.resolutionNote.trim().slice(0, 2000) : undefined } });
   });
   if (!result) return NextResponse.json({ error: "Report not found" }, { status: 404 });
