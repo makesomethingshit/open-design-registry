@@ -68,11 +68,24 @@ describePostgres("Revision PostgreSQL constraints", () => {
           altText: "Atomic preview",
         },
       });
+      await tx.preview.create({
+        data: {
+          id: `preview-test-${crypto.randomUUID()}`,
+          revisionId: staged.id,
+          position: 1,
+          key: `preview-test-${crypto.randomUUID()}`,
+          url: "https://example.test/atomic.html",
+          mimeType: "text/html",
+          size: 32,
+          altText: "Atomic HTML preview",
+        },
+      });
       return tx.revision.update({ where: { id: staged.id }, data: { isPublished: true }, include: { previews: true } });
     });
 
     expect(revision.isPublished).toBe(true);
-    expect(revision.previews).toHaveLength(1);
+    expect(revision.previews).toHaveLength(2);
+    expect(revision.previews.some((preview) => preview.mimeType === "text/html")).toBe(true);
     await expect(prisma.$executeRaw`INSERT INTO "Preview" ("id", "revisionId", "position", "key", "url", "mimeType", "size", "altText") VALUES (${`preview-test-${crypto.randomUUID()}`}, ${revision.id}, 1, ${`preview-test-${crypto.randomUUID()}`}, 'https://example.test/late.png', 'image/png', 1, 'Late preview')`).rejects.toThrow();
   });
 });

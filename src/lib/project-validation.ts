@@ -24,6 +24,7 @@ export const issueSchema = z.object({ title: z.string().trim().min(1).max(200), 
 export const issueCommentSchema = z.object({ body: z.string().trim().min(1).max(10000) });
 
 export const imageTypes = new Set(["image/png", "image/jpeg"]);
+export const previewTypes = new Set([...imageTypes, "text/html"]);
 export const maxImageBytes = 10 * 1024 * 1024;
 
 export const maxRevisionSourceBytes = 100 * 1024 * 1024;

@@ -3,12 +3,12 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { deleteObject, publicAssetUrl, putObject } from "@/src/lib/storage";
 import {
-  imageTypes,
   maxRevisionPreviewBytes,
   maxRevisionPreviewTotalBytes,
   maxRevisionPreviews,
   maxRevisionSourceBytes,
   previewAltText,
+  previewTypes,
   revisionChangeDescription,
   revisionTitle,
   validateRevisionSource,
@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (sourceFile && sourceFile.size > maxRevisionSourceBytes) return error("Source file exceeds the 100MB limit");
 
   const previews = [...form.getAll("previews"), ...form.getAll("preview")].filter((value): value is File => value instanceof File);
-  if (!previews.length || previews.length > maxRevisionPreviews) return error(`Provide 1-${maxRevisionPreviews} PNG/JPG previews`);
+  if (!previews.length || previews.length > maxRevisionPreviews) return error(`Provide 1-${maxRevisionPreviews} PNG/JPG/HTML previews`);
   const altTextValues = ["altTexts", "previewAltTexts", "altText"].flatMap((name) => form.getAll(name));
   if (altTextValues.length !== previews.length) return error("Provide one alt text for each preview");
   const altTexts: string[] = [];
@@ -66,7 +66,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     altTexts.push(result.data);
   }
   const totalPreviewBytes = previews.reduce((total, file) => total + file.size, 0);
-  if (previews.some((file) => !imageTypes.has(file.type) || file.size > maxRevisionPreviewBytes)) return error("Previews must be PNG/JPG files no larger than 10MB each");
+  if (previews.some((file) => !previewTypes.has(file.type) || file.size > maxRevisionPreviewBytes)) return error("Previews must be PNG/JPG/HTML files no larger than 10MB each");
   if (totalPreviewBytes > maxRevisionPreviewTotalBytes) return error("Preview quota exceeded (50MB total)");
 
   const uploadedKeys: string[] = [];

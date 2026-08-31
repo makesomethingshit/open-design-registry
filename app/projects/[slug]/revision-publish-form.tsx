@@ -42,7 +42,7 @@ export default function RevisionPublishForm({ slug }: { slug: string }) {
     <label>Change description<textarea name="changeDescription" required minLength={1} maxLength={500} /></label>
     <label>Source file (ZIP, PSD, or another original format)<input name="source" type="file" /></label>
     <label>Source URL<input name="sourceUrl" type="url" placeholder="https://…" /></label>
-    <label>Previews (PNG/JPG, up to 10)<input name="previews" type="file" accept="image/png,image/jpeg" multiple required onChange={selectPreviews} /></label>
+    <label>Previews (PNG/JPG/HTML, up to 10)<input name="previews" type="file" accept="image/png,image/jpeg,text/html" multiple required onChange={selectPreviews} /></label>
     {files.map((file, index) => <label key={`${file.name}-${index}`}>Alt text for {file.name}<input name="altTexts" required maxLength={500} /></label>)}
     {error && <p className="error" role="alert">{error}</p>}
     <button className="button" disabled={submitting}>{submitting ? "Publishing…" : "Publish revision"}</button>

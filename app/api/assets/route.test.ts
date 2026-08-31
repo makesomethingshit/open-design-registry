@@ -83,5 +83,6 @@ describe("asset proxy route", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe("attachment");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-security-policy")).toContain("script-src 'none'");
   });
 });
