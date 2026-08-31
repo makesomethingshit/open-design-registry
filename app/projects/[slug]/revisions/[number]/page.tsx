@@ -24,9 +24,9 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
   const previousPreviews = previous?.previews.map((preview) => ({ ...preview, url: publicAssetUrl(preview.url) }));
   return <article className="detail">
     <p className="meta"><Link href={`/projects/${project.slug}`}>{project.title}</Link> · Revision {revision.number}</p>
-    <h1>Revision {revision.number}</h1>
+    <h1>{revision.title}</h1>
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
-    <p>{revision.changeDescription || "No change description provided."}</p>
+    <p>{revision.changeDescription}</p>
     <RevisionDiff current={currentPreviews} previous={previousPreviews} currentNumber={revision.number} previousNumber={previous?.number} /><ForkForm slug={project.slug} number={revision.number} license={project.license} signedIn={project.isPublic && Boolean(session)} /><ReportForm revisionId={revision.id} />
   </article>;
 }

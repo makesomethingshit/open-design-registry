@@ -30,7 +30,9 @@ export const maxRevisionSourceBytes = 100 * 1024 * 1024;
 export const maxRevisionPreviews = 10;
 export const maxRevisionPreviewBytes = 10 * 1024 * 1024;
 export const maxRevisionPreviewTotalBytes = 50 * 1024 * 1024;
-export const revisionChangeDescription = z.string().trim().max(500);
+export const revisionTitle = z.string().trim().min(1).max(120);
+export const revisionChangeDescription = z.string().trim().min(1).max(500);
+export const previewAltText = z.string().trim().min(1).max(500);
 
 export const revisionUrlSchema = z.string().trim().url().refine((value) => {
   try {

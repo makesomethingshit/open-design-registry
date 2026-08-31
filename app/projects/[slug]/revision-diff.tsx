@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type Preview = { key: string; url: string; position: number };
+type Preview = { key: string; url: string; position: number; altText: string };
 
 function PreviewDiff({ current, previous, currentNumber, previousNumber }: { current?: Preview; previous?: Preview; currentNumber: number; previousNumber?: number }) {
   const [currentSize, setCurrentSize] = useState<[number, number]>();
@@ -12,15 +12,15 @@ function PreviewDiff({ current, previous, currentNumber, previousNumber }: { cur
   const preview = current ?? previous;
   if (!preview) return null;
   const label = `Preview ${preview.position + 1}`;
-  if (!current || !previous) return <figure className="preview-diff"><figcaption>{label} · {current ? `Added in Revision ${currentNumber}` : `Removed after Revision ${previousNumber}`}</figcaption><img src={preview.url} alt={`${label}, Revision ${current ? currentNumber : previousNumber}`} /></figure>;
+  if (!current || !previous) return <figure className="preview-diff"><figcaption>{label} · {current ? `Added in Revision ${currentNumber}` : `Removed after Revision ${previousNumber}`}</figcaption><img src={preview.url} alt={preview.altText} /></figure>;
   return <figure className="preview-diff">
     <figcaption>{label} · Revision {previousNumber} → {currentNumber}</figcaption>
     {sameSize ? <div className="diff-stage" style={{ aspectRatio: `${currentSize![0]} / ${currentSize![1]}` }}>
-      <img src={previous.url} alt={`Previous ${label}, Revision ${previousNumber}`} onLoad={(event) => setPreviousSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} />
-      <img src={current.url} alt={`Current ${label}, Revision ${currentNumber}`} style={{ opacity: opacity / 100 }} onLoad={(event) => setCurrentSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} />
+      <img src={previous.url} alt={previous.altText} onLoad={(event) => setPreviousSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} />
+      <img src={current.url} alt={current.altText} style={{ opacity: opacity / 100 }} onLoad={(event) => setCurrentSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} />
     </div> : <div className="diff-side-by-side">
-      <div><span>Revision {previousNumber}</span><img src={previous.url} alt={`Revision ${previousNumber}, ${label}`} onLoad={(event) => setPreviousSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} /></div>
-      <div><span>Revision {currentNumber}</span><img src={current.url} alt={`Revision ${currentNumber}, ${label}`} onLoad={(event) => setCurrentSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} /></div>
+      <div><span>Revision {previousNumber}</span><img src={previous.url} alt={previous.altText} onLoad={(event) => setPreviousSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} /></div>
+      <div><span>Revision {currentNumber}</span><img src={current.url} alt={current.altText} onLoad={(event) => setCurrentSize([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])} /></div>
     </div>}
     {sameSize && <label className="opacity-control">Current revision opacity <input type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} aria-label={`Current ${label} opacity`} aria-valuetext={`${opacity}%`} /></label>}
   </figure>;

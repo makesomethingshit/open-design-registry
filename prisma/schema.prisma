@@ -128,7 +128,8 @@ model Revision {
   projectId  String
   number     Int
   parentId   String?
-  changeDescription String @default("")
+  title      String
+  changeDescription String
   sourceKey  String?
   sourceUrl  String?
   createdAt  DateTime  @default(now())
@@ -194,6 +195,7 @@ model Preview {
   url        String
   mimeType   String
   size       Int
+  altText    String
   createdAt  DateTime @default(now())
   revision   Revision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
 

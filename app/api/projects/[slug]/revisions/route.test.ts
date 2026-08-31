@@ -19,9 +19,15 @@ vi.mock("@/src/lib/storage", () => ({ putObject: mocks.putObject, deleteObject: 
 
 const { POST } = await import("./route");
 
-function request(fields: Record<string, string | File>) {
+function request(fields: Record<string, string | File>, metadata = true) {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  if (metadata) {
+    form.append("title", "Landing page update");
+    form.append("changeDescription", "Updated the landing page layout");
+    const previewCount = Object.keys(fields).filter((key) => key === "previews" || key === "preview").length;
+    for (let index = 0; index < previewCount; index += 1) form.append("altTexts", `Preview ${index + 1}`);
+  }
   return new Request("http://localhost/projects/demo/revisions", { method: "POST", body: form });
 }
 
@@ -53,7 +59,7 @@ describe("revision publishing route", () => {
     const response = await POST(request({ source: new File(["source"], name, { type }), previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
     expect(mocks.putObject).toHaveBeenCalledTimes(2);
-    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceUrl: undefined, sourceKey: expect.stringMatching(/^revisions\/project\//) }) }));
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: "Landing page update", changeDescription: "Updated the landing page layout", sourceUrl: undefined, sourceKey: expect.stringMatching(/^revisions\/project\//), previews: { create: [expect.objectContaining({ altText: "Preview 1" })] } }) }));
   });
 
   it("publishes an HTTP(S) source URL without a source key", async () => {
@@ -75,5 +81,23 @@ describe("revision publishing route", () => {
     expect(response.status).toBe(500);
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.deleteObject).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["title", { title: "" }],
+    ["change description", { changeDescription: "   " }],
+    ["preview alt text", { altTexts: "" }],
+  ])("rejects an empty %s before uploading", async (_field, override) => {
+    const response = await POST(request({ title: "Landing page update", changeDescription: "Updated the landing page layout", sourceUrl: "https://example.com/design.zip", previews: new File(["png"], "preview.png", { type: "image/png" }), ...override }, false), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/title|description|alt text/i) });
+    expect(mocks.putObject).not.toHaveBeenCalled();
+  });
+
+  it("rejects a preview alt text count that does not match uploaded previews", async () => {
+    const response = await POST(request({ title: "Landing page update", changeDescription: "Updated the landing page layout", sourceUrl: "https://example.com/design.zip", previews: new File(["one"], "one.png", { type: "image/png" }), preview: new File(["two"], "two.png", { type: "image/png" }), altTexts: "Only one description" }, false), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/one alt text/i) });
+    expect(mocks.putObject).not.toHaveBeenCalled();
   });
 });

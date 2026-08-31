@@ -8,7 +8,9 @@ import {
   maxRevisionPreviewTotalBytes,
   maxRevisionPreviews,
   maxRevisionSourceBytes,
+  previewAltText,
   revisionChangeDescription,
+  revisionTitle,
   validateRevisionSource,
 } from "@/src/lib/project-validation";
 
@@ -37,9 +39,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (project.ownerId !== session.user.id) return error("Only the project owner can publish revisions", 403);
 
   const form = await request.formData();
+  const titleResult = revisionTitle.safeParse(form.get("title"));
+  if (!titleResult.success) return error("Revision title is required and must be 120 characters or fewer");
+  const title = titleResult.data;
   const changeDescriptionValue = form.get("changeDescription") ?? form.get("description");
   const descriptionResult = revisionChangeDescription.safeParse(typeof changeDescriptionValue === "string" ? changeDescriptionValue : "");
-  if (!descriptionResult.success) return error("Change description must be 500 characters or fewer");
+  if (!descriptionResult.success) return error("Change description is required and must be 500 characters or fewer");
   const changeDescription = descriptionResult.data;
   const sourceEntry = form.get("source");
   const sourceFile = sourceEntry instanceof File ? sourceEntry : undefined;
@@ -52,6 +57,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const previews = [...form.getAll("previews"), ...form.getAll("preview")].filter((value): value is File => value instanceof File);
   if (!previews.length || previews.length > maxRevisionPreviews) return error(`Provide 1-${maxRevisionPreviews} PNG/JPG previews`);
+  const altTextValues = ["altTexts", "previewAltTexts", "altText"].flatMap((name) => form.getAll(name));
+  if (altTextValues.length !== previews.length) return error("Provide one alt text for each preview");
+  const altTexts: string[] = [];
+  for (const value of altTextValues) {
+    const result = previewAltText.safeParse(value);
+    if (!result.success) return error("Each preview alt text is required and must be 500 characters or fewer");
+    altTexts.push(result.data);
+  }
   const totalPreviewBytes = previews.reduce((total, file) => total + file.size, 0);
   if (previews.some((file) => !imageTypes.has(file.type) || file.size > maxRevisionPreviewBytes)) return error("Previews must be PNG/JPG files no larger than 10MB each");
   if (totalPreviewBytes > maxRevisionPreviewTotalBytes) return error("Preview quota exceeded (50MB total)");
@@ -64,12 +77,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       await putObject(sourceFile, publishedSourceKey);
       uploadedKeys.push(publishedSourceKey);
     }
-    const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number; position: number }>;
+    const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number; position: number; altText: string }>;
     for (const [index, file] of previews.entries()) {
       const key = `revisions/${project.id}/${crypto.randomUUID()}/preview-${index}-${safeName(file.name)}`;
       const url = await putObject(file, key);
       uploadedKeys.push(key);
-      uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index });
+      uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index, altText: altTexts[index] });
     }
 
     const revision = await prisma.$transaction(async (tx) => {
@@ -80,7 +93,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       if ((latest && parentId !== latest.id) || (!latest && parentId)) throw new PublishError("parentId must be the latest revision", 409);
       return tx.revision.create({
         data: {
-          projectId: project.id, number: (latest?.number ?? 0) + 1, parentId,
+          projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,
           changeDescription,
           sourceKey: publishedSourceKey, sourceUrl,
           previews: { create: uploadedPreviews },
