@@ -73,8 +73,41 @@ model Project {
   coverUrl    String
   ownerId     String
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  revisions   Revision[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([ownerId])
   @@index([isPublic, createdAt])
+}
+
+model Revision {
+  id         String    @id @default(cuid())
+  projectId  String
+  number     Int
+  parentId   String?
+  sourceKey  String?
+  sourceUrl  String?
+  createdAt  DateTime  @default(now())
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent     Revision? @relation("RevisionParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children   Revision[] @relation("RevisionParent")
+  previews   Preview[]
+
+  @@unique([projectId, number])
+  @@index([projectId, createdAt])
+  @@index([parentId])
+}
+
+model Preview {
+  id         String   @id @default(cuid())
+  revisionId String
+  key        String
+  url        String
+  mimeType   String
+  size       Int
+  createdAt  DateTime @default(now())
+  revision   Revision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+
+  @@unique([revisionId, key])
+  @@index([revisionId])
 }
