@@ -1,0 +1,44 @@
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import { PrismaClient } from "@prisma/client";
+
+const describePostgres = process.env.DATABASE_URL ? describe : describe.skip;
+
+describePostgres("Revision PostgreSQL constraints", () => {
+  const prisma = new PrismaClient();
+  const userId = `revision-test-user-${crypto.randomUUID()}`;
+  const projectId = `revision-test-project-${crypto.randomUUID()}`;
+
+  beforeAll(async () => {
+    await prisma.$connect();
+    await prisma.user.create({ data: { id: userId, name: "Revision test", email: `${userId}@example.test` } });
+    await prisma.project.create({ data: { id: projectId, slug: projectId, title: "Revision test", description: "", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: userId } });
+  });
+
+  afterAll(async () => {
+    await prisma.$executeRaw`ALTER TABLE "Revision" DISABLE TRIGGER "Revision_immutable"`;
+    await prisma.revision.deleteMany({ where: { projectId } });
+    await prisma.$executeRaw`ALTER TABLE "Revision" ENABLE TRIGGER "Revision_immutable"`;
+    await prisma.project.delete({ where: { id: projectId } });
+    await prisma.user.delete({ where: { id: userId } });
+    await prisma.$disconnect();
+  });
+
+  it("serializes concurrent publishes and rejects both-null/both-present sources", async () => {
+    const publish = (number: number) => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      const latest = await tx.revision.findFirst({ where: { projectId }, orderBy: { number: "desc" } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return tx.revision.create({ data: { id: `revision-test-${crypto.randomUUID()}`, projectId, number: (latest?.number ?? 0) + 1, parentId: latest?.id, ...(number === 1 ? { sourceKey: "revisions/test/source-a" } : { sourceUrl: "https://example.test/source-b.zip" }) } });
+    });
+
+    const [first, second] = await Promise.all([publish(1), publish(2)]);
+    expect([first.number, second.number].sort()).toEqual([1, 2]);
+    const revisions = await prisma.revision.findMany({ where: { projectId }, orderBy: { number: "asc" } });
+    expect(revisions).toHaveLength(2);
+    expect(revisions[0].parentId).toBeNull();
+    expect(revisions[1].parentId).toBe(revisions[0].id);
+
+    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "sourceKey", "sourceUrl") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 99, 'both-key', 'https://example.test/both')`).rejects.toThrow();
+    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 100)`).rejects.toThrow();
+  });
+});
