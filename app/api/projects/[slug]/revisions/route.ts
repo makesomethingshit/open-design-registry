@@ -47,7 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!descriptionResult.success) return error("Change description is required and must be 500 characters or fewer");
   const changeDescription = descriptionResult.data;
   const sourceEntry = form.get("source");
-  const sourceFile = sourceEntry instanceof File ? sourceEntry : undefined;
+  const sourceFile = sourceEntry instanceof File && sourceEntry.name.trim() ? sourceEntry : undefined;
   const sourceUrlValue = form.get("sourceUrl");
   const sourceKeyValue = form.get("sourceKey");
   const sourceUrl = typeof sourceUrlValue === "string" && sourceUrlValue.trim() ? sourceUrlValue.trim() : undefined;

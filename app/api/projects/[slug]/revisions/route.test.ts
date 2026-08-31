@@ -69,6 +69,13 @@ describe("revision publishing route", () => {
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceKey: undefined, sourceUrl: "https://example.com/design.zip" }) }));
   });
 
+  it("ignores an empty optional source input when a source URL is provided", async () => {
+    const response = await POST(request({ source: new File([], "", { type: "application/octet-stream" }), sourceUrl: "https://example.com/design.zip", previews: new File(["jpg"], "preview.jpg", { type: "image/jpeg" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.putObject).toHaveBeenCalledTimes(1);
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceKey: undefined, sourceUrl: "https://example.com/design.zip" }) }));
+  });
+
   it("persists preview positions for stable multi-preview pairing", async () => {
     const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["one"], "one.png", { type: "image/png" }), preview: new File(["two"], "two.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
