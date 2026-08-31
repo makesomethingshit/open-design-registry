@@ -33,7 +33,7 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma db push --skip-generate
-      - run: printf 'DROP TABLE "Preview"; DROP TABLE "Revision";' | npx prisma db execute --stdin
+      - run: printf 'DROP TABLE "Preview"; DROP TABLE "Revision";' | npx prisma db execute --stdin --schema prisma/schema.prisma
       - run: npx prisma migrate deploy
       - run: npm test -- --run
       - run: npx tsc --noEmit
