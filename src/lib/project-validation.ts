@@ -20,6 +20,9 @@ export const reportSchema = z.object({
   details: z.string().trim().max(2000).default(""),
 });
 
+export const issueSchema = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().max(10000).default(""), revisionId: z.string().trim().optional() });
+export const issueCommentSchema = z.object({ body: z.string().trim().min(1).max(10000) });
+
 export const imageTypes = new Set(["image/png", "image/jpeg"]);
 export const maxImageBytes = 10 * 1024 * 1024;
 

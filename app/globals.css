@@ -26,6 +26,18 @@ h1 { margin: 0 0 18px; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; 
 .opacity-control { display: flex; align-items: center; gap: 12px; padding: 10px 12px; font-size: .85rem; font-weight: 600; }
 .report-form { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--line); display: grid; gap: 12px; max-width: 600px; }
 .report-form h3 { margin: 0; }
+.issues { display: grid; gap: 14px; }
+.issue { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; }
+.issue-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.issue-heading h3 { margin: 0; }
+.issue-status { border-radius: 999px; padding: 4px 9px; font-size: .72rem; font-weight: 700; }
+.issue-status.open { background: #e5f5e8; color: #276749; }
+.issue-status.closed { background: #edf0ed; color: var(--muted); }
+.issue-comment { margin: 10px 0 0 18px; padding: 8px 12px; border-left: 2px solid var(--line); }
+.issue-comment p { margin: 0 0 4px; }
+.inline-form { display: flex; gap: 8px; margin-top: 12px; }
+.inline-form input { flex: 1; }
+.issue-form, .fork-form { margin-top: 28px; }
 .consent { font-weight: 500; }
 .opacity-control input { padding: 0; }
 @media (max-width: 600px) { header { padding: 0 20px; } nav { gap: 11px; } main { padding: 42px 18px; } }

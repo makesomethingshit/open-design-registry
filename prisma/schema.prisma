@@ -20,6 +20,8 @@ model User {
   accounts      Account[]
   projects      Project[]
   reports       Report[]
+  issues        Issue[]
+  issueComments IssueComment[]
 }
 
 model Session {
@@ -79,10 +81,19 @@ model Project {
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   revisions   Revision[]
   reports     Report[]
+  issues      Issue[]
+  forks       Project[] @relation("ProjectForks")
+  forkedFrom  Project? @relation("ProjectForks", fields: [forkedFromProjectId], references: [id], onDelete: SetNull)
+  forkedFromProjectId String?
+  forkedFromRevisionId String?
+  forkedFromLicense String?
+  forkedFromRevision Revision? @relation("RevisionForks", fields: [forkedFromRevisionId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([ownerId])
   @@index([isPublic, createdAt])
+  @@index([forkedFromProjectId])
+  @@index([forkedFromRevisionId])
 }
 
 enum ReportStatus {
@@ -126,10 +137,53 @@ model Revision {
   children   Revision[] @relation("RevisionParent")
   previews   Preview[]
   reports    Report[]
+  issues     Issue[]
+  forks      Project[] @relation("RevisionForks")
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
   @@index([parentId])
+}
+
+enum IssueStatus {
+  OPEN
+  CLOSED
+}
+
+model Issue {
+  id         String      @id @default(cuid())
+  projectId  String
+  authorId   String
+  revisionId String?
+  title      String
+  body       String       @default("")
+  status     IssueStatus  @default(OPEN)
+  closedAt   DateTime?
+  closedBy   String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author     User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  revision   Revision?    @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  comments   IssueComment[]
+
+  @@index([projectId, status, createdAt])
+  @@index([authorId])
+  @@index([revisionId])
+}
+
+model IssueComment {
+  id        String   @id @default(cuid())
+  issueId   String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+  @@index([authorId])
 }
 
 model Preview {
