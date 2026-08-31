@@ -11,13 +11,16 @@ function notFound() {
 
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
+  const hasKey = query.has("key");
+  const hasUrl = query.has("url");
+  if (hasKey === hasUrl) return notFound();
   const requestedKey = query.get("key")?.trim();
   const requestedUrl = query.get("url")?.trim();
   const key = requestedKey || keyFromLegacyUrl(requestedUrl);
   if (!key || !safeKey(key)) return notFound();
 
-  const storedUrls = new Set<string>(requestedUrl ? [requestedUrl] : []);
-  if (requestedKey) [assetUrl(key), legacyObjectUrl(key), key].forEach((value) => storedUrls.add(value));
+  const storedUrls = new Set<string>(hasUrl ? [requestedUrl!] : []);
+  if (hasKey) [assetUrl(key), legacyObjectUrl(key), key].forEach((value) => storedUrls.add(value));
 
   const session = await auth.api.getSession({ headers: request.headers });
   const [projects, previews, revisions] = await Promise.all([
@@ -38,9 +41,10 @@ export async function GET(request: Request) {
   try {
     const object = await getObject(key);
     if (!object.Body) return notFound();
-    const headers = new Headers({ "Cache-Control": "private, no-store" });
+    const headers = new Headers({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
     if (object.ContentType) headers.set("Content-Type", object.ContentType);
     if (object.ContentLength !== undefined) headers.set("Content-Length", String(object.ContentLength));
+    if (revisions.length) headers.set("Content-Disposition", "attachment");
     const body = object.Body as typeof object.Body & { transformToWebStream?: () => ReadableStream };
     return new NextResponse(body.transformToWebStream ? body.transformToWebStream() : body as unknown as BodyInit, { headers });
   } catch {

@@ -67,4 +67,21 @@ describe("asset proxy route", () => {
     expect(response.status).toBe(200);
     expect(mocks.getObject).toHaveBeenCalledWith("covers/owner/project");
   });
+
+  it("rejects mixed key and legacy URL parameters", async () => {
+    mocks.projectFindMany.mockResolvedValue([{ isPublic: true, ownerId: "owner" }]);
+    const response = await GET(request("key=revisions%2Fprivate%2Fsource.zip&url=https%3A%2F%2Fopen-design-registry.s3.us-east-1.amazonaws.com%2Fcovers%2Fpublic%2Fproject"));
+    expect(response.status).toBe(404);
+    expect(mocks.projectFindMany).not.toHaveBeenCalled();
+    expect(mocks.getObject).not.toHaveBeenCalled();
+  });
+
+  it("forces uploaded revision sources to download safely", async () => {
+    mocks.revisionFindMany.mockResolvedValue([{ project: { isPublic: true, ownerId: "owner" } }]);
+    mocks.getObject.mockResolvedValue({ Body: body, ContentType: "text/html", ContentLength: 5 });
+    const response = await GET(request("key=revisions%2Fpublic%2Fsource.html"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe("attachment");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
 });
