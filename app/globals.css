@@ -24,5 +24,8 @@ h1 { margin: 0 0 18px; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; 
 .diff-side-by-side > div { min-width: 0; background: #fff; }
 .diff-side-by-side span { display: block; padding: 8px 10px; color: var(--muted); font-size: .8rem; }
 .opacity-control { display: flex; align-items: center; gap: 12px; padding: 10px 12px; font-size: .85rem; font-weight: 600; }
+.report-form { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--line); display: grid; gap: 12px; max-width: 600px; }
+.report-form h3 { margin: 0; }
+.consent { font-weight: 500; }
 .opacity-control input { padding: 0; }
 @media (max-width: 600px) { header { padding: 0 20px; } nav { gap: 11px; } main { padding: 42px 18px; } }

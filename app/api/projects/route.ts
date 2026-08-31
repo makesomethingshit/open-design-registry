@@ -22,13 +22,14 @@ export async function POST(request: Request) {
   const parsed = projectSchema.safeParse({
     title: form.get("title"), description: form.get("description") ?? "", license: form.get("license"), isPublic: form.get("isPublic") === "on" || form.get("isPublic") === "true",
   });
+  const rightsConfirmed = form.get("rightsConfirmed") === "on" || form.get("rightsConfirmed") === "true";
   const cover = form.get("cover");
-  if (!parsed.success || !(cover instanceof File) || !imageTypes.has(cover.type) || cover.size > maxImageBytes) {
+  if (!parsed.success || (parsed.data.isPublic && !rightsConfirmed) || !(cover instanceof File) || !imageTypes.has(cover.type) || cover.size > maxImageBytes) {
     return NextResponse.json({ error: "제목, 라이선스와 10MB 이하 PNG/JPG 대표 이미지를 확인하세요." }, { status: 400 });
   }
   const baseSlug = slugify(parsed.data.title);
   const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
   const coverUrl = await putCover(cover, `covers/${session.user.id}/${slug}`);
-  const project = await prisma.project.create({ data: { ...parsed.data, slug, coverUrl, ownerId: session.user.id } });
+  const project = await prisma.project.create({ data: { ...parsed.data, slug, coverUrl, ownerId: session.user.id, ...(parsed.data.isPublic ? { publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id } : {}) } });
   return NextResponse.json(project, { status: 201 });
 }
