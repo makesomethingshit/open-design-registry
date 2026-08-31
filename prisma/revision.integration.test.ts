@@ -24,7 +24,7 @@ describePostgres("Revision PostgreSQL constraints", () => {
       await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
       const latest = await tx.revision.findFirst({ where: { projectId }, orderBy: { number: "desc" } });
       await new Promise((resolve) => setTimeout(resolve, 20));
-      return tx.revision.create({ data: { id: `revision-test-${crypto.randomUUID()}`, projectId, number: (latest?.number ?? 0) + 1, parentId: latest?.id, ...(number === 1 ? { sourceKey: "revisions/test/source-a" } : { sourceUrl: "https://example.test/source-b.zip" }) } });
+      return tx.revision.create({ data: { id: `revision-test-${crypto.randomUUID()}`, projectId, number: (latest?.number ?? 0) + 1, parentId: latest?.id, title: `Revision ${number}`, changeDescription: `Publish ${number}`, ...(number === 1 ? { sourceKey: "revisions/test/source-a" } : { sourceUrl: "https://example.test/source-b.zip" }) } });
     });
 
     const [first, second] = await Promise.all([publish(1), publish(2)]);
@@ -34,7 +34,9 @@ describePostgres("Revision PostgreSQL constraints", () => {
     expect(revisions[0].parentId).toBeNull();
     expect(revisions[1].parentId).toBe(revisions[0].id);
 
-    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "sourceKey", "sourceUrl") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 99, 'both-key', 'https://example.test/both')`).rejects.toThrow();
-    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 100)`).rejects.toThrow();
+    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "title", "changeDescription", "sourceKey", "sourceUrl") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 99, 'Invalid', 'Invalid', 'both-key', 'https://example.test/both')`).rejects.toThrow();
+    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "title", "changeDescription") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 100, 'Invalid', 'Invalid')`).rejects.toThrow();
+    await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "title", "changeDescription", "sourceUrl") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 101, '', 'Invalid', 'https://example.test/empty-title')`).rejects.toThrow();
+    await expect(prisma.$executeRaw`INSERT INTO "Preview" ("id", "revisionId", "position", "key", "url", "mimeType", "size", "altText") VALUES (${`preview-test-${crypto.randomUUID()}`}, ${revisions[0].id}, 99, ${`preview-test-${crypto.randomUUID()}`}, 'https://example.test/preview.png', 'image/png', 1, '')`).rejects.toThrow();
   });
 });

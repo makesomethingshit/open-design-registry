@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { imageTypes, maxImageBytes, projectSchema, projectUpdateSchema, reportSchema, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
+import { imageTypes, maxImageBytes, previewAltText, projectSchema, projectUpdateSchema, reportSchema, revisionChangeDescription, revisionTitle, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
 
 describe("project validation", () => {
   it("accepts a valid project and creates a stable slug", () => {
@@ -22,6 +22,13 @@ describe("project validation", () => {
     expect(revisionUrlSchema.safeParse("https://example.com/design.zip").success).toBe(true);
     expect(revisionUrlSchema.safeParse("ftp://example.com/design.zip").success).toBe(false);
   });
+  it("requires non-empty revision metadata within the public limits", () => {
+    expect(revisionTitle.safeParse("  ").success).toBe(false);
+    expect(revisionTitle.safeParse("A revision").success).toBe(true);
+    expect(revisionChangeDescription.safeParse("  ").success).toBe(false);
+    expect(previewAltText.safeParse("Describe this screen").success).toBe(true);
+    expect(previewAltText.safeParse("x".repeat(501)).success).toBe(false);
+  });
   it("requires a concise report reason", () => {
     expect(reportSchema.safeParse({ reason: "Copyright concern" }).success).toBe(true);
     expect(reportSchema.safeParse({ reason: "" }).success).toBe(false);
@@ -40,5 +47,13 @@ describe("project validation", () => {
     expect(sql).toContain('Revision_projectId_number_key');
     expect(sql).toContain('Revision_source_xor');
     expect(sql).toContain('Revision_immutable');
+  });
+  it("backfills required revision metadata before adding non-empty checks", () => {
+    const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260831050000_revision_metadata/migration.sql"), "utf8");
+    expect(sql).toContain('ADD COLUMN "title" TEXT');
+    expect(sql).toContain('ADD COLUMN "altText" TEXT');
+    expect(sql).toContain("No change description provided.");
+    expect(sql).toContain('Revision_title_non_empty');
+    expect(sql).toContain('Preview_altText_non_empty');
   });
 });
