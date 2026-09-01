@@ -3,7 +3,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/project-validation";
-import { publicAssetUrl, putCover } from "@/src/lib/storage";
+import { deleteObject, publicAssetUrl, putCover } from "@/src/lib/storage";
 
 export async function GET() {
   const session = await getSession();
@@ -29,7 +29,14 @@ export async function POST(request: Request) {
   }
   const baseSlug = slugify(parsed.data.title);
   const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
-  const coverUrl = await putCover(cover, `covers/${session.user.id}/${slug}`);
-  const project = await prisma.project.create({ data: { ...parsed.data, slug, coverUrl, ownerId: session.user.id, ...(parsed.data.isPublic ? { publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id } : {}) } });
-  return NextResponse.json({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }, { status: 201 });
+  const coverKey = `covers/${session.user.id}/${slug}`;
+  try {
+    const coverUrl = await putCover(cover, coverKey);
+    const project = await prisma.project.create({ data: { ...parsed.data, slug, coverUrl, ownerId: session.user.id, ...(parsed.data.isPublic ? { publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id } : {}) } });
+    return NextResponse.json({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }, { status: 201 });
+  } catch (cause) {
+    await deleteObject(coverKey).catch(() => undefined);
+    console.error("project creation failed", cause);
+    return NextResponse.json({ error: "프로젝트를 만들지 못했습니다." }, { status: 500 });
+  }
 }

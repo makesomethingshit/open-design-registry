@@ -9,6 +9,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const issue = await prisma.issue.findUnique({ where: { id }, select: { project: { select: { isPublic: true } }, status: true } });
   if (!issue || !issue.project.isPublic) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+  if (issue.status === "CLOSED") return NextResponse.json({ error: "Issue is closed" }, { status: 409 });
   const parsed = issueCommentSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Comment body is required" }, { status: 400 });
   const comment = await prisma.issueComment.create({ data: { issueId: id, authorId: session.user.id, body: parsed.data.body }, include: { author: { select: { id: true, name: true } } } });
