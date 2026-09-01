@@ -38,7 +38,7 @@ h1 { margin: 0 0 18px; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; 
 .issue-comment p { margin: 0 0 4px; }
 .inline-form { display: flex; gap: 8px; margin-top: 12px; }
 .inline-form input { flex: 1; }
-.issue-form, .fork-form, .revision-publish-form { margin-top: 28px; }
+.issue-form, .fork-form, .revision-publish-form, .restore-form { margin-top: 28px; }
 .consent { font-weight: 500; }
 .opacity-control input { padding: 0; }
 .nav-button { border: 0; padding: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; } .nav-user { color: var(--ink); font-weight: 600; }
