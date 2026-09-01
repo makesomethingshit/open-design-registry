@@ -20,5 +20,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (titleValue.length > 120) return NextResponse.json({ error: "Title must be 120 characters or fewer" }, { status: 400 });
   const slug = `${slugify(titleValue)}-${crypto.randomUUID().slice(0, 8)}`;
   const fork = await prisma.project.create({ data: { slug, title: titleValue, description: source.description, license: source.license, forkedFromLicense: source.license, isPublic: true, publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id, coverUrl: source.coverUrl, ownerId: session.user.id, forkedFromProjectId: source.id, forkedFromRevisionId: revision.id }, include: { owner: { select: { name: true } }, forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } }, forkedFromRevision: { select: { number: true } } } });
+  if (source.owner.id !== session.user.id) {
+    await prisma.notification.create({ data: { recipientId: source.owner.id, actorId: session.user.id, type: "FORK_CREATED", projectId: source.id, forkedProjectId: fork.id } });
+  }
   return NextResponse.json({ ...fork, coverUrl: publicAssetUrl(fork.coverUrl) }, { status: 201 });
 }

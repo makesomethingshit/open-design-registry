@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), createProject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), createProject: vi.fn(), createNotification: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, create: mocks.createProject } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, create: mocks.createProject }, notification: { create: mocks.createNotification } } }));
 
 const { POST } = await import("./route");
 
@@ -15,7 +15,7 @@ describe("revision fork route", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "forker" } });
     mocks.findProject.mockResolvedValue({ id: "project", title: "Design", description: "Notes", license: "CC BY 4.0", coverUrl: "https://cdn/cover", isPublic: true, owner: { id: "owner", name: "Author" }, revisions: [{ id: "revision", number: 1 }] });
-    mocks.createProject.mockResolvedValue({ slug: "design-fork", coverUrl: "/api/assets?key=covers/forker/design-fork" });
+    mocks.createProject.mockResolvedValue({ id: "fork", slug: "design-fork", coverUrl: "/api/assets?key=covers/forker/design-fork" });
   });
 
   it.each([undefined, false])("rejects missing or false rights confirmation (%s)", async (rightsConfirmed) => {
@@ -28,5 +28,13 @@ describe("revision fork route", () => {
     const response = await POST(request({ title: "Fork", rightsConfirmed: true }), { params: Promise.resolve({ slug: "demo", number: "1" }) });
     expect(response.status).toBe(201);
     expect(mocks.createProject).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ isPublic: true, publicationConfirmedBy: "forker", forkedFromProjectId: "project", forkedFromRevisionId: "revision", forkedFromLicense: "CC BY 4.0" }) }));
+    expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "owner", actorId: "forker", type: "FORK_CREATED", projectId: "project", forkedProjectId: "fork" } });
+  });
+
+  it("does not notify when the owner forks their own revision", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    const response = await POST(request({ title: "Fork", rightsConfirmed: true }), { params: Promise.resolve({ slug: "demo", number: "1" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 });

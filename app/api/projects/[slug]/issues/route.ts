@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
   const { slug } = await params;
-  const project = await prisma.project.findUnique({ where: { slug }, select: { id: true, isPublic: true } });
+  const project = await prisma.project.findUnique({ where: { slug }, select: { id: true, ownerId: true, isPublic: true } });
   if (!project?.isPublic) return notFound();
   const parsed = issueSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Title and body are invalid" }, { status: 400 });
@@ -29,5 +29,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!revision) return NextResponse.json({ error: "Revision not found" }, { status: 400 });
   }
   const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, revisionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
+  if (project.ownerId !== session.user.id) {
+    await prisma.notification.create({ data: { recipientId: project.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: issue.id } });
+  }
   return NextResponse.json(issue, { status: 201 });
 }
