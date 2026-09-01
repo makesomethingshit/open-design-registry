@@ -47,4 +47,12 @@ h1 { margin: 0 0 18px; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; 
 .project-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; } .project-card-heading h2 { margin: 0; font-size: 1.25rem; letter-spacing: -.03em; }
 .visibility { border-radius: 999px; padding: 4px 9px; font-size: .72rem; font-weight: 700; white-space: nowrap; } .visibility.public { background: #e5f5e8; color: var(--accent); } .visibility.private { background: #fff2d9; color: #8a5a00; }
 .empty-state { display: grid; place-items: start; gap: 12px; padding: 48px 0; color: var(--muted); } .project-settings { margin: 28px 0; border-top: 1px solid var(--line); padding-top: 18px; } .project-settings summary { cursor: pointer; font-weight: 700; } .project-settings .form { margin-top: 18px; }
+.notification-badge { display: inline-grid; min-width: 1.25rem; height: 1.25rem; margin-left: 4px; padding: 0 4px; place-items: center; border-radius: 999px; background: #a33a32; color: white; font-size: .7rem; font-weight: 700; vertical-align: .08em; }
+.notifications { display: grid; gap: 12px; max-width: 760px; padding: 0; list-style: none; }
+.notification { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; }
+.notification > div { display: grid; gap: 5px; min-width: 0; }
+.notification.unread { border-color: #a8c9ad; box-shadow: 0 0 0 2px #e5f5e8; }
+.notification.read { opacity: .72; }
+.notification time { display: block; }
+@media (max-width: 600px) { .notification { align-items: start; flex-direction: column; } }
 @media (max-width: 600px) { header { padding: 0 20px; } nav { gap: 11px; } main { padding: 42px 18px; } .project-filters label, .project-filters label + label { min-width: 100%; flex-basis: 100%; } }

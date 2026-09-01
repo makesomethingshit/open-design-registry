@@ -6,13 +6,15 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
   test.setTimeout(120_000);
   test.skip(!process.env.E2E_INTEGRATION, "requires local PostgreSQL and S3-compatible services");
 
-  test("uploads, publishes, restores a revision, serves assets, and forks it", async ({ page }) => {
+  test("uploads, publishes, restores a revision, forks it, and delivers owner notifications", async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const password = "integration-password-123";
+    const ownerEmail = `owner-${suffix}@example.test`;
     const projectTitle = `Integration project ${suffix}`;
     const forkTitle = `Integration fork ${suffix}`;
+    const issueTitle = `Integration issue ${suffix}`;
 
-    await signUp(page, `Owner ${suffix}`, `owner-${suffix}@example.test`, password);
+    await signUp(page, `Owner ${suffix}`, ownerEmail, password);
     await page.goto("/projects/new");
     await page.getByLabel("제목").fill(projectTitle);
     await page.getByLabel("설명").fill("Real storage integration flow");
@@ -93,6 +95,11 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(session?.user ?? null).toBeNull();
     await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
     await signUp(page, `Forker ${suffix}`, `forker-${suffix}@example.test`, password);
+    await page.goto(projectPath);
+    await page.getByLabel("Issue title").fill(issueTitle);
+    await page.getByLabel("Issue description").fill("A real user found a problem");
+    await page.getByRole("button", { name: "Open issue" }).click();
+    await expect(page.getByRole("heading", { name: issueTitle })).toBeVisible();
     await page.goto(restoredRevisionUrl);
     await expect(page.getByRole("heading", { name: "Fork this revision" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Restore as new revision" })).toHaveCount(0);
@@ -103,6 +110,20 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);
     await expect(page.getByRole("heading", { name: forkTitle })).toBeVisible();
     await expect(page.getByText(new RegExp(`Forked from ${projectTitle}`))).toBeVisible();
+    await page.getByRole("button", { name: "로그아웃" }).click();
+    await signIn(page, ownerEmail, password);
+    await expect(page.getByRole("link", { name: /미확인 2개/ })).toBeVisible();
+    await page.goto("/notifications");
+    await expect(page.getByRole("heading", { name: "알림" })).toBeVisible();
+    const issueNotification = page.getByRole("listitem").filter({ hasText: issueTitle });
+    const forkNotification = page.getByRole("listitem").filter({ hasText: "Fork했습니다." });
+    await expect(issueNotification).toBeVisible();
+    await expect(forkNotification).toBeVisible();
+    await issueNotification.getByRole("button", { name: "읽음 처리" }).click();
+    await expect(page.getByRole("link", { name: /미확인 1개/ })).toBeVisible();
+    await forkNotification.getByRole("button", { name: "읽음 처리" }).click();
+    await expect(page.getByText("미확인 알림 0개")).toBeVisible();
+    await expect(page.getByRole("link", { name: "알림" })).toBeVisible();
   });
 });
 
@@ -113,5 +134,13 @@ async function signUp(page: Page, name: string, email: string, password: string)
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "가입하기" }).click();
+  await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
+}
+
+async function signIn(page: Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.getByLabel("이메일").fill(email);
+  await page.getByLabel("비밀번호").fill(password);
+  await page.getByRole("button", { name: "로그인" }).click();
   await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
 }
