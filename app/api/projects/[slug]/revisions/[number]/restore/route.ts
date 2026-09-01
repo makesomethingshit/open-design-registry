@@ -38,6 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           sourceKey: source.sourceKey,
           sourceUrl: source.sourceUrl,
           isPublished: false,
+          // Restored previews intentionally keep the same key/url: immutable snapshots share the original storage objects.
           previews: { create: source.previews.map(({ position, key, url, mimeType, size, altText }) => ({ position, key, url, mimeType, size, altText })) },
         },
       });

@@ -65,12 +65,14 @@ describe("revision restore route", () => {
     }));
   });
 
-  it("requires an authenticated owner", async () => {
+  it("returns 401 when unauthenticated", async () => {
     mocks.getSession.mockResolvedValue(null);
     const response = await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) });
     expect(response.status).toBe(401);
     expect(mocks.findProject).not.toHaveBeenCalled();
+  });
 
+  it("returns 403 for a non-owner", async () => {
     mocks.getSession.mockResolvedValue({ user: { id: "other" } });
     const forbidden = await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) });
     expect(forbidden.status).toBe(403);
@@ -111,7 +113,7 @@ describe("revision restore route", () => {
     expect(mocks.findSource).toHaveBeenCalledWith(expect.objectContaining({ where: { projectId_number: { projectId: "project", number: 1 } } }));
   });
 
-  it("rejects missing or unpublished historical revisions", async () => {
+  it("returns 404 for missing or unpublished historical revisions", async () => {
     mocks.findSource.mockResolvedValueOnce(null);
     const missing = await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) });
     expect(missing.status).toBe(404);
