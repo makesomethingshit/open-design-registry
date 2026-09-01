@@ -7,8 +7,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
   const { slug, id } = await params;
-  const issue = await prisma.issue.findFirst({ where: { id, project: { slug, isPublic: true } }, select: { id: true } });
+  const issue = await prisma.issue.findFirst({ where: { id, project: { slug, isPublic: true } }, select: { id: true, status: true } });
   if (!issue) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+  if (issue.status === "CLOSED") return NextResponse.json({ error: "Issue is closed" }, { status: 409 });
   const parsed = issueCommentSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Comment body is required" }, { status: 400 });
   return NextResponse.json(await prisma.issueComment.create({ data: { issueId: id, authorId: session.user.id, body: parsed.data.body }, include: { author: { select: { id: true, name: true } } } }), { status: 201 });
