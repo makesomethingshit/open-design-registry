@@ -25,6 +25,15 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     const slug = projectPath.split("/").pop();
     expect(slug).toBeTruthy();
 
+    await page.goto(`/?q=${encodeURIComponent(projectTitle)}&license=${encodeURIComponent("CC BY 4.0")}`);
+    await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
+    await expect(page.getByLabel("라이선스")).toHaveValue("CC BY 4.0");
+    await page.goto(`/?q=${encodeURIComponent(projectTitle)}&license=MIT`);
+    await expect(page.getByText("조건에 맞는 공개 프로젝트가 없습니다.")).toBeVisible();
+    await page.goto(`/?q=${encodeURIComponent("Real storage integration flow")}`);
+    await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
+    await page.goto(projectPath);
+
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Upload the first source and previews");
     await page.locator('input[name="source"]').setInputFiles({ name: "source.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04integration-source") });

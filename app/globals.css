@@ -43,7 +43,8 @@ h1 { margin: 0 0 18px; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; 
 .opacity-control input { padding: 0; }
 .nav-button { border: 0; padding: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; } .nav-user { color: var(--ink); font-weight: 600; }
 .page-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 36px; } .page-heading h1 { margin-bottom: 12px; }
+.project-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 18px 0 28px; } .project-filters label { min-width: 220px; flex: 1; } .project-filters label + label { min-width: 180px; flex: 0 1 220px; } .project-filters .button { white-space: nowrap; }
 .project-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; } .project-card-heading h2 { margin: 0; font-size: 1.25rem; letter-spacing: -.03em; }
 .visibility { border-radius: 999px; padding: 4px 9px; font-size: .72rem; font-weight: 700; white-space: nowrap; } .visibility.public { background: #e5f5e8; color: var(--accent); } .visibility.private { background: #fff2d9; color: #8a5a00; }
 .empty-state { display: grid; place-items: start; gap: 12px; padding: 48px 0; color: var(--muted); } .project-settings { margin: 28px 0; border-top: 1px solid var(--line); padding-top: 18px; } .project-settings summary { cursor: pointer; font-weight: 700; } .project-settings .form { margin-top: 18px; }
-@media (max-width: 600px) { header { padding: 0 20px; } nav { gap: 11px; } main { padding: 42px 18px; } }
+@media (max-width: 600px) { header { padding: 0 20px; } nav { gap: 11px; } main { padding: 42px 18px; } .project-filters label, .project-filters label + label { min-width: 100%; flex-basis: 100%; } }
