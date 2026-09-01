@@ -5,10 +5,15 @@ import { getSession } from "@/src/lib/session";
 import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/project-validation";
 import { deleteObject, publicAssetUrl, putCover } from "@/src/lib/storage";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
+  const params = new URL(request.url).searchParams;
+  const query = params.get("q")?.trim() ?? "";
+  const license = params.get("license")?.trim() ?? "";
+  const visibility = session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true };
+  const where = query || license ? { AND: [visibility, ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { description: { contains: query, mode: "insensitive" as const } }] }] : []), ...(license ? [{ license }] : [])] } : visibility;
   const projects = await prisma.project.findMany({
-    where: session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true },
+    where,
     orderBy: { createdAt: "desc" },
     select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
   });
