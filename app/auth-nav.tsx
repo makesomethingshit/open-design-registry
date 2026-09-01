@@ -28,7 +28,7 @@ export default function AuthNav() {
   }, []);
 
   async function signOut() {
-    await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => undefined);
+    await fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => undefined);
     setUser(null);
     router.push("/");
     router.refresh();
