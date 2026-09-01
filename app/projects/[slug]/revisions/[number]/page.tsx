@@ -7,6 +7,7 @@ import { publicAssetUrl } from "@/src/lib/storage";
 import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
 import ForkForm from "./fork-form";
+import RestoreForm from "./restore-form";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,6 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     {sourceHref && <section aria-labelledby="revision-source"><h2 id="revision-source">Source</h2><a className="button secondary" href={sourceHref} {...(sourceUrl ? { target: "_blank", rel: "noreferrer" } : { download: true })}>{sourceUrl ? "Open source link" : "Download original file"}</a></section>}
     {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length)) && <RevisionDiff current={currentImagePreviews} previous={previousImagePreviews} currentNumber={revision.number} previousNumber={previous?.number} />}
     {htmlPreviews.length > 0 && <section aria-labelledby="html-previews"><h2 id="html-previews">HTML previews</h2><div className="html-previews">{htmlPreviews.map((preview) => <figure className="preview-diff" key={preview.id}><figcaption>{preview.altText}</figcaption><iframe className="html-preview" src={preview.url} title={preview.altText} sandbox="" loading="lazy" /></figure>)}</div></section>}
-    <ForkForm slug={project.slug} number={revision.number} license={project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
+    {session?.user.id === project.ownerId && <RestoreForm slug={project.slug} number={revision.number} />}<ForkForm slug={project.slug} number={revision.number} license={project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
   </article>;
 }

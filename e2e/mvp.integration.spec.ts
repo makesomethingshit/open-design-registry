@@ -6,7 +6,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
   test.setTimeout(120_000);
   test.skip(!process.env.E2E_INTEGRATION, "requires local PostgreSQL and S3-compatible services");
 
-  test("uploads, publishes a revision, serves assets, and forks it", async ({ page }) => {
+  test("uploads, publishes, restores a revision, serves assets, and forks it", async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const password = "integration-password-123";
     const projectTitle = `Integration project ${suffix}`;
@@ -37,7 +37,6 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.getByRole("button", { name: "Publish revision" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/projects/${slug}/revisions/1$`));
-    const revisionUrl = page.url();
     await expect(page.getByRole("heading", { name: "Initial revision" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "HTML previews" })).toBeVisible();
     await expect(page.locator('iframe[title="HTML design preview"]')).toBeVisible();
@@ -47,11 +46,47 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(sourceResponse.status()).toBe(200);
     expect((await sourceResponse.body()).length).toBeGreaterThan(0);
 
+    await page.goto(`/projects/${slug}`);
+    await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
+    await page.locator("form.revision-publish-form input[name=title]").fill("Second revision");
+    await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Make a second revision before restoring the first");
+    await page.locator('input[name="sourceUrl"]').fill("https://example.com/second-source.zip");
+    await page.locator('input[name="previews"]').setInputFiles({ name: "design-v2.png", mimeType: "image/png", buffer: tinyPng });
+    await page.getByLabel("Alt text for design-v2.png").fill("Second design preview");
+    await page.getByRole("button", { name: "Publish revision" }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${slug}/revisions/2$`));
+
+    const firstRevisionUrl = new URL(page.url());
+    firstRevisionUrl.pathname = `/projects/${slug}/revisions/1`;
+    await page.goto(firstRevisionUrl.toString());
+    await expect(page.getByRole("heading", { name: "Restore this revision" })).toBeVisible();
+    await page.getByRole("button", { name: "Restore as new revision" }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${slug}/revisions/3$`));
+    const restoredRevisionUrl = page.url();
+    await expect(page.getByRole("heading", { name: "Restored: Initial revision" })).toBeVisible();
+    const revisionsResponse = await page.request.get(`/api/projects/${slug}/revisions`);
+    expect(revisionsResponse.status()).toBe(200);
+    const revisions = await revisionsResponse.json() as Array<{ number: number; title: string; parentId: string | null }>;
+    expect(revisions.map((revision) => revision.number)).toEqual([1, 2, 3]);
+    expect(revisions.find((revision) => revision.number === 1)?.title).toBe("Initial revision");
+    expect(revisions.find((revision) => revision.number === 3)?.parentId).toBeTruthy();
+
+    const signOutResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/auth/sign-out" && response.request().method() === "POST";
+    });
     await page.getByRole("button", { name: "로그아웃" }).click();
+    const signOutResponse = await signOutResponsePromise;
+    expect(signOutResponse.status()).toBe(200);
+    const sessionResponse = await page.request.get("/api/auth/get-session");
+    expect(sessionResponse.status()).toBe(200);
+    const session = await sessionResponse.json() as { user?: unknown } | null;
+    expect(session?.user ?? null).toBeNull();
     await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
     await signUp(page, `Forker ${suffix}`, `forker-${suffix}@example.test`, password);
-    await page.goto(revisionUrl);
+    await page.goto(restoredRevisionUrl);
     await expect(page.getByRole("heading", { name: "Fork this revision" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Restore as new revision" })).toHaveCount(0);
     await page.getByLabel("Fork project title").fill(forkTitle);
     await page.locator('input[name="rightsConfirmed"]').check();
     await page.getByRole("button", { name: "Create fork" }).click();
