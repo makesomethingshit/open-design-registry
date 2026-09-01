@@ -47,7 +47,17 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(sourceResponse.status()).toBe(200);
     expect((await sourceResponse.body()).length).toBeGreaterThan(0);
 
+    const signOutResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/auth/sign-out" && response.request().method() === "POST";
+    });
     await page.getByRole("button", { name: "로그아웃" }).click();
+    const signOutResponse = await signOutResponsePromise;
+    expect(signOutResponse.status()).toBe(200);
+    const sessionResponse = await page.request.get("/api/auth/get-session");
+    expect(sessionResponse.status()).toBe(200);
+    const session = await sessionResponse.json() as { user?: unknown } | null;
+    expect(session?.user ?? null).toBeNull();
     await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
     await signUp(page, `Forker ${suffix}`, `forker-${suffix}@example.test`, password);
     await page.goto(revisionUrl);
