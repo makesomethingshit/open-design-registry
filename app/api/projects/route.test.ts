@@ -46,4 +46,9 @@ describe("project listing route", () => {
     await GET(request());
     expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isPublic: true }, orderBy: { createdAt: "desc" } }));
   });
+
+  it("orders by recent activity when requested", async () => {
+    await GET(request("?sort=recent"));
+    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { updatedAt: "desc" } }));
+  });
 });

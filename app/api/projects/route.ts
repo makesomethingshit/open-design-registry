@@ -10,11 +10,12 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const query = params.get("q")?.trim() ?? "";
   const license = params.get("license")?.trim() ?? "";
+  const sort = params.get("sort")?.trim() === "recent" ? "recent" : "";
   const visibility = session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true };
   const where = query || license ? { AND: [visibility, ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { description: { contains: query, mode: "insensitive" as const } }] }] : []), ...(license ? [{ license }] : [])] } : visibility;
   const projects = await prisma.project.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: sort === "recent" ? { updatedAt: "desc" } : { createdAt: "desc" },
     select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
   });
   return NextResponse.json(projects.map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) })));
