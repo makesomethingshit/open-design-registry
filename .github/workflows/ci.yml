@@ -45,7 +45,7 @@ jobs:
             --env MINIO_ROOT_USER=minioadmin \
             --env MINIO_ROOT_PASSWORD=minioadmin \
             minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
-          curl --retry 30 --retry-connrefused --retry-delay 1 --fail --silent --show-error \
+          curl --retry 30 --retry-connrefused --retry-all-errors --retry-delay 1 --fail --silent --show-error \
             http://127.0.0.1:9000/minio/health/live
           npm run test:storage:prepare
       - run: npx prisma generate
