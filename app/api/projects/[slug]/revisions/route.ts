@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { deleteObject, publicAssetUrl, putObject } from "@/src/lib/storage";
+import { toPublicRevision } from "@/src/lib/revisions";
+import { deleteObject, putObject } from "@/src/lib/storage";
 import {
   maxRevisionPreviewBytes,
   maxRevisionPreviewTotalBytes,
@@ -27,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const revisions = await prisma.revision.findMany({
     where: { projectId: project.id }, orderBy: { number: "asc" }, include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } },
   });
-  return NextResponse.json(revisions.map(exposeRevision));
+  return NextResponse.json(revisions.map(toPublicRevision));
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -102,7 +103,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       });
       return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
     });
-    return NextResponse.json(exposeRevision(revision), { status: 201 });
+    return NextResponse.json(toPublicRevision(revision), { status: 201 });
   } catch (cause) {
     await Promise.allSettled(uploadedKeys.map((key) => deleteObject(key)));
     if (cause instanceof PublishError) return error(cause.message, cause.status);
@@ -117,13 +118,4 @@ class PublishError extends Error {
 
 function safeName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-100) || "file";
-}
-
-function exposeRevision<T extends { sourceKey?: string | null; sourceUrl?: string | null; isPublished?: boolean; previews?: Array<{ url: string }> }>(revision: T) {
-  const { sourceKey, isPublished: _isPublished, previews, ...rest } = revision;
-  return {
-    ...rest,
-    sourceUrl: revision.sourceUrl ?? (sourceKey ? publicAssetUrl(sourceKey) : revision.sourceUrl),
-    previews: previews?.map((preview) => ({ ...preview, url: publicAssetUrl(preview.url) })),
-  };
 }

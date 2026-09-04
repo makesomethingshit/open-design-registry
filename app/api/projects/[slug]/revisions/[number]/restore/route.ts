@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { publicAssetUrl } from "@/src/lib/storage";
+import { toPublicRevision } from "@/src/lib/revisions";
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       });
       return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
     });
-    return NextResponse.json(exposeRevision(revision), { status: 201 });
+    return NextResponse.json(toPublicRevision(revision), { status: 201 });
   } catch (cause) {
     if (cause instanceof RestoreError) return error(cause.message, cause.status);
     console.error("revision restore failed", cause);
@@ -54,13 +54,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
 class RestoreError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
-}
-
-function exposeRevision<T extends { sourceKey?: string | null; sourceUrl?: string | null; isPublished?: boolean; previews?: Array<{ url: string }> }>(revision: T) {
-  const { sourceKey, isPublished: _isPublished, previews, ...rest } = revision;
-  return {
-    ...rest,
-    sourceUrl: revision.sourceUrl ?? (sourceKey ? publicAssetUrl(sourceKey) : revision.sourceUrl),
-    previews: previews?.map((preview) => ({ ...preview, url: publicAssetUrl(preview.url) })),
-  };
 }
