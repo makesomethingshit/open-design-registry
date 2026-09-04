@@ -154,7 +154,6 @@ model Revision {
   @@index([projectId, createdAt])
   @@index([parentId])
   @@index([tool, createdAt])
-  @@index([sourceChecksum])
   @@index([tags], type: Gin)
 }
 

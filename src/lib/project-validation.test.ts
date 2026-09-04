@@ -70,10 +70,13 @@ describe("project validation", () => {
   });
   it("adds discovery metadata and updates revision immutability", () => {
     const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260904000000_revision_discovery_metadata/migration.sql"), "utf8");
+    const hardeningSql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260904010000_revision_discovery_hardening/migration.sql"), "utf8");
     expect(sql).toContain('ADD COLUMN "tool" TEXT');
     expect(sql).toContain('ADD COLUMN "tags" TEXT[]');
     expect(sql).toContain('Revision_sourceChecksum_sha256');
     expect(sql).toContain('OLD."sourceChecksum"');
+    expect(hardeningSql).toContain("to_jsonb(OLD) - 'isPublished'");
+    expect(hardeningSql).toContain('DROP INDEX IF EXISTS "Revision_sourceChecksum_idx"');
   });
   it("limits stored preview MIME types to supported formats", () => {
     const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260831070000_html_previews/migration.sql"), "utf8");

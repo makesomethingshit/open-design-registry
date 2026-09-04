@@ -11,7 +11,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const query = firstValue(params.q);
   const license = firstValue(params.license);
-  const tool = firstValue(params.tool);
+  const tool = firstValue(params.tool).toLowerCase();
   const tag = firstValue(params.tag).toLowerCase();
   const sort = firstValue(params.sort) === "recent" ? "recent" : "";
   const projects = await prisma.project.findMany({
@@ -19,7 +19,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       isPublic: true,
       ...(query ? { OR: [{ title: { contains: query, mode: "insensitive" } }, { description: { contains: query, mode: "insensitive" } }] } : {}),
       ...(license ? { license } : {}),
-      ...(tool || tag ? { revisions: { some: { ...(tool ? { tool: { equals: tool, mode: "insensitive" } } : {}), ...(tag ? { tags: { has: tag } } : {}) } } } : {}),
+      ...(tool || tag ? { revisions: { some: { ...(tool ? { tool: { equals: tool } } : {}), ...(tag ? { tags: { hasEvery: [tag] } } : {}) } } } : {}),
     },
     orderBy: sort === "recent" ? { updatedAt: "desc" } : { createdAt: "desc" },
     take: 24,

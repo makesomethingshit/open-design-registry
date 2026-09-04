@@ -20,7 +20,7 @@ describe("project discovery listing", () => {
 
     expect(await response.json()).toMatchObject({ items: [{ slug: "second" }], nextCursor: "second" });
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: [{ isPublic: true }, { revisions: { some: { tool: { equals: "Figma", mode: "insensitive" } } } }, { revisions: { some: { tags: { has: "ui" } } } }] },
+      where: { AND: [{ isPublic: true }, { revisions: { some: { tool: { equals: "figma" }, tags: { hasEvery: ["ui"] } } } }] },
       take: 2,
       orderBy: [{ createdAt: "desc" }, { slug: "desc" }],
     }));

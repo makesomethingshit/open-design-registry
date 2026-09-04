@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const searchParams = new URL(request.url).searchParams;
   const query = searchParams.get("q")?.trim() ?? "";
   const license = searchParams.get("license")?.trim() ?? "";
-  const tool = (searchParams.get("tool") ?? searchParams.get("toolName"))?.trim() ?? "";
+  const tool = ((searchParams.get("tool") ?? searchParams.get("toolName"))?.trim() ?? "").toLowerCase();
   const tags = [...new Set(searchParams.getAll("tag").concat(searchParams.getAll("tags").flatMap((value) => value.split(",")).filter(Boolean)).map((value) => value.trim().toLowerCase()).filter(Boolean))];
   const sort = searchParams.get("sort")?.trim() ?? "";
   const isPaginated = paginationRequested(searchParams);
@@ -42,22 +42,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const cursor = pageCursor(searchParams.get("cursor"));
   const filters = [
     { projectId: project.id, isPublished: true },
-    ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { changeDescription: { contains: query, mode: "insensitive" as const } }, { tool: { contains: query, mode: "insensitive" as const } }, { toolVersion: { contains: query, mode: "insensitive" as const } }, { tags: { has: query.toLowerCase() } }] }] : []),
+    ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { changeDescription: { contains: query, mode: "insensitive" as const } }, { tool: { contains: query, mode: "insensitive" as const } }, { toolVersion: { contains: query, mode: "insensitive" as const } }, { tags: { hasEvery: [query.toLowerCase()] } }] }] : []),
     ...(license ? [{ project: { license } }] : []),
-    ...(tool ? [{ tool: { equals: tool, mode: "insensitive" as const } }] : []),
+    ...(tool ? [{ tool: { equals: tool } }] : []),
     ...(tags.length ? [{ tags: { hasEvery: tags } }] : []),
   ];
   const revisions = await prisma.revision.findMany({
     where: filters.length === 1 ? filters[0] : { AND: filters },
-    ...(isPaginated ? { cursor: cursor ? { id: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit }),
+    ...(isPaginated ? { cursor: cursor ? { id: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
     orderBy: isPaginated
       ? (sort === "recent" ? [{ createdAt: "desc" }, { id: "desc" }] : sort === "oldest" ? [{ createdAt: "asc" }, { id: "asc" }] : { number: "asc" })
       : { number: "asc" },
     include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } },
   });
-  const hasMore = isPaginated && revisions.length > limit;
+  const hasMore = revisions.length > limit;
   const page = revisions.slice(0, limit).map(toPublicRevision);
-  if (!isPaginated) return NextResponse.json(page);
+  if (!isPaginated) {
+    const response = NextResponse.json(page);
+    response.headers.set("X-Has-More", String(hasMore));
+    if (hasMore) response.headers.set("X-Next-Cursor", revisions[limit - 1]?.id ?? "");
+    return response;
+  }
   return NextResponse.json({ items: page, nextCursor: hasMore ? revisions[limit - 1]?.id ?? null : null });
 }
 
@@ -83,7 +88,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const toolVersionValue = form.get("toolVersion");
   const toolVersionResult = toolVersionValue == null || (typeof toolVersionValue === "string" && !toolVersionValue.trim()) ? { success: true as const, data: undefined } : revisionToolVersion.safeParse(toolVersionValue);
   if (!toolVersionResult.success) return error("Tool version must be 80 characters or fewer");
-  if (toolVersionResult.data && !toolResult.data) return error("Provide a tool name with the tool version");
+  const tool = toolResult.data?.toLowerCase();
+  if (toolVersionResult.data && !tool) return error("Provide a tool name with the tool version");
   const tagResult = parseRevisionTags(form.getAll("tags").concat(form.getAll("tag")));
   if ("error" in tagResult) return error(tagResult.error ?? "Invalid tags");
   const checksumValue = ["sourceChecksum", "checksum", "sourceHash"].map((name) => form.get(name)).find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
@@ -145,7 +151,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,
           changeDescription,
           sourceKey: publishedSourceKey, sourceUrl,
-          tool: toolResult.data,
+          tool,
           toolVersion: toolVersionResult.data,
           tags: tagResult.tags,
           sourceChecksum,

@@ -18,19 +18,19 @@ describe("revision discovery listing", () => {
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.findMany.mockResolvedValue([
       {
-        id: "revision-1", projectId: "project", number: 2, parentId: null, title: "Mobile kit", changeDescription: "Update", sourceKey: null, sourceUrl: "https://example.test/source.zip", tool: "Figma", toolVersion: "1", tags: ["ui"], sourceChecksum: null, isPublished: true, createdAt: new Date("2026-01-01"), previews: [],
+        id: "revision-1", projectId: "project", number: 2, parentId: null, title: "Mobile kit", changeDescription: "Update", sourceKey: null, sourceUrl: "https://example.test/source.zip", tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: null, isPublished: true, createdAt: new Date("2026-01-01"), previews: [],
       },
       {
-        id: "revision-2", projectId: "project", number: 1, parentId: null, title: "Older", changeDescription: "Initial", sourceKey: null, sourceUrl: "https://example.test/source.zip", tool: "Figma", toolVersion: "1", tags: ["ui"], sourceChecksum: null, isPublished: true, createdAt: new Date("2025-01-01"), previews: [],
+        id: "revision-2", projectId: "project", number: 1, parentId: null, title: "Older", changeDescription: "Initial", sourceKey: null, sourceUrl: "https://example.test/source.zip", tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: null, isPublished: true, createdAt: new Date("2025-01-01"), previews: [],
       },
     ]);
 
     const response = await GET(new Request("http://localhost/api/projects/demo/revisions?limit=1&tool=figma&tag=ui&sort=recent"), { params: Promise.resolve({ slug: "demo" }) });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ items: [{ id: "revision-1", tool: "Figma", tags: ["ui"] }], nextCursor: "revision-1" });
+    expect(await response.json()).toMatchObject({ items: [{ id: "revision-1", tool: "figma", tags: ["ui"] }], nextCursor: "revision-1" });
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: [{ projectId: "project", isPublished: true }, { tool: { equals: "figma", mode: "insensitive" } }, { tags: { hasEvery: ["ui"] } }] },
+      where: { AND: [{ projectId: "project", isPublished: true }, { tool: { equals: "figma" } }, { tags: { hasEvery: ["ui"] } }] },
       take: 2,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }));

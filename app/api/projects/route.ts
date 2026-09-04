@@ -11,31 +11,36 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const query = params.get("q")?.trim() ?? "";
   const license = params.get("license")?.trim() ?? "";
-  const tool = (params.get("tool") ?? params.get("toolName"))?.trim() ?? "";
+  const tool = ((params.get("tool") ?? params.get("toolName"))?.trim() ?? "").toLowerCase();
   const tags = [...new Set(params.getAll("tag").concat(params.getAll("tags").flatMap((value) => value.split(",")).filter(Boolean)).map((value) => value.trim().toLowerCase()).filter(Boolean))];
   const sort = params.get("sort")?.trim() ?? "";
   const isPaginated = paginationRequested(params);
   const limit = parsePageSize(params.get("limit") ?? params.get("take") ?? params.get("pageSize"));
   const cursor = pageCursor(params.get("cursor"));
   const visibility = session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true };
+  const revisionFilter = tool || tags.length ? { revisions: { some: { ...(tool ? { tool: { equals: tool } } : {}), ...(tags.length ? { tags: { hasEvery: tags } } : {}) } } } : undefined;
   const filters = [
     ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { description: { contains: query, mode: "insensitive" as const } }] }] : []),
     ...(license ? [{ license }] : []),
-    ...(tool ? [{ revisions: { some: { tool: { equals: tool, mode: "insensitive" as const } } } }] : []),
-    ...(tags.length ? tags.map((tag) => ({ revisions: { some: { tags: { has: tag } } } })) : []),
+    ...(revisionFilter ? [revisionFilter] : []),
   ];
   const where = filters.length ? { AND: [visibility, ...filters] } : visibility;
   const projects = await prisma.project.findMany({
     where,
-    ...(isPaginated ? { cursor: cursor ? { slug: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit }),
+    ...(isPaginated ? { cursor: cursor ? { slug: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
     orderBy: isPaginated
       ? (sort === "recent" ? [{ updatedAt: "desc" }, { slug: "desc" }] : sort === "oldest" ? [{ createdAt: "asc" }, { slug: "asc" }] : [{ createdAt: "desc" }, { slug: "desc" }])
       : (sort === "recent" ? { updatedAt: "desc" } : sort === "oldest" ? { createdAt: "asc" } : { createdAt: "desc" }),
     select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
   });
-  const hasMore = isPaginated && projects.length > limit;
+  const hasMore = projects.length > limit;
   const page = projects.slice(0, limit).map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }));
-  if (!isPaginated) return NextResponse.json(page);
+  if (!isPaginated) {
+    const response = NextResponse.json(page);
+    response.headers.set("X-Has-More", String(hasMore));
+    if (hasMore) response.headers.set("X-Next-Cursor", projects[limit - 1]?.slug ?? "");
+    return response;
+  }
   return NextResponse.json({ items: page, nextCursor: hasMore ? projects[limit - 1]?.slug ?? null : null });
 }
 
