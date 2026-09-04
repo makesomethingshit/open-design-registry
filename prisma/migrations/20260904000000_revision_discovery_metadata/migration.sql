@@ -16,7 +16,6 @@ ALTER TABLE "Revision"
     CHECK (cardinality("tags") <= 20);
 
 CREATE INDEX "Revision_tool_createdAt_idx" ON "Revision"("tool", "createdAt");
-CREATE INDEX "Revision_sourceChecksum_idx" ON "Revision"("sourceChecksum");
 CREATE INDEX "Revision_tags_idx" ON "Revision" USING GIN ("tags");
 
 -- Include discovery metadata in the published-row immutability comparison.

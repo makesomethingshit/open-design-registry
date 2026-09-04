@@ -40,6 +40,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const isPaginated = paginationRequested(searchParams);
   const limit = parsePageSize(searchParams.get("limit") ?? searchParams.get("take") ?? searchParams.get("pageSize"));
   const cursor = pageCursor(searchParams.get("cursor"));
+  const orderBy = sort === "recent"
+    ? [{ createdAt: "desc" as const }, { id: "desc" as const }]
+    : sort === "oldest"
+      ? [{ createdAt: "asc" as const }, { id: "asc" as const }]
+      : [{ number: "asc" as const }];
   const filters = [
     { projectId: project.id, isPublished: true },
     ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { changeDescription: { contains: query, mode: "insensitive" as const } }, { tool: { contains: query, mode: "insensitive" as const } }, { toolVersion: { contains: query, mode: "insensitive" as const } }, { tags: { hasEvery: [query.toLowerCase()] } }] }] : []),
@@ -50,9 +55,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const revisions = await prisma.revision.findMany({
     where: filters.length === 1 ? filters[0] : { AND: filters },
     ...(isPaginated ? { cursor: cursor ? { id: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
-    orderBy: isPaginated
-      ? (sort === "recent" ? [{ createdAt: "desc" }, { id: "desc" }] : sort === "oldest" ? [{ createdAt: "asc" }, { id: "asc" }] : { number: "asc" })
-      : { number: "asc" },
+    orderBy,
     include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } },
   });
   const hasMore = revisions.length > limit;

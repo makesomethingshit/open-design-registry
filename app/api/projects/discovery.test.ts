@@ -25,4 +25,30 @@ describe("project discovery listing", () => {
       orderBy: [{ createdAt: "desc" }, { slug: "desc" }],
     }));
   });
+
+  it("uses a unique tie-break and signals truncation for the default first page", async () => {
+    mocks.findMany.mockClear();
+    mocks.findMany.mockResolvedValue(Array.from({ length: 25 }, (_, index) => ({
+      slug: `project-${index + 1}`,
+      title: `Project ${index + 1}`,
+      description: "",
+      license: "MIT",
+      isPublic: true,
+      coverUrl: `covers/project-${index + 1}`,
+      createdAt: new Date("2026-01-01"),
+      owner: { name: "Author" },
+    })));
+
+    const response = await GET(new Request("http://localhost/api/projects"));
+    const body = await response.json();
+
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(24);
+    expect(response.headers.get("X-Has-More")).toBe("true");
+    expect(response.headers.get("X-Next-Cursor")).toBe(body[23].slug);
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 25,
+      orderBy: [{ createdAt: "desc" }, { slug: "desc" }],
+    }));
+  });
 });

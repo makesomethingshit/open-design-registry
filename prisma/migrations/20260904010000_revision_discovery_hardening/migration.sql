@@ -15,8 +15,6 @@ ALTER TABLE "Revision"
   ADD CONSTRAINT "Revision_sourceChecksum_sha256"
     CHECK ("sourceChecksum" IS NULL OR "sourceChecksum" ~ '^[0-9a-f]{64}$');
 
-DROP INDEX IF EXISTS "Revision_sourceChecksum_idx";
-
 CREATE OR REPLACE FUNCTION prevent_revision_publish() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'UPDATE'

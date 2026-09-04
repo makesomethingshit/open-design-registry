@@ -75,8 +75,9 @@ describe("project validation", () => {
     expect(sql).toContain('ADD COLUMN "tags" TEXT[]');
     expect(sql).toContain('Revision_sourceChecksum_sha256');
     expect(sql).toContain('OLD."sourceChecksum"');
+    expect(sql).not.toContain('Revision_sourceChecksum_idx');
     expect(hardeningSql).toContain("to_jsonb(OLD) - 'isPublished'");
-    expect(hardeningSql).toContain('DROP INDEX IF EXISTS "Revision_sourceChecksum_idx"');
+    expect(hardeningSql).not.toContain('Revision_sourceChecksum_idx');
   });
   it("limits stored preview MIME types to supported formats", () => {
     const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260831070000_html_previews/migration.sql"), "utf8");

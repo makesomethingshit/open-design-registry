@@ -35,4 +35,27 @@ describe("revision discovery listing", () => {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }));
   });
+
+  it("keeps the array response while honoring recent sorting without pagination", async () => {
+    mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
+    mocks.findMany.mockClear();
+    mocks.findMany.mockResolvedValue([
+      {
+        id: "revision-new", projectId: "project", number: 2, parentId: null, title: "Newer", changeDescription: "Update", sourceKey: null, sourceUrl: "https://example.test/source.zip", tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: null, isPublished: true, createdAt: new Date("2026-01-02"), previews: [],
+      },
+      {
+        id: "revision-old", projectId: "project", number: 1, parentId: null, title: "Older", changeDescription: "Initial", sourceKey: null, sourceUrl: "https://example.test/source.zip", tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: null, isPublished: true, createdAt: new Date("2026-01-01"), previews: [],
+      },
+    ]);
+
+    const response = await GET(new Request("http://localhost/api/projects/demo/revisions?sort=recent"), { params: Promise.resolve({ slug: "demo" }) });
+    const body = await response.json();
+
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.map((revision: { id: string }) => revision.id)).toEqual(["revision-new", "revision-old"]);
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 25,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }));
+  });
 });
