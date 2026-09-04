@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { imageTypes, issueStatusSchema, maxImageBytes, previewAltText, previewTypes, projectSchema, projectUpdateSchema, reportSchema, revisionChangeDescription, revisionTitle, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
+import { imageTypes, issueStatusSchema, maxImageBytes, parseRevisionTags, previewAltText, previewTypes, projectSchema, projectUpdateSchema, reportSchema, revisionChangeDescription, revisionSourceChecksum, revisionTitle, revisionTool, revisionUrlSchema, slugify, validateRevisionSource } from "./project-validation";
 
 describe("project validation", () => {
   it("accepts a valid project and creates a stable slug", () => {
@@ -30,6 +30,12 @@ describe("project validation", () => {
     expect(revisionChangeDescription.safeParse("  ").success).toBe(false);
     expect(previewAltText.safeParse("Describe this screen").success).toBe(true);
     expect(previewAltText.safeParse("x".repeat(501)).success).toBe(false);
+  });
+  it("normalizes and bounds revision discovery metadata", () => {
+    expect(revisionTool.safeParse("Penpot").success).toBe(true);
+    expect(revisionSourceChecksum.safeParse("a".repeat(64)).success).toBe(true);
+    expect(parseRevisionTags(["UI, Mobile", "ui"])).toEqual({ tags: ["ui", "mobile"] });
+    expect(parseRevisionTags(Array.from({ length: 21 }, (_, index) => `tag-${index}`))).toMatchObject({ error: expect.stringMatching(/20/) });
   });
   it("requires a concise report reason", () => {
     expect(reportSchema.safeParse({ reason: "Copyright concern" }).success).toBe(true);
@@ -61,6 +67,17 @@ describe("project validation", () => {
     expect(sql).toContain("No change description provided.");
     expect(sql).toContain('Revision_title_non_empty');
     expect(sql).toContain('Preview_altText_non_empty');
+  });
+  it("adds discovery metadata and updates revision immutability", () => {
+    const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260904000000_revision_discovery_metadata/migration.sql"), "utf8");
+    const hardeningSql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260904010000_revision_discovery_hardening/migration.sql"), "utf8");
+    expect(sql).toContain('ADD COLUMN "tool" TEXT');
+    expect(sql).toContain('ADD COLUMN "tags" TEXT[]');
+    expect(sql).toContain('Revision_sourceChecksum_sha256');
+    expect(sql).toContain('OLD."sourceChecksum"');
+    expect(sql).not.toContain('Revision_sourceChecksum_idx');
+    expect(hardeningSql).toContain("to_jsonb(OLD) - 'isPublished'");
+    expect(hardeningSql).not.toContain('Revision_sourceChecksum_idx');
   });
   it("limits stored preview MIME types to supported formats", () => {
     const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260831070000_html_previews/migration.sql"), "utf8");

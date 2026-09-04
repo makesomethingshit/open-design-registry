@@ -136,6 +136,10 @@ model Revision {
   changeDescription String
   sourceKey  String?
   sourceUrl  String?
+  tool       String?
+  toolVersion String?
+  tags       String[] @default([])
+  sourceChecksum String?
   isPublished Boolean   @default(true)
   createdAt  DateTime  @default(now())
   project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -149,6 +153,8 @@ model Revision {
   @@unique([projectId, number])
   @@index([projectId, createdAt])
   @@index([parentId])
+  @@index([tool, createdAt])
+  @@index([tags], type: Gin)
 }
 
 enum IssueStatus {

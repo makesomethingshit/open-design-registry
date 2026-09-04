@@ -35,6 +35,21 @@ export const maxRevisionPreviewTotalBytes = 50 * 1024 * 1024;
 export const revisionTitle = z.string().trim().min(1).max(120);
 export const revisionChangeDescription = z.string().trim().min(1).max(500);
 export const previewAltText = z.string().trim().min(1).max(500);
+export const revisionTool = z.string().trim().min(1).max(80);
+export const revisionToolVersion = z.string().trim().min(1).max(80);
+export const revisionTag = z.string().trim().min(1).max(40);
+export const revisionSourceChecksum = z.string().trim().regex(/^[0-9a-f]{64}$/i, "sourceChecksum must be a SHA-256 hex digest");
+export const maxRevisionTags = 20;
+
+export function parseRevisionTags(values: FormDataEntryValue[]) {
+  if (values.some((value) => typeof value !== "string")) return { error: "Tags must be text values" } as const;
+  const tags = [...new Set(values.flatMap((value) => typeof value === "string" ? value.split(/[\n,]/) : []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
+  if (tags.length > maxRevisionTags) return { error: `Use no more than ${maxRevisionTags} tags` } as const;
+  for (const tag of tags) {
+    if (!revisionTag.safeParse(tag).success) return { error: "Each tag must be 40 characters or fewer" } as const;
+  }
+  return { tags } as const;
+}
 
 export const revisionUrlSchema = z.string().trim().url().refine((value) => {
   try {
