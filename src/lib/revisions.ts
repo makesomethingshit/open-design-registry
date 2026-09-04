@@ -1,7 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import { publicAssetUrl } from "./storage";
 
-type RevisionWithPreviews = Prisma.RevisionGetPayload<{ include: { previews: true } }>;
+type RevisionWithPreviews = Omit<Prisma.RevisionGetPayload<{ include: { previews: true } }>, "tool" | "toolVersion" | "tags" | "sourceChecksum"> & {
+  tool?: string | null;
+  toolVersion?: string | null;
+  tags?: string[];
+  sourceChecksum?: string | null;
+};
 type PublicRevision = Omit<RevisionWithPreviews, "sourceKey" | "isPublished" | "previews"> & {
   previews: Array<Omit<RevisionWithPreviews["previews"][number], "url"> & { url: string }>;
 };

@@ -40,8 +40,12 @@ export default function RevisionPublishForm({ slug }: { slug: string }) {
     <h2>Publish a revision</h2>
     <label>Revision title<input name="title" required maxLength={120} /></label>
     <label>Change description<textarea name="changeDescription" required minLength={1} maxLength={500} /></label>
+    <label>Design tool<input name="tool" maxLength={80} placeholder="Figma, Penpot, …" /></label>
+    <label>Tool version<input name="toolVersion" maxLength={80} placeholder="Optional" /></label>
+    <label>Tags<input name="tags" maxLength={800} placeholder="ui, landing-page, mobile" /></label>
     <label>Source file (ZIP, PSD, or another original format)<input name="source" type="file" /></label>
     <label>Source URL<input name="sourceUrl" type="url" placeholder="https://…" /></label>
+    <label>Source SHA-256 checksum<input name="sourceChecksum" inputMode="text" pattern="[a-fA-F0-9]{64}" maxLength={64} placeholder="Optional; uploaded files are checked automatically" /></label>
     <label>Previews (PNG/JPG/HTML, up to 10)<input name="previews" type="file" accept="image/png,image/jpeg,text/html" multiple required onChange={selectPreviews} /></label>
     {files.map((file, index) => <label key={`${file.name}-${index}`}>Alt text for {file.name}<input name="altTexts" required maxLength={500} /></label>)}
     {error && <p className="error" role="alert">{error}</p>}

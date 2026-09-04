@@ -4,21 +4,39 @@ import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/project-validation";
 import { deleteObject, publicAssetUrl, putCover } from "@/src/lib/storage";
+import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 
 export async function GET(request: Request) {
   const session = await getSession();
   const params = new URL(request.url).searchParams;
   const query = params.get("q")?.trim() ?? "";
   const license = params.get("license")?.trim() ?? "";
-  const sort = params.get("sort")?.trim() === "recent" ? "recent" : "";
+  const tool = (params.get("tool") ?? params.get("toolName"))?.trim() ?? "";
+  const tags = [...new Set(params.getAll("tag").concat(params.getAll("tags").flatMap((value) => value.split(",")).filter(Boolean)).map((value) => value.trim().toLowerCase()).filter(Boolean))];
+  const sort = params.get("sort")?.trim() ?? "";
+  const isPaginated = paginationRequested(params);
+  const limit = parsePageSize(params.get("limit") ?? params.get("take") ?? params.get("pageSize"));
+  const cursor = pageCursor(params.get("cursor"));
   const visibility = session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true };
-  const where = query || license ? { AND: [visibility, ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { description: { contains: query, mode: "insensitive" as const } }] }] : []), ...(license ? [{ license }] : [])] } : visibility;
+  const filters = [
+    ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { description: { contains: query, mode: "insensitive" as const } }] }] : []),
+    ...(license ? [{ license }] : []),
+    ...(tool ? [{ revisions: { some: { tool: { equals: tool, mode: "insensitive" as const } } } }] : []),
+    ...(tags.length ? tags.map((tag) => ({ revisions: { some: { tags: { has: tag } } } })) : []),
+  ];
+  const where = filters.length ? { AND: [visibility, ...filters] } : visibility;
   const projects = await prisma.project.findMany({
     where,
-    orderBy: sort === "recent" ? { updatedAt: "desc" } : { createdAt: "desc" },
+    ...(isPaginated ? { cursor: cursor ? { slug: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit }),
+    orderBy: isPaginated
+      ? (sort === "recent" ? [{ updatedAt: "desc" }, { slug: "desc" }] : sort === "oldest" ? [{ createdAt: "asc" }, { slug: "asc" }] : [{ createdAt: "desc" }, { slug: "desc" }])
+      : (sort === "recent" ? { updatedAt: "desc" } : sort === "oldest" ? { createdAt: "asc" } : { createdAt: "desc" }),
     select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
   });
-  return NextResponse.json(projects.map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) })));
+  const hasMore = isPaginated && projects.length > limit;
+  const page = projects.slice(0, limit).map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }));
+  if (!isPaginated) return NextResponse.json(page);
+  return NextResponse.json({ items: page, nextCursor: hasMore ? projects[limit - 1]?.slug ?? null : null });
 }
 
 export async function POST(request: Request) {
