@@ -22,6 +22,7 @@ export const reportSchema = z.object({
 
 export const issueSchema = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().max(10000).default(""), revisionId: z.string().trim().optional() });
 export const issueCommentSchema = z.object({ body: z.string().trim().min(1).max(10000) });
+export const issueStatusSchema = z.object({ status: z.enum(["OPEN", "CLOSED"]) });
 
 export const imageTypes = new Set(["image/png", "image/jpeg"]);
 export const previewTypes = new Set([...imageTypes, "text/html"]);
