@@ -23,7 +23,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     },
     orderBy: sort === "recent" ? { updatedAt: "desc" } : { createdAt: "desc" },
     take: 24,
-    include: { owner: { select: { name: true } }, revisions: { orderBy: { createdAt: "desc" }, take: 1, select: { tags: true } } },
+    include: { owner: { select: { name: true } }, revisions: { where: { isPublished: true }, orderBy: { createdAt: "desc" }, take: 1, select: { tags: true } } },
   });
   return <>
     <section className="hero">

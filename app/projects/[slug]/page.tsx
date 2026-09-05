@@ -18,7 +18,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       owner: { select: { name: true } },
       revisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, altText: true } } } },
       issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } },
-      forks: { where: { isPublic: true }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
+      forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
+      _count: { select: { forks: { where: { isPublic: true } } } },
       forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } },
       forkedFromRevision: { select: { number: true } },
     },
@@ -44,7 +45,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <a className="repo-tab" href="#preview">Preview</a>
       <a className="repo-tab" href="#revisions">Revisions <span className="repo-tab-count">{project.revisions.length}</span></a>
       <a className="repo-tab" href="#issues">Issues <span className="repo-tab-count">{project.issues.length}</span></a>
-      <a className="repo-tab" href="#forks">Forks <span className="repo-tab-count">{project.forks.length}</span></a>
+      <a className="repo-tab" href="#forks">Forks <span className="repo-tab-count">{project._count.forks}</span></a>
     </nav>
     <section id="preview" className="repo-panel" aria-labelledby="preview-heading">
       <div className="section-heading"><h2 id="preview-heading">Preview</h2><span className="meta">Latest project cover</span></div>
