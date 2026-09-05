@@ -33,7 +33,20 @@ describe("revision source file download", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("original bytes");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
-    expect(response.headers.get("Content-Disposition")).toContain("original.ai");
+    expect(response.headers.get("Content-Disposition")).toBe("attachment; filename=\"source-file\"; filename*=UTF-8''original.ai");
+  });
+
+  it.each([
+    ["Korean", "포스터.psd", "%ED%8F%AC%EC%8A%A4%ED%84%B0.psd"],
+    ["emoji", "poster-😀.psd", "poster-%F0%9F%98%80.psd"],
+    ["quotes and path separators", "../'\"source\"\\poster😀.psd", "..-%27-source--poster%F0%9F%98%80.psd"],
+  ])("streams %s names with a safe RFC 5987 header", async (_case, name, encodedName) => {
+    mocks.readBundle.mockResolvedValue({ version: 1, files: [{ id: "file-a", name, mimeType: "application/postscript", size: 14, assetKey: "private/original.ai", previewKeys: [] }] });
+    const response = await GET(request(), params);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("original bytes");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Content-Disposition")).toBe(`attachment; filename="source-file"; filename*=UTF-8''${encodedName}`);
   });
 
   it("does not reveal a private revision file to a non-owner", async () => {

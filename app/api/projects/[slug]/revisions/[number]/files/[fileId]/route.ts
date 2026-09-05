@@ -12,6 +12,10 @@ function downloadName(name: string) {
   return name.replace(/[\\/\r\n"]/g, "-").trim() || "source-file";
 }
 
+function encodedDownloadName(name: string) {
+  return encodeURIComponent(downloadName(name)).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string; number: string; fileId: string }> }) {
   const { slug, number, fileId } = await params;
   const revisionNumber = Number(number);
@@ -26,11 +30,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   try {
     const object = await getObject(file.assetKey);
     if (!object.Body) return notFound();
-    const name = downloadName(file.name);
     const headers = new Headers({
       "Cache-Control": "private, no-store",
       "Content-Type": object.ContentType ?? file.mimeType,
-      "Content-Disposition": `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      "Content-Disposition": `attachment; filename="source-file"; filename*=UTF-8''${encodedDownloadName(file.name)}`,
       "X-Content-Type-Options": "nosniff",
     });
     if (object.ContentLength !== undefined) headers.set("Content-Length", String(object.ContentLength));
