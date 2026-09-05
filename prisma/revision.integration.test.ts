@@ -51,6 +51,7 @@ describePostgres("Revision PostgreSQL constraints", () => {
           number: (latest?.number ?? 0) + 1,
           parentId: latest?.id,
           title: "Atomic publish",
+          license: "CC BY 4.0",
           changeDescription: "Insert previews before publishing",
           sourceUrl: "https://example.test/atomic.zip",
           isPublished: false,
@@ -84,6 +85,9 @@ describePostgres("Revision PostgreSQL constraints", () => {
     });
 
     expect(revision.isPublished).toBe(true);
+    await prisma.project.update({ where: { id: projectId }, data: { license: "MIT" } });
+    expect((await prisma.revision.findUniqueOrThrow({ where: { id: revision.id } })).license).toBe("CC BY 4.0");
+    await expect(prisma.revision.update({ where: { id: revision.id }, data: { license: "MIT" } })).rejects.toThrow();
     expect(revision.previews).toHaveLength(2);
     expect(revision.previews.some((preview) => preview.mimeType === "text/html")).toBe(true);
     await expect(prisma.$executeRaw`INSERT INTO "Preview" ("id", "revisionId", "position", "key", "url", "mimeType", "size", "altText") VALUES (${`preview-test-${crypto.randomUUID()}`}, ${revision.id}, 1, ${`preview-test-${crypto.randomUUID()}`}, 'https://example.test/late.png', 'image/png', 1, 'Late preview')`).rejects.toThrow();

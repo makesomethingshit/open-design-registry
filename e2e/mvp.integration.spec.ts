@@ -62,7 +62,8 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(sourceLink).toHaveAttribute("href", /\/api\/assets\?key=/);
     const sourceResponse = await page.request.get(await sourceLink.getAttribute("href") as string);
     expect(sourceResponse.status()).toBe(200);
-    expect((await sourceResponse.body()).length).toBeGreaterThan(0);
+    const originalBytes = await sourceResponse.body();
+    expect(originalBytes.length).toBeGreaterThan(0);
 
     await page.goto(`/projects/${slug}`);
     await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
@@ -88,6 +89,12 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(revisions.map((revision) => revision.number)).toEqual([1, 2, 3]);
     expect(revisions.find((revision) => revision.number === 1)?.title).toBe("Initial revision");
     expect(revisions.find((revision) => revision.number === 3)?.parentId).toBeTruthy();
+
+    // Changing project settings must not rewrite the license of published revisions.
+    const licenseChange = await page.request.patch(`/api/projects/${slug}`, { data: { license: "MIT" } });
+    expect(licenseChange.status()).toBe(200);
+    await page.reload();
+    await expect(page.getByText("Revision license: CC BY 4.0", { exact: true })).toBeVisible();
 
     const signOutResponsePromise = page.waitForResponse((response) => {
       const url = new URL(response.url());
@@ -117,6 +124,17 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);
     await expect(page.getByRole("heading", { name: forkTitle })).toBeVisible();
     await expect(page.getByText(new RegExp(`Forked from ${projectTitle}`))).toBeVisible();
+    const forkPath = new URL(page.url()).pathname;
+    const forkRevisionsResponse = await page.request.get(`/api${forkPath}/revisions`);
+    expect(forkRevisionsResponse.status()).toBe(200);
+    const forkRevisions = await forkRevisionsResponse.json();
+    expect(forkRevisions).toHaveLength(1);
+    expect(forkRevisions[0]).toMatchObject({ number: 1, parentId: null, license: "CC BY 4.0", title: "Restored: Initial revision" });
+    expect(forkRevisions[0].previews).toHaveLength(2);
+    const forkSourceUrl = forkRevisions[0].sourceUrl as string;
+    const forkDownload = await page.request.get(forkSourceUrl);
+    expect(forkDownload.status()).toBe(200);
+    expect(await forkDownload.body()).toEqual(originalBytes);
     await page.getByRole("button", { name: "Sign out" }).click();
     await signIn(page, ownerEmail, password);
     await expect(page.getByRole("link", { name: /Activity, 2 unread/ })).toBeVisible();
@@ -131,6 +149,23 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await forkNotification.getByRole("button", { name: "읽음 처리" }).click();
     await expect(page.getByText("미확인 알림 0개")).toBeVisible();
     await expect(page.getByRole("link", { name: "Activity" })).toBeVisible();
+
+    // A fork owns independent asset references even after upstream becomes private.
+    expect((await page.request.patch(`/api/projects/${slug}`, { data: { isPublic: false } })).status()).toBe(200);
+    await signOut(page);
+    expect((await page.request.get(`/api/projects/${slug}/revisions`)).status()).toBe(404);
+    expect((await page.request.get(`/api${forkPath}/revisions`)).status()).toBe(200);
+    const preservedDownload = await page.request.get(forkSourceUrl);
+    expect(preservedDownload.status()).toBe(200);
+    expect(await preservedDownload.body()).toEqual(originalBytes);
+    for (const preview of forkRevisions[0].previews) {
+      expect((await page.request.get(preview.url)).status()).toBe(200);
+    }
+    // Once both projects are private, anonymous access must close again.
+    await signIn(page, `forker-${suffix}@example.test`, password);
+    expect((await page.request.patch(`/api${forkPath}`, { data: { isPublic: false } })).status()).toBe(200);
+    await signOut(page);
+    expect((await page.request.get(forkSourceUrl)).status()).toBe(404);
   });
 });
 
@@ -150,4 +185,14 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "로그인" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+async function signOut(page: Page) {
+  const responsePromise = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/sign-out" && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  expect((await responsePromise).status()).toBe(200);
+  const sessionResponse = await page.request.get("/api/auth/get-session");
+  expect(sessionResponse.status()).toBe(200);
+  expect((await sessionResponse.json())?.user ?? null).toBeNull();
+  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
 }

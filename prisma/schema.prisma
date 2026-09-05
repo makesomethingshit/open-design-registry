@@ -134,6 +134,7 @@ model Revision {
   parentId   String?
   title      String
   changeDescription String
+  license    String?
   sourceKey  String?
   sourceUrl  String?
   tool       String?
