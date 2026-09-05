@@ -23,34 +23,45 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     },
     orderBy: sort === "recent" ? { updatedAt: "desc" } : { createdAt: "desc" },
     take: 24,
-    include: { owner: { select: { name: true } } },
+    include: { owner: { select: { name: true } }, revisions: { where: { isPublished: true }, orderBy: { createdAt: "desc" }, take: 1, select: { tags: true } } },
   });
   return <>
     <section className="hero">
-      <p className="meta">TOOL-NEUTRAL DESIGN REGISTRY</p>
-      <h1>Make it open.</h1>
-      <p className="lede">Publish design projects that anyone can inspect, reuse, and carry forward across tools.</p>
+      <p className="eyebrow">Open Design Registry</p>
+      <h1>Design, with a history.</h1>
+      <p className="lede">A public home for design projects that anyone can inspect, reuse, and carry forward across tools.</p>
       <a className="button" href="/projects/new">Create a project</a>
     </section>
-    <section aria-labelledby="public-projects-heading">
-      <h2 id="public-projects-heading">Public projects</h2>
+    <section className="repo-section" aria-labelledby="public-projects-heading">
+      <div className="section-heading"><div><p className="eyebrow">Explore</p><h2 id="public-projects-heading">Public projects</h2></div><span className="section-count">{projects.length}</span></div>
       <form className="project-filters" method="get" action="/">
-        <label>Title or description<input name="q" type="search" defaultValue={query} placeholder="Search projects" /></label>
-        <label>Tool<input name="tool" defaultValue={tool} placeholder="Figma, Penpot…" /></label>
-        <label>Tag<input name="tag" defaultValue={tag} placeholder="mobile, ui…" /></label>
+        <label>Search<input name="q" type="search" defaultValue={query} placeholder="Search projects" /></label>
+        <label>Tool<input name="tool" defaultValue={tool} placeholder="Figma, Penpot" /></label>
+        <label>Tag<input name="tag" defaultValue={tag} placeholder="mobile, ui" /></label>
         <label>License<select name="license" defaultValue={license}><option value="">All licenses</option>{licenseOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
         <label>Sort<select name="sort" defaultValue={sort}><option value="">Newest first</option><option value="recent">Recently active</option></select></label>
         <button className="button" type="submit">Search</button>
         {(query || license || tool || tag || sort) && <a className="button secondary" href="/">Clear</a>}
       </form>
-      {projects.length ? <div className="grid">{projects.map((project) => <a className="card" href={`/projects/${project.slug}`} key={project.id}>
-        <img src={publicAssetUrl(project.coverUrl)} alt="" />
-        <div className="card-content"><h3>{project.title}</h3><p className="meta">{project.owner.name} · {project.license}</p><p>{project.description}</p></div>
-      </a>)}</div> : <p className="meta">No public projects match those filters.</p>}
+      {projects.length ? <div className="repo-list" aria-label="Public projects">{projects.map((project) => {
+        const tags = project.revisions[0]?.tags ?? [];
+        return <article className="repo-row" key={project.id}>
+          <div className="repo-icon"><img src={publicAssetUrl(project.coverUrl)} alt="" /></div>
+          <div className="repo-row-main">
+            <div className="repo-row-heading"><a className="repo-name" href={`/projects/${project.slug}`}>{project.title}</a><span className="repo-visibility public">Public</span></div>
+            <p className="repo-description">{project.description || "No description provided."}</p>
+            <div className="repo-meta"><span>{project.owner.name}</span><span>{project.license}</span>{tags.map((projectTag) => <span className="topic-tag" key={projectTag}>{projectTag}</span>)}<span>Updated <time dateTime={project.updatedAt.toISOString()}>{formatDate(project.updatedAt)}</time></span></div>
+          </div>
+        </article>;
+      })}</div> : <p className="empty-state">No public projects match those filters.</p>}
     </section>
   </>;
 }
 
 function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
+}
+
+function formatDate(value: Date) {
+  return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }

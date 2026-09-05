@@ -12,7 +12,24 @@ export default async function MyProjectsPage() {
   const projects = await prisma.project.findMany({
     where: { ownerId: session.user.id },
     orderBy: { updatedAt: "desc" },
-    include: { revisions: { select: { id: true } } },
+    include: { revisions: { select: { id: true, tags: true } } },
   });
-  return <section><div className="page-heading"><div><p className="meta">WORKSPACE</p><h1>내 프로젝트</h1><p className="lede">공개·비공개 프로젝트와 Revision을 관리하세요.</p></div><Link className="button" href="/projects/new">프로젝트 만들기</Link></div>{projects.length ? <div className="grid">{projects.map((project) => <Link className="card" href={`/projects/${project.slug}`} key={project.id}><img src={publicAssetUrl(project.coverUrl)} alt="" /><div className="card-content"><div className="project-card-heading"><h2>{project.title}</h2><span className={`visibility ${project.isPublic ? "public" : "private"}`}>{project.isPublic ? "공개" : "비공개"}</span></div><p className="meta">{project.revisions.length}개 Revision · {project.license}</p><p>{project.description || "설명이 없습니다."}</p></div></Link>)}</div> : <div className="empty-state"><p>아직 프로젝트가 없습니다.</p><Link className="button" href="/projects/new">첫 프로젝트 만들기</Link></div>}</section>;
+  return <section>
+    <div className="page-heading"><div><p className="eyebrow">Workspace</p><h1>My projects</h1><p className="lede">Your public and private design repositories, all in one place.</p></div><Link className="button" href="/projects/new">New project</Link></div>
+    {projects.length ? <div className="repo-list" aria-label="My projects">{projects.map((project) => {
+      const tags = [...new Set(project.revisions.flatMap((revision) => revision.tags))].slice(0, 5);
+      return <article className="repo-row" key={project.id}>
+        <div className="repo-icon"><img src={publicAssetUrl(project.coverUrl)} alt="" /></div>
+        <div className="repo-row-main">
+          <div className="repo-row-heading"><Link className="repo-name" href={`/projects/${project.slug}`}>{project.title}</Link><span className={`repo-visibility ${project.isPublic ? "public" : "private"}`}>{project.isPublic ? "Public" : "Private"}</span></div>
+          <p className="repo-description">{project.description || "No description provided."}</p>
+          <div className="repo-meta"><span>{project.revisions.length} revisions</span><span>{project.license}</span>{tags.map((tag) => <span className="topic-tag" key={tag}>{tag}</span>)}<span>Updated <time dateTime={project.updatedAt.toISOString()}>{formatDate(project.updatedAt)}</time></span></div>
+        </div>
+      </article>;
+    })}</div> : <div className="empty-state"><p>You do not have any projects yet.</p><Link className="button" href="/projects/new">Create your first project</Link></div>}
+  </section>;
+}
+
+function formatDate(value: Date) {
+  return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
