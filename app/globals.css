@@ -208,7 +208,8 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; accent
   .site-header-inner { padding-inline: 16px; }
   .brand span:last-child { display: none; }
   .auth-nav { font-size: .8rem; }
-  .nav-profile, .nav-button, .auth-nav .nav-link:first-child { display: none; }
+  .auth-nav { min-width: 0; overflow-x: auto; }
+  .nav-profile { display: none; }
   .hero { padding-top: 18px; }
   h1 { font-size: clamp(2.2rem, 14vw, 3.5rem); }
   .page-heading { align-items: start; flex-direction: column; }
