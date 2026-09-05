@@ -24,12 +24,17 @@ export const issueSchema = z.object({ title: z.string().trim().min(1).max(200), 
 export const issueCommentSchema = z.object({ body: z.string().trim().min(1).max(10000) });
 export const issueStatusSchema = z.object({ status: z.enum(["OPEN", "CLOSED"]) });
 const recordId = z.string().trim().min(1).max(200);
+const proposalFileSchema = z.object({
+  sourceFileId: recordId,
+  targetFileId: recordId,
+}).strict();
 export const proposalCreateSchema = z.object({
   baseRevisionId: recordId,
   sourceRevisionId: recordId,
   title: z.string().trim().min(1).max(200),
   body: z.string().trim().min(1).max(10000),
   relatedIssueId: recordId.nullable().optional(),
+  files: z.array(proposalFileSchema).min(1).max(10),
 }).strict();
 export const proposalReviewSchema = z.object({
   status: z.enum(["APPROVED", "CHANGES_REQUESTED"]),
@@ -37,7 +42,11 @@ export const proposalReviewSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (value.status === "CHANGES_REQUESTED" && !value.comment) context.addIssue({ code: "custom", message: "A comment is required when requesting changes", path: ["comment"] });
 });
-export const proposalApplySchema = z.object({ reviewedLatestRevisionId: recordId.optional() }).strict();
+export const proposalApplySchema = z.object({
+  reviewedLatestRevisionId: recordId.optional(),
+  reviewedChangeIds: z.array(recordId).max(10).optional(),
+  changeIds: z.array(recordId).min(1).max(10),
+}).strict();
 export const proposalCloseSchema = z.object({ status: z.literal("CLOSED") }).strict();
 
 export const imageTypes = new Set(["image/png", "image/jpeg"]);

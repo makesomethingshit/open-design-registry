@@ -26,6 +26,7 @@ model User {
   proposalReviews Proposal[] @relation("ProposalReviewer")
   proposalsAccepted Proposal[] @relation("ProposalAcceptor")
   changeReviews Change[] @relation("ChangeReviewer")
+  changeReviewHistory ChangeReview[] @relation("ChangeReviewAuthor")
   proposalComments ProposalComment[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCreated Notification[] @relation("NotificationActor")
@@ -158,8 +159,9 @@ model Revision {
   forks      Project[] @relation("RevisionForks")
   baseProposals Proposal[] @relation("ProposalBaseRevision")
   sourceProposals Proposal[] @relation("ProposalSourceRevision")
-  appliedProposal Proposal? @relation("ProposalAppliedRevision", fields: [sourceProposalId], references: [id], onDelete: Restrict)
-  sourceProposalId String? @unique
+  appliedProposal Proposal? @relation("ProposalAppliedRevisions", fields: [sourceProposalId], references: [id], onDelete: Restrict)
+  sourceProposalId String?
+  appliedChanges Change[] @relation("ChangeAppliedRevision")
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -265,7 +267,7 @@ model Proposal {
   acceptedBy       User?          @relation("ProposalAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
   changeSet        ChangeSet?
   comments         ProposalComment[]
-  appliedRevision  Revision?      @relation("ProposalAppliedRevision")
+  appliedRevisions Revision[]     @relation("ProposalAppliedRevisions")
 
   @@unique([projectId, proposalNumber])
   @@index([projectId, status, createdAt])
@@ -288,16 +290,39 @@ model Change {
   changeSetId   String
   type          ChangeType
   target        String
+  targetFileId  String?
+  name          String?
+  mimeType      String?
+  size          Int?
+  assetKey      String?
   reviewStatus  ChangeReviewStatus @default(PENDING)
   reviewComment String?
   reviewedById  String?
   reviewedAt    DateTime?
+  appliedRevisionId String?
   createdAt     DateTime           @default(now())
   changeSet     ChangeSet          @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
   reviewedBy    User?              @relation("ChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  appliedRevision Revision?        @relation("ChangeAppliedRevision", fields: [appliedRevisionId], references: [id], onDelete: Restrict)
+  reviewHistory ChangeReview[]
 
   @@index([changeSetId])
   @@index([reviewedById])
+  @@index([appliedRevisionId])
+}
+
+model ChangeReview {
+  id         String             @id @default(cuid())
+  changeId   String
+  authorId   String
+  status     ChangeReviewStatus
+  comment    String?
+  createdAt  DateTime           @default(now())
+  change     Change             @relation(fields: [changeId], references: [id], onDelete: Cascade)
+  author     User               @relation("ChangeReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([changeId, createdAt])
+  @@index([authorId])
 }
 
 model ProposalComment {

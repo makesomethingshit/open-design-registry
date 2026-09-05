@@ -16,7 +16,12 @@ export async function putCover(file: File, key: string) {
 
 export async function putObject(file: File, key: string) {
   const body = Buffer.from(await file.arrayBuffer());
-  await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: file.type }));
+  await putBytes(body, key, file.type);
+  return assetUrl(key);
+}
+
+export async function putBytes(body: Buffer, key: string, contentType = "application/octet-stream") {
+  await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
   return assetUrl(key);
 }
 

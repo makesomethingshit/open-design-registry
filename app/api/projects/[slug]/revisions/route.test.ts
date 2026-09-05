@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   findLatest: vi.fn(),
   putObject: vi.fn(),
   deleteObject: vi.fn(),
+  putBundle: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
@@ -17,6 +18,7 @@ vi.mock("@/src/lib/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
 } }));
 vi.mock("@/src/lib/storage", () => ({ putObject: mocks.putObject, deleteObject: mocks.deleteObject }));
+vi.mock("@/src/lib/revision-bundle", () => ({ putRevisionBundle: mocks.putBundle, revisionBundleChecksum: () => "b".repeat(64) }));
 
 const { POST } = await import("./route");
 
@@ -45,6 +47,7 @@ describe("revision publishing route", () => {
       revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
     }));
     mocks.putObject.mockImplementation(async (_file: File, key: string) => `https://cdn/${key}`);
+    mocks.putBundle.mockResolvedValue({ checksum: "b".repeat(64) });
   });
 
   it("rejects a non-owner before reading or uploading the form", async () => {
@@ -68,7 +71,7 @@ describe("revision publishing route", () => {
   it("normalizes discovery metadata and computes an uploaded source checksum", async () => {
     const response = await POST(request({ tool: " Figma ", toolVersion: " 2025 ", tags: "UI, Mobile", source: new File(["source"], "source.zip", { type: "application/zip" }), previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
-    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ license: "CC BY 4.0", tool: "figma", toolVersion: "2025", tags: ["ui", "mobile"], sourceChecksum: "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d" }) }));
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ license: "CC BY 4.0", tool: "figma", toolVersion: "2025", tags: ["ui", "mobile"], sourceChecksum: "b".repeat(64) }) }));
   });
 
   it("publishes an HTTP(S) source URL without a source key", async () => {

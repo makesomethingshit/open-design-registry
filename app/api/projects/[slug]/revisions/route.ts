@@ -4,6 +4,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { toPublicRevision } from "@/src/lib/revisions";
 import { deleteObject, putObject } from "@/src/lib/storage";
+import { putRevisionBundle, revisionBundleChecksum, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import {
   maxRevisionPreviewBytes,
@@ -130,10 +131,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const uploadedKeys: string[] = [];
   try {
     let publishedSourceKey: string | undefined;
+    let sourceAssetKey: string | undefined;
     if (sourceFile) {
-      publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/source-${safeName(sourceFile.name)}`;
-      await putObject(sourceFile, publishedSourceKey);
-      uploadedKeys.push(publishedSourceKey);
+      sourceAssetKey = `revisions/${project.id}/${crypto.randomUUID()}/source-${safeName(sourceFile.name)}`;
+      await putObject(sourceFile, sourceAssetKey);
+      uploadedKeys.push(sourceAssetKey);
     }
     const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number; position: number; altText: string }>;
     for (const [index, file] of previews.entries()) {
@@ -141,6 +143,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const url = await putObject(file, key);
       uploadedKeys.push(key);
       uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index, altText: altTexts[index] });
+    }
+    if (sourceFile && sourceAssetKey) {
+      const bundle: RevisionBundle = {
+        version: 1,
+        files: [{ id: crypto.randomUUID(), name: sourceFile.name, mimeType: sourceFile.type || "application/octet-stream", size: sourceFile.size, assetKey: sourceAssetKey, previewKeys: uploadedPreviews.map((preview) => preview.key) }],
+      };
+      publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/bundle.json`;
+      await putRevisionBundle(publishedSourceKey, bundle);
+      uploadedKeys.push(publishedSourceKey);
+      sourceChecksum = revisionBundleChecksum(bundle);
     }
 
     const revision = await prisma.$transaction(async (tx) => {
