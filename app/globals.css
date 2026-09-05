@@ -233,3 +233,15 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; accent
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.contribution-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.contribution-previews { display: grid; gap: 1rem; margin-top: 1rem; }
+.contribution-previews figure { margin: 0; }
+.contribution-previews img { display: block; max-width: 100%; height: auto; }
+.contribution-previews iframe { width: 100%; }
+.contribution-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.contribution-history { padding-left: 1.5rem; }
+.contribution-history li { margin-block: 1.5rem; }
+.contribution-buttons { display: flex; flex-wrap: wrap; gap: .75rem; }
+.contribution-result { padding: 1rem; border: 1px solid currentColor; border-radius: .5rem; }
+@media (max-width: 760px) { .contribution-comparison { grid-template-columns: 1fr; } }

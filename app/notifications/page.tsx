@@ -1,3 +1,4 @@
+import { notificationVisibility } from "@/src/lib/notification-visibility";
 import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
@@ -10,7 +11,7 @@ export default async function NotificationsPage() {
   if (!session) redirect("/login");
   const [notifications, unreadCount] = await Promise.all([
     prisma.notification.findMany({
-      where: { recipientId: session.user.id },
+      where: notificationVisibility(session.user.id),
       orderBy: { createdAt: "desc" },
       take: 50,
       select: {
@@ -22,10 +23,11 @@ export default async function NotificationsPage() {
         project: { select: { slug: true, title: true } },
         issue: { select: { id: true, title: true } },
         forkedProject: { select: { slug: true, title: true } },
+  contribution: { select: { id: true, title: true } },
       },
     }),
-    prisma.notification.count({ where: { recipientId: session.user.id, readAt: null } }),
+    prisma.notification.count({ where: { ...notificationVisibility(session.user.id), readAt: null } }),
   ]);
 
-  return <section><div className="page-heading"><div><p className="meta">ACTIVITY</p><h1>알림</h1><p className="lede">내 프로젝트에 새로 생긴 Issue와 Fork를 확인하세요.</p></div></div><NotificationList notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} unreadCount={unreadCount} /></section>;
+  return <section><div className="page-heading"><div><p className="meta">ACTIVITY</p><h1>알림</h1><p className="lede">프로젝트의 Issue, Fork와 기여 제안·리뷰를 확인하세요.</p></div></div><NotificationList notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} unreadCount={unreadCount} /></section>;
 }

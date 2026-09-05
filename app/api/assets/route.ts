@@ -36,7 +36,17 @@ export async function GET(request: Request) {
     ...previews.map(({ revision }) => revision.project),
     ...revisions.map(({ project }) => project),
   ];
-  if (!owners.some((project) => project.isPublic || project.ownerId === session?.user.id)) return notFound();
+  if (!owners.some((project) => project.isPublic || project.ownerId === session?.user.id)) {
+    // Submitting a contribution publishes an immutable review snapshot under the
+    // target project's visibility, including earlier proposal versions in its audit log.
+    const event = await prisma.contributionEvent.findFirst({
+      where: {
+        contribution: { project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } },
+        proposedRevision: { OR: [{ sourceKey: key }, { previews: { some: { OR: [{ key }, { url: { in: [...storedUrls] } }] } } }] },
+      }, select: { id: true },
+    });
+    if (!event) return notFound();
+  }
 
   try {
     const object = await getObject(key);

@@ -33,6 +33,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <p className="meta"><Link href={`/projects/${project.slug}`}>{project.title}</Link> · Revision {revision.number}</p>
     <h1>{revision.title}</h1>
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
+    {revision.acceptedContributionId && <p className="meta">Contributed by {revision.contributorName} · Accepted by {revision.acceptedByName} · <Link href={`/projects/${slug}/contributions/${revision.acceptedContributionId}`}>View proposal and review history</Link></p>}
     <p>{revision.changeDescription}</p>
     <p className="meta">Revision license: {revision.license ?? "Not recorded for this legacy revision"}</p>
     {!revision.license && <p className="meta">The original publication license is unknown. Forking uses the current project license ({project.license}); confirm your rights before continuing.</p>}

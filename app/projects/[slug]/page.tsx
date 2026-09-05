@@ -16,7 +16,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     where: { slug },
     include: {
       owner: { select: { name: true } },
-      revisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, altText: true } } } },
+      revisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, contributorId: true, contributorName: true, acceptedByName: true, acceptedContributionId: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, altText: true } } } },
       issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } },
       forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
       _count: { select: { forks: { where: { isPublic: true } } } },
@@ -42,6 +42,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <div className="repo-header-meta"><span>Owner <strong>{project.owner.name}</strong></span><span>License <strong>{project.license}</strong></span><span><strong>{project.revisions.length}</strong> revisions</span></div>
     </header>
     <nav className="repo-tabs" aria-label="Project sections">
+      <Link className="repo-tab" href={`/projects/${project.slug}/contributions`}>Contributions</Link>
       <a className="repo-tab" href="#preview">Preview</a>
       <a className="repo-tab" href="#revisions">Revisions <span className="repo-tab-count">{project.revisions.length}</span></a>
       <a className="repo-tab" href="#issues">Issues <span className="repo-tab-count">{project.issues.length}</span></a>
@@ -59,13 +60,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         <div className="commit-main">
           <Link className="commit-title" href={`/projects/${project.slug}/revisions/${revision.number}`}>{revision.changeDescription || revision.title}</Link>
           <p className="commit-subject">{revision.title}</p>
-          <div className="commit-meta"><span>{project.owner.name}</span><span>Revision <code>{revision.id.slice(0, 8)}</code></span>{revision.tool && <span>{revision.tool}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}</span>}{revision.tags.map((tag) => <span className="topic-tag" key={tag}>{tag}</span>)}</div>
+          <div className="commit-meta"><span>{revision.contributorName ?? project.owner.name}</span>{revision.acceptedContributionId && <Link href={`/projects/${slug}/contributions/${revision.acceptedContributionId}`}>Reviewed contribution · accepted by {revision.acceptedByName}</Link>}<span>Revision <code>{revision.id.slice(0, 8)}</code></span>{revision.tool && <span>{revision.tool}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}</span>}{revision.tags.map((tag) => <span className="topic-tag" key={tag}>{tag}</span>)}</div>
           {revision.previews.length > 0 && <ul className="commit-previews" aria-label={`Revision ${revision.number} preview alt text`}>{revision.previews.map((preview) => <li className="commit-chip" key={preview.id}>Preview {preview.position + 1}: {preview.altText}</li>)}</ul>}
         </div>
         <time className="commit-time" dateTime={revision.createdAt.toISOString()}>{formatDate(revision.createdAt)}</time>
       </li>)}</ol> : <p className="empty-state">No revisions published yet.</p>}
     </section>
     {session?.user.id === project.ownerId && <RevisionPublishForm slug={project.slug} />}
+    {project.revisions.some((revision) => revision.contributorId) && <section className="repo-panel"><h2>Contributors</h2><ul>{[...new Map(project.revisions.filter((revision) => revision.contributorId).map((revision) => [revision.contributorId, revision.contributorName])).entries()].map(([id, name]) => <li key={id}>{name}</li>)}</ul></section>}
     <IssueBoard slug={project.slug} issues={project.issues} revisions={project.revisions} canManage={project.isPublic && session?.user.id === project.ownerId} signedIn={project.isPublic && Boolean(session)} />
     <section id="forks" className="repo-panel" aria-labelledby="forks-heading">
       <div className="section-heading"><h2 id="forks-heading">Forks</h2><span className="meta">Project descendants</span></div>

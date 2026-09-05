@@ -6,10 +6,12 @@ const mocks = vi.hoisted(() => ({
   previewFindMany: vi.fn(),
   revisionFindMany: vi.fn(),
   getObject: vi.fn(),
+  contributionEvent: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: {
+  contributionEvent: { findFirst: mocks.contributionEvent },
   project: { findMany: mocks.projectFindMany },
   preview: { findMany: mocks.previewFindMany },
   revision: { findMany: mocks.revisionFindMany },
@@ -32,6 +34,7 @@ describe("asset proxy route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue(null);
+    mocks.contributionEvent.mockResolvedValue(null);
     mocks.projectFindMany.mockResolvedValue([]);
     mocks.previewFindMany.mockResolvedValue([]);
     mocks.revisionFindMany.mockResolvedValue([]);
