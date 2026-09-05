@@ -152,7 +152,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
     // A fork owns independent asset references even after upstream becomes private.
     expect((await page.request.patch(`/api/projects/${slug}`, { data: { isPublic: false } })).status()).toBe(200);
-    expect((await page.request.post("/api/auth/sign-out")).status()).toBe(200);
+    await signOut(page);
     expect((await page.request.get(`/api/projects/${slug}/revisions`)).status()).toBe(404);
     expect((await page.request.get(`/api${forkPath}/revisions`)).status()).toBe(200);
     const preservedDownload = await page.request.get(forkSourceUrl);
@@ -164,7 +164,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     // Once both projects are private, anonymous access must close again.
     await signIn(page, `forker-${suffix}@example.test`, password);
     expect((await page.request.patch(`/api${forkPath}`, { data: { isPublic: false } })).status()).toBe(200);
-    expect((await page.request.post("/api/auth/sign-out")).status()).toBe(200);
+    await signOut(page);
     expect((await page.request.get(forkSourceUrl)).status()).toBe(404);
   });
 });
@@ -185,4 +185,14 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "로그인" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+async function signOut(page: Page) {
+  const responsePromise = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/sign-out" && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  expect((await responsePromise).status()).toBe(200);
+  const sessionResponse = await page.request.get("/api/auth/get-session");
+  expect(sessionResponse.status()).toBe(200);
+  expect((await sessionResponse.json())?.user ?? null).toBeNull();
+  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
 }
