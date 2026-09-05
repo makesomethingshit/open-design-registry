@@ -244,6 +244,7 @@ model IssueComment {
 model Proposal {
   id               String         @id @default(cuid())
   projectId        String
+  proposalNumber   Int
   baseRevisionId   String
   sourceRevisionId String
   authorId         String
@@ -266,6 +267,7 @@ model Proposal {
   comments         ProposalComment[]
   appliedRevision  Revision?      @relation("ProposalAppliedRevision")
 
+  @@unique([projectId, proposalNumber])
   @@index([projectId, status, createdAt])
   @@index([baseRevisionId])
   @@index([sourceRevisionId])

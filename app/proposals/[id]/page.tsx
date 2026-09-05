@@ -22,7 +22,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const isOwner = session?.user.id === proposal.project.ownerId;
   const canClose = Boolean(session && (isOwner || session.user.id === proposal.authorId));
   return <article className="detail proposal-page">
-    <p className="meta"><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> · Proposal</p>
+    <p className="meta"><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> · Proposal #{proposal.proposalNumber}</p>
     <div className="proposal-heading"><h1>{proposal.title}</h1><span className={`proposal-status ${proposal.status.toLowerCase()}`}>{proposal.status.replaceAll("_", " ")}</span></div>
     <p className="meta">{proposal.author.name} proposes {proposal.sourceRevision.project.title} Revision {proposal.sourceRevision.number} → {proposal.project.title} Revision {proposal.baseRevision.number}</p>
     <p className="proposal-body">{proposal.body}</p>

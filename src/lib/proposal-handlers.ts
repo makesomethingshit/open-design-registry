@@ -43,13 +43,14 @@ export async function findVisibleProposal(id: string, userId?: string) {
 }
 
 export async function listVisibleProjectProposals(projectId: string, userId?: string) {
-  const proposals = await prisma.proposal.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, include: proposalDetails });
+  const proposals = await prisma.proposal.findMany({ where: { projectId }, orderBy: { proposalNumber: "desc" }, include: proposalDetails });
   return proposals.filter((proposal) => isVisible(proposal, userId));
 }
 
 export function publicProposal(proposal: ProposalDetails) {
   return {
     id: proposal.id,
+    proposalNumber: proposal.proposalNumber,
     title: proposal.title,
     body: proposal.body,
     status: proposal.status,
@@ -95,18 +96,23 @@ export async function createProjectProposal(request: Request, scope: { slug: str
     const relatedIssue = await prisma.issue.findFirst({ where: { id: relatedIssueId, projectId: project.id }, select: { id: true } });
     if (!relatedIssue) return error("Related issue not found", 400);
   }
-  const proposal = await prisma.proposal.create({
-    data: {
-      projectId: project.id,
-      baseRevisionId: baseRevision.id,
-      sourceRevisionId: sourceRevision.id,
-      authorId: session.user.id,
-      relatedIssueId,
-      title: input.title,
-      body: input.body,
-      changeSet: { create: { changes: { create: { type: "REPLACE_DOCUMENT", target: "whole_document" } } } },
-    },
-    include: proposalDetails,
+  const proposal = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+    const latestProposal = await tx.proposal.findFirst({ where: { projectId: project.id }, orderBy: { proposalNumber: "desc" }, select: { proposalNumber: true } });
+    return tx.proposal.create({
+      data: {
+        projectId: project.id,
+        proposalNumber: (latestProposal?.proposalNumber ?? 0) + 1,
+        baseRevisionId: baseRevision.id,
+        sourceRevisionId: sourceRevision.id,
+        authorId: session.user.id,
+        relatedIssueId,
+        title: input.title,
+        body: input.body,
+        changeSet: { create: { changes: { create: { type: "REPLACE_DOCUMENT", target: "whole_document" } } } },
+      },
+      include: proposalDetails,
+    });
   });
   return NextResponse.json(publicProposal(proposal), { status: 201 });
 }
