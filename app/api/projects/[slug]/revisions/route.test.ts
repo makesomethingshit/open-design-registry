@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   putObject: vi.fn(),
   deleteObject: vi.fn(),
   putBundle: vi.fn(),
+  readBundle: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
@@ -18,17 +19,17 @@ vi.mock("@/src/lib/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
 } }));
 vi.mock("@/src/lib/storage", () => ({ putObject: mocks.putObject, deleteObject: mocks.deleteObject }));
-vi.mock("@/src/lib/revision-bundle", () => ({ putRevisionBundle: mocks.putBundle, revisionBundleChecksum: () => "b".repeat(64) }));
+vi.mock("@/src/lib/revision-bundle", () => ({ putRevisionBundle: mocks.putBundle, readRevisionBundle: mocks.readBundle }));
 
 const { POST } = await import("./route");
 
-function request(fields: Record<string, string | File>, metadata = true) {
+function request(fields: Record<string, string | File | Array<string | File>>, metadata = true) {
   const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  for (const [key, value] of Object.entries(fields)) for (const entry of Array.isArray(value) ? value : [value]) form.append(key, entry);
   if (metadata) {
     form.append("title", "Landing page update");
     form.append("changeDescription", "Updated the landing page layout");
-    const previewCount = Object.keys(fields).filter((key) => key === "previews" || key === "preview").length;
+    const previewCount = Object.entries(fields).filter(([key]) => key === "previews" || key === "preview").reduce((count, [, value]) => count + (Array.isArray(value) ? value.length : 1), 0);
     for (let index = 0; index < previewCount; index += 1) form.append("altTexts", `Preview ${index + 1}`);
   }
   return new Request("http://localhost/projects/demo/revisions", { method: "POST", body: form });
@@ -48,6 +49,7 @@ describe("revision publishing route", () => {
     }));
     mocks.putObject.mockImplementation(async (_file: File, key: string) => `https://cdn/${key}`);
     mocks.putBundle.mockResolvedValue({ checksum: "b".repeat(64) });
+    mocks.readBundle.mockResolvedValue(null);
   });
 
   it("rejects a non-owner before reading or uploading the form", async () => {
@@ -66,6 +68,37 @@ describe("revision publishing route", () => {
     expect(mocks.putObject).toHaveBeenCalledTimes(2);
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: "Landing page update", changeDescription: "Updated the landing page layout", sourceUrl: undefined, sourceKey: expect.stringMatching(/^revisions\/project\//), isPublished: false, previews: { create: [expect.objectContaining({ altText: "Preview 1" })] } }) }));
     expect(mocks.updateRevision).toHaveBeenCalledWith({ where: { id: "revision" }, data: { isPublished: true }, include: { previews: true } });
+  });
+
+  it("publishes multiple source files with explicit preview mappings", async () => {
+    const response = await POST(request({
+      sources: [new File(["a"], "poster.ai", { type: "application/postscript" }), new File(["b"], "logo.svg", { type: "image/svg+xml" })],
+      previews: [new File(["a"], "poster.png", { type: "image/png" }), new File(["b"], "logo.jpg", { type: "image/jpeg" })],
+      sourceFileIds: ["", ""],
+      sourcePreviewIndexes: ["0", "1"],
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    const bundle = mocks.putBundle.mock.calls[0][1];
+    expect(bundle.files.map((file: { name: string }) => file.name)).toEqual(["poster.ai", "logo.svg"]);
+    expect(bundle.files.map((file: { previewKeys: string[] }) => file.previewKeys)).toEqual([expect.any(Array), expect.any(Array)]);
+    expect(bundle.files.every((file: { previewKeys: string[] }) => file.previewKeys.length === 1)).toBe(true);
+    expect(mocks.putObject).toHaveBeenCalledTimes(4);
+  });
+
+  it("preserves an explicitly mapped file ID from the locked latest revision", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r1", number: 1, sourceKey: "r1-bundle" });
+    mocks.readBundle.mockResolvedValue({ version: 1, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 1, assetKey: "old-a", previewKeys: [] }] });
+    const response = await POST(request({ sources: new File(["next"], "poster.ai", { type: "application/postscript" }), previews: new File(["preview"], "poster.png", { type: "image/png" }), sourceFileIds: "file-a", sourcePreviewIndexes: "0" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1].files[0].id).toBe("file-a");
+  });
+
+  it("rejects an explicit mapping for a file removed from the latest revision", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r2", number: 2, sourceKey: "r2-bundle" });
+    mocks.readBundle.mockResolvedValue({ version: 1, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 1, assetKey: "old-a", previewKeys: [] }] });
+    const response = await POST(request({ sources: new File(["next"], "poster.ai", { type: "application/postscript" }), previews: new File(["preview"], "poster.png", { type: "image/png" }), sourceFileIds: "file-removed", sourcePreviewIndexes: "0" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.createRevision).not.toHaveBeenCalled();
   });
 
   it("normalizes discovery metadata and computes an uploaded source checksum", async () => {

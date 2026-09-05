@@ -34,7 +34,7 @@ export const proposalCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
   body: z.string().trim().min(1).max(10000),
   relatedIssueId: recordId.nullable().optional(),
-  files: z.array(proposalFileSchema).min(1).max(10),
+  files: z.array(proposalFileSchema).min(1).max(10).optional(),
 }).strict();
 export const proposalReviewSchema = z.object({
   status: z.enum(["APPROVED", "CHANGES_REQUESTED"]),

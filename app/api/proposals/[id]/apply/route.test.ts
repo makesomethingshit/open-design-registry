@@ -69,11 +69,53 @@ describe("selective proposal apply route", () => {
     expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "proposal" }, data: { status: "PARTIALLY_ACCEPTED", acceptedById: "owner" } });
   });
 
+  it("preserves a previously applied file and reaches ACCEPTED after the remaining file is reapproved", async () => {
+    await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+    const [changeA, changeB] = changes();
+    mocks.findProposal.mockResolvedValue(proposal({
+      status: "PARTIALLY_ACCEPTED",
+      changeSet: { id: "set", changes: [{ ...changeA, appliedRevisionId: "revision-11" }, changeB] },
+      appliedRevisions: [{ id: "revision-11", number: 11, title: "Accepted: Improve header" }],
+    }));
+    mocks.findLatest.mockResolvedValue({ id: "revision-11", number: 11 });
+    mocks.findRevision.mockResolvedValue(latest("revision-11", 11));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? sourceBundle : {
+      version: 1,
+      files: [{ ...latestBundle.files[0], assetKey: "source-a-key", previewKeys: ["source-a-preview"] }, latestBundle.files[1]],
+    }));
+    mocks.publishRevision.mockResolvedValue({ id: "revision-12", number: 12, title: "Accepted: Improve header" });
+    const response = await POST(request({ changeIds: ["change-b"], reviewedLatestRevisionId: "revision-11", reviewedChangeIds: ["change-b"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(201);
+    const bundleCall = mocks.putBundle.mock.calls.at(-1);
+    expect(bundleCall).toBeDefined();
+    const bundle = bundleCall![1];
+    expect(bundle.files.map((file: { assetKey: string }) => file.assetKey)).toEqual(["source-a-key", "source-b-key"]);
+    expect(mocks.updateProposal).toHaveBeenLastCalledWith({ where: { id: "proposal" }, data: { status: "ACCEPTED", acceptedById: "owner" } });
+  });
+
   it("requires a fresh latest-review confirmation scoped to the selected IDs", async () => {
     mocks.findLatest.mockResolvedValue({ id: "current", number: 13 });
     const response = await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ latestRevision: { id: "current", number: 13 } });
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("applies after stale review when the latest bundle retains the explicit file ID", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r2", number: 12 });
+    mocks.findRevision.mockResolvedValue(latest("r2", 12));
+    const response = await POST(request({ changeIds: ["change-a"], reviewedLatestRevisionId: "r2", reviewedChangeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createRevision).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a removed target file as a stale-apply conflict", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r2", number: 12 });
+    mocks.findRevision.mockResolvedValue(latest("r2", 12));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? sourceBundle : { version: 1, files: [latestBundle.files[1]] }));
+    const response = await POST(request({ changeIds: ["change-a"], reviewedLatestRevisionId: "r2", reviewedChangeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/target file/i) });
     expect(mocks.createRevision).not.toHaveBeenCalled();
   });
 

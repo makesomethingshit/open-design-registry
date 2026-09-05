@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { listVisibleProjectProposals } from "@/src/lib/proposal-handlers";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
+import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
 import ReportForm from "../../reports/report-form";
 import IssueBoard from "./issue-board";
 import RevisionPublishForm from "./revision-publish-form";
@@ -21,7 +22,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     where: { slug },
     include: {
       owner: { select: { name: true } },
-      revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
+      revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
       issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } },
       forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
       _count: { select: { forks: { where: { isPublic: true } } } },
@@ -39,6 +40,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const proposalRows: ProposalListItem[] = filteredProposals.slice(0, 20).map((proposal) => ({ id: proposal.id, proposalNumber: proposal.proposalNumber, title: proposal.title, status: proposal.status, author: proposal.author.name, updatedAt: proposal.updatedAt.toISOString(), approved: proposal.changeSet?.changes.filter((change) => change.reviewStatus === "APPROVED" && !change.appliedRevision).length ?? 0, applied: proposal.changeSet?.changes.filter((change) => Boolean(change.appliedRevision)).length ?? 0, total: proposal.changeSet?.changes.length ?? 0 }));
   const proposalCursor = filteredProposals.length > proposalRows.length ? proposalRows.at(-1)?.id ?? null : null;
   const latestRevision = project.revisions.at(-1);
+  const latestFiles = publicBundleFiles(await readRevisionBundle(latestRevision?.sourceKey));
   const latestPreview = latestRevision?.previews.find((preview) => preview.mimeType !== "text/html");
   const openIssues = project.issues.filter((issue) => issue.status === "OPEN");
   const contributors = new Set([project.ownerId, ...proposals.filter((proposal) => proposal.appliedRevisions.length > 0).map((proposal) => proposal.authorId)]).size;
@@ -86,7 +88,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         <time className="commit-time" dateTime={revision.createdAt.toISOString()}>{formatDate(revision.createdAt)}</time>
       </li>)}</ol> : <p className="empty-state">No revisions published yet.</p>}
     </section>
-    {session?.user.id === project.ownerId && <RevisionPublishForm slug={project.slug} />}
+    {session?.user.id === project.ownerId && <RevisionPublishForm slug={project.slug} existingFiles={latestFiles} />}
     <IssueBoard slug={project.slug} issues={project.issues} revisions={project.revisions} canManage={project.isPublic && session?.user.id === project.ownerId} signedIn={project.isPublic && Boolean(session)} />
     <section id="proposals" className="repo-panel" aria-labelledby="proposals-heading">
       <div className="section-heading"><h2 id="proposals-heading">Proposals</h2>{session && latestRevision && <Link className="button secondary" href={`/projects/${project.slug}/proposals/new`}>New proposal</Link>}</div>

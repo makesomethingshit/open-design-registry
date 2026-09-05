@@ -133,18 +133,23 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   if (!baseRevision) return error("Base revision not found", 400);
   if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
   const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundle(baseRevision.sourceKey), readRevisionBundle(sourceRevision.sourceKey)]);
-  if (!baseBundle || !sourceBundle) return error("This revision needs a file bundle before individual files can be replaced.", 409);
-  const targetFiles = new Map(baseBundle.files.map((file) => [file.id, file]));
-  const sourceFiles = new Map(sourceBundle.files.map((file) => [file.id, file]));
-  const targetIds = input.files.map((file) => file.targetFileId);
-  if (new Set(targetIds).size !== targetIds.length) return error("Each target file can be replaced only once", 400);
-  const changes = input.files.map((file) => {
-    const sourceFile = sourceFiles.get(file.sourceFileId);
-    const targetFile = targetFiles.get(file.targetFileId);
-    if (!sourceFile || !targetFile) return null;
-    return { type: "REPLACE_ASSET" as const, target: targetFile.name, targetFileId: targetFile.id, name: sourceFile.name, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey };
-  });
-  if (changes.some((change) => !change)) return error("Selected files no longer match their published revisions", 400);
+  const requestedFiles = input.files ?? [];
+  if (requestedFiles.length && (!baseBundle || !sourceBundle)) return error("This revision needs a file bundle before individual files can be replaced.", 409);
+  const changes = baseBundle && sourceBundle && requestedFiles.length
+    ? (() => {
+        const targetFiles = new Map(baseBundle.files.map((file) => [file.id, file]));
+        const sourceFiles = new Map(sourceBundle.files.map((file) => [file.id, file]));
+        const targetIds = requestedFiles.map((file) => file.targetFileId);
+        if (new Set(targetIds).size !== targetIds.length) return null;
+        return requestedFiles.map((file) => {
+          const sourceFile = sourceFiles.get(file.sourceFileId);
+          const targetFile = targetFiles.get(file.targetFileId);
+          if (!sourceFile || !targetFile) return null;
+          return { type: "REPLACE_ASSET" as const, target: targetFile.name, targetFileId: targetFile.id, name: sourceFile.name, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey };
+        });
+      })()
+    : [{ type: "REPLACE_DOCUMENT" as const, target: "whole_document" }];
+  if (!changes || changes.some((change) => !change)) return error("Selected files no longer match their published revisions", 400);
   const relatedIssueId = input.relatedIssueId || undefined;
   if (relatedIssueId) {
     const relatedIssue = await prisma.issue.findFirst({ where: { id: relatedIssueId, projectId: project.id }, select: { id: true } });

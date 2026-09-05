@@ -60,6 +60,13 @@ describe("proposal creation route", () => {
     expect(body.changeSet.changes[0]).not.toHaveProperty("assetKey");
   });
 
+  it("keeps the whole-document proposal path for revisions without bundles", async () => {
+    mocks.readBundle.mockResolvedValue(null);
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Replace source", body: "Use the newer opaque file" }), { params: Promise.resolve({ slug: "target" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createProposal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ changeSet: { create: { changes: { create: [{ type: "REPLACE_DOCUMENT", target: "whole_document" }] } } } }) }));
+  });
+
   it("rejects duplicate target files without trusting client metadata", async () => {
     const response = await POST(request(createBody([{ sourceFileId: "source-file", targetFileId: "target-file" }, { sourceFileId: "source-file", targetFileId: "target-file" }])), { params: Promise.resolve({ slug: "target" }) });
     expect(response.status).toBe(400);
