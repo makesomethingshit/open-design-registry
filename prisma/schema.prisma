@@ -22,6 +22,11 @@ model User {
   reports       Report[]
   issues        Issue[]
   issueComments IssueComment[]
+  proposalsAuthored Proposal[] @relation("ProposalAuthor")
+  proposalReviews Proposal[] @relation("ProposalReviewer")
+  proposalsAccepted Proposal[] @relation("ProposalAcceptor")
+  changeReviews Change[] @relation("ChangeReviewer")
+  proposalComments ProposalComment[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCreated Notification[] @relation("NotificationActor")
 }
@@ -84,6 +89,7 @@ model Project {
   revisions   Revision[]
   reports     Report[]
   issues      Issue[]
+  proposals   Proposal[]
   notifications Notification[] @relation("NotificationProject")
   forkNotifications Notification[] @relation("NotificationForkedProject")
   forks       Project[] @relation("ProjectForks")
@@ -150,6 +156,10 @@ model Revision {
   reports    Report[]
   issues     Issue[]
   forks      Project[] @relation("RevisionForks")
+  baseProposals Proposal[] @relation("ProposalBaseRevision")
+  sourceProposals Proposal[] @relation("ProposalSourceRevision")
+  appliedProposal Proposal? @relation("ProposalAppliedRevision", fields: [sourceProposalId], references: [id], onDelete: Restrict)
+  sourceProposalId String? @unique
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -161,6 +171,31 @@ model Revision {
 enum IssueStatus {
   OPEN
   CLOSED
+}
+
+enum ProposalStatus {
+  DRAFT
+  OPEN
+  CHANGES_REQUESTED
+  APPROVED
+  PARTIALLY_ACCEPTED
+  ACCEPTED
+  CLOSED
+}
+
+enum ChangeType {
+  REPLACE_DOCUMENT
+  REPLACE_ASSET
+  ADD_UNIT
+  MODIFY_UNIT
+  REMOVE_UNIT
+  RENAME_UNIT
+}
+
+enum ChangeReviewStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
 }
 
 enum NotificationType {
@@ -184,6 +219,7 @@ model Issue {
   author     User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
   revision   Revision?    @relation(fields: [revisionId], references: [id], onDelete: SetNull)
   comments   IssueComment[]
+  proposals  Proposal[]
   notifications Notification[]
 
   @@index([projectId, status, createdAt])
@@ -202,6 +238,79 @@ model IssueComment {
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([issueId, createdAt])
+  @@index([authorId])
+}
+
+model Proposal {
+  id               String         @id @default(cuid())
+  projectId        String
+  proposalNumber   Int
+  baseRevisionId   String
+  sourceRevisionId String
+  authorId         String
+  relatedIssueId   String?
+  reviewerId       String?
+  acceptedById     String?
+  title            String
+  body             String
+  status           ProposalStatus @default(OPEN)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  baseRevision     Revision       @relation("ProposalBaseRevision", fields: [baseRevisionId], references: [id], onDelete: Cascade)
+  sourceRevision   Revision       @relation("ProposalSourceRevision", fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+  author           User           @relation("ProposalAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  relatedIssue     Issue?         @relation(fields: [relatedIssueId], references: [id], onDelete: SetNull)
+  reviewer         User?          @relation("ProposalReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  acceptedBy       User?          @relation("ProposalAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+  changeSet        ChangeSet?
+  comments         ProposalComment[]
+  appliedRevision  Revision?      @relation("ProposalAppliedRevision")
+
+  @@unique([projectId, proposalNumber])
+  @@index([projectId, status, createdAt])
+  @@index([baseRevisionId])
+  @@index([sourceRevisionId])
+  @@index([authorId])
+  @@index([relatedIssueId])
+}
+
+model ChangeSet {
+  id         String   @id @default(cuid())
+  proposalId String   @unique
+  createdAt  DateTime @default(now())
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  changes    Change[]
+}
+
+model Change {
+  id            String             @id @default(cuid())
+  changeSetId   String
+  type          ChangeType
+  target        String
+  reviewStatus  ChangeReviewStatus @default(PENDING)
+  reviewComment String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  changeSet     ChangeSet          @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
+  reviewedBy    User?              @relation("ChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([changeSetId])
+  @@index([reviewedById])
+}
+
+model ProposalComment {
+  id         String   @id @default(cuid())
+  proposalId String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId, createdAt])
   @@index([authorId])
 }
 
