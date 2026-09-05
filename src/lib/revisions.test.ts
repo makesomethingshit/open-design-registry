@@ -5,6 +5,7 @@ describe("public revision serialization", () => {
   it("hides storage state and exposes proxy URLs", () => {
     const revision = toPublicRevision({
       license: "MIT",
+      acceptedContributionId: null, contributorId: null, contributorName: null, acceptedById: null, acceptedByName: null,
       id: "revision-1",
       projectId: "project-1",
       number: 1,

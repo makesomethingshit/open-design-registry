@@ -22,6 +22,8 @@ model User {
   reports       Report[]
   issues        Issue[]
   issueComments IssueComment[]
+  contributions Contribution[]
+  contributionEvents ContributionEvent[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCreated Notification[] @relation("NotificationActor")
 }
@@ -82,6 +84,8 @@ model Project {
   ownerId     String
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   revisions   Revision[]
+  contributions Contribution[] @relation("TargetContributions")
+  proposedContributions Contribution[] @relation("SourceContributions")
   reports     Report[]
   issues      Issue[]
   notifications Notification[] @relation("NotificationProject")
@@ -150,6 +154,16 @@ model Revision {
   reports    Report[]
   issues     Issue[]
   forks      Project[] @relation("RevisionForks")
+  basedContributions Contribution[] @relation("ContributionBase")
+  proposedContributions Contribution[] @relation("ContributionProposal")
+  baseEvents ContributionEvent[] @relation("EventBase")
+  proposedEvents ContributionEvent[] @relation("EventProposal")
+  acceptedContributionId String? @unique
+  acceptedContribution Contribution? @relation("AcceptedContribution", fields: [acceptedContributionId], references: [id], onDelete: Restrict)
+  contributorId String?
+  contributorName String?
+  acceptedById String?
+  acceptedByName String?
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -166,6 +180,7 @@ enum IssueStatus {
 enum NotificationType {
   ISSUE_CREATED
   FORK_CREATED
+  CONTRIBUTION_ACTIVITY
 }
 
 model Issue {
@@ -229,6 +244,8 @@ model Notification {
   projectId       String
   issueId         String?
   forkedProjectId String?
+  contributionId String?
+  contribution Contribution? @relation(fields: [contributionId], references: [id], onDelete: Restrict)
   readAt          DateTime?
   createdAt       DateTime         @default(now())
   recipient       User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
@@ -242,4 +259,73 @@ model Notification {
   @@index([projectId])
   @@index([issueId])
   @@index([forkedProjectId])
+  @@index([contributionId])
+}
+
+enum ContributionStatus {
+  OPEN
+  CHANGES_REQUESTED
+  ACCEPTED
+  REJECTED
+}
+
+enum ContributionEventType {
+  OPENED
+  COMMENTED
+  UPDATED
+  CHANGES_REQUESTED
+  ACCEPTED
+  REJECTED
+}
+
+model Contribution {
+  id String @id @default(cuid())
+  projectId String
+  sourceProjectId String
+  sourceProjectTitle String
+  sourceProjectSlug String
+  baseRevisionId String
+  proposedRevisionId String
+  authorId String
+  authorName String
+  title String
+  body String
+  status ContributionStatus @default(OPEN)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation("TargetContributions", fields: [projectId], references: [id], onDelete: Restrict)
+  sourceProject Project @relation("SourceContributions", fields: [sourceProjectId], references: [id], onDelete: Restrict)
+  baseRevision Revision @relation("ContributionBase", fields: [baseRevisionId], references: [id], onDelete: Restrict)
+  proposedRevision Revision @relation("ContributionProposal", fields: [proposedRevisionId], references: [id], onDelete: Restrict)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  events ContributionEvent[]
+  acceptedRevision Revision? @relation("AcceptedContribution")
+  notifications Notification[]
+  @@index([projectId, createdAt, id])
+  @@index([sourceProjectId])
+  @@index([authorId])
+  @@index([baseRevisionId])
+  @@index([proposedRevisionId])
+}
+
+model ContributionEvent {
+  id String @id @default(cuid())
+  contributionId String
+  actorId String
+  actorName String
+  type ContributionEventType
+  body String
+  version Int
+  baseRevisionId String
+  proposedRevisionId String
+  createdAt DateTime @default(now())
+  contribution Contribution @relation(fields: [contributionId], references: [id], onDelete: Restrict)
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  baseRevision Revision @relation("EventBase", fields: [baseRevisionId], references: [id], onDelete: Restrict)
+  proposedRevision Revision @relation("EventProposal", fields: [proposedRevisionId], references: [id], onDelete: Restrict)
+  @@index([contributionId, createdAt, id])
+  @@index([actorId])
+  @@index([baseRevisionId])
+  @@index([proposedRevisionId])
 }

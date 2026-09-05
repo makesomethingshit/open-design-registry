@@ -1,3 +1,4 @@
+import { notificationVisibility } from "@/src/lib/notification-visibility";
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
@@ -11,6 +12,7 @@ const notificationSelect = {
   project: { select: { slug: true, title: true } },
   issue: { select: { id: true, title: true } },
   forkedProject: { select: { slug: true, title: true } },
+  contribution: { select: { id: true, title: true } },
 } as const;
 
 export async function GET(request: Request) {
@@ -18,8 +20,8 @@ export async function GET(request: Request) {
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
 
   const [notifications, unreadCount] = await Promise.all([
-    prisma.notification.findMany({ where: { recipientId: session.user.id }, orderBy: { createdAt: "desc" }, take: 50, select: notificationSelect }),
-    prisma.notification.count({ where: { recipientId: session.user.id, readAt: null } }),
+    prisma.notification.findMany({ where: notificationVisibility(session.user.id), orderBy: { createdAt: "desc" }, take: 50, select: notificationSelect }),
+    prisma.notification.count({ where: { ...notificationVisibility(session.user.id), readAt: null } }),
   ]);
   return NextResponse.json({ notifications, unreadCount });
 }
