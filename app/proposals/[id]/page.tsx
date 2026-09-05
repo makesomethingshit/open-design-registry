@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { findVisibleProposal } from "@/src/lib/proposal-handlers";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
+import { readRevisionBundle } from "@/src/lib/revision-bundle";
 import ProposalReview from "./proposal-review";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +14,25 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const session = await getSession();
   const proposal = await findVisibleProposal(id, session?.user.id);
   if (!proposal) notFound();
-  const latest = await prisma.revision.findFirst({ where: { projectId: proposal.project.id, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, url: true, mimeType: true, altText: true } } } });
-  const toRevision = (revision: { id: string; number: number; title: string; previews: Array<{ id: string; position: number; url: string; mimeType: string; altText: string }> }) => ({ ...revision, previews: revision.previews.filter((preview) => preview.mimeType !== "text/html").map((preview) => ({ ...preview, url: publicAssetUrl(preview.url) })) });
+  const latest = await prisma.revision.findFirst({ where: { projectId: proposal.project.id, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, sourceKey: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } });
+  const toRevision = (revision: { id: string; number: number; title: string; previews: Array<{ id: string; position: number; key: string; url: string; mimeType: string; altText: string }> }) => ({ ...revision, previews: revision.previews.filter((preview) => preview.mimeType !== "text/html").map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) });
   const baseRevision = toRevision(proposal.baseRevision);
   const sourceRevision = toRevision(proposal.sourceRevision);
   const latestRevision = latest ? toRevision(latest) : null;
+  const [baseBundle, sourceBundle, latestBundle] = await Promise.all([readRevisionBundle(proposal.baseRevision.sourceKey), readRevisionBundle(proposal.sourceRevision.sourceKey), readRevisionBundle(latest?.sourceKey)]);
+  const previewsFor = (revision: { previews: Array<{ key: string; id: string; position: number; url: string; mimeType: string; altText: string }> }, keys: string[] | undefined) => (keys ?? []).map((key) => revision.previews.find((preview) => preview.key === key)).filter((preview): preview is { id: string; position: number; key: string; url: string; mimeType: string; altText: string } => Boolean(preview)).filter((preview) => preview.mimeType !== "text/html").map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) }));
+  const changes = proposal.changeSet?.changes.map((change) => {
+    const sourceFile = sourceBundle?.files.find((file) => file.assetKey === change.assetKey);
+    const baseFile = baseBundle?.files.find((file) => file.id === change.targetFileId);
+    const latestFile = latestBundle?.files.find((file) => file.id === change.targetFileId);
+    return {
+      id: change.id, type: change.type, target: change.target, targetFileId: change.targetFileId, name: change.name, mimeType: change.mimeType, size: change.size,
+      reviewStatus: change.reviewStatus, reviewComment: change.reviewComment, reviewedBy: change.reviewedBy && { name: change.reviewedBy.name }, appliedRevision: change.appliedRevision ?? (change.type === "REPLACE_DOCUMENT" ? proposal.appliedRevisions[0] ?? null : null), reviewHistory: change.reviewHistory.map((review) => ({ id: review.id, status: review.status, comment: review.comment, createdAt: review.createdAt, author: { name: review.author.name } })),
+      sourcePreviews: sourceFile ? previewsFor(proposal.sourceRevision, sourceFile.previewKeys) : sourceRevision.previews,
+      basePreviews: baseFile ? previewsFor(proposal.baseRevision, baseFile.previewKeys) : baseRevision.previews,
+      latestPreviews: latestFile && latest ? previewsFor(latest, latestFile.previewKeys) : latestRevision?.previews ?? [],
+    };
+  }) ?? [];
   const stale = Boolean(latest && latest.id !== proposal.baseRevisionId);
   const isOwner = session?.user.id === proposal.project.ownerId;
   const canClose = Boolean(session && (isOwner || session.user.id === proposal.authorId));
@@ -27,7 +42,8 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
     <p className="meta">{proposal.author.name} proposes {proposal.sourceRevision.project.title} Revision {proposal.sourceRevision.number} → {proposal.project.title} Revision {proposal.baseRevision.number}</p>
     <p className="proposal-body">{proposal.body}</p>
     {proposal.relatedIssue && <p className="meta">Related issue: {proposal.relatedIssue.title}</p>}
-    {proposal.appliedRevision && <p className="success-note">Applied 1 change as <Link href={`/projects/${proposal.project.slug}/revisions/${proposal.appliedRevision.number}`}>Revision {proposal.appliedRevision.number}</Link>.</p>}
-    <ProposalReview proposalId={proposal.id} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} stale={stale} status={proposal.status} changes={proposal.changeSet?.changes.map((change) => ({ id: change.id, reviewStatus: change.reviewStatus, reviewComment: change.reviewComment, reviewedBy: change.reviewedBy && { name: change.reviewedBy.name } })) ?? []} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
+    {proposal.appliedRevisions.length > 0 && <p className="success-note">Applied changes: {proposal.appliedRevisions.map((revision) => <Link key={revision.id} href={`/projects/${proposal.project.slug}/revisions/${revision.number}`}>Revision {revision.number}</Link>)}</p>}
+    {!proposal.sourceRevision.project.isPublic && session?.user.id === proposal.authorId && <p className="stale-banner">Private workspace · visible to you. The project owner cannot review this proposal while its source is private.</p>}
+    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} stale={stale} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
   </article>;
 }

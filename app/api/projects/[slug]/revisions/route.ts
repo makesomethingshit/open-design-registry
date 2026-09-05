@@ -4,6 +4,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { toPublicRevision } from "@/src/lib/revisions";
 import { deleteObject, putObject } from "@/src/lib/storage";
+import { putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import {
   maxRevisionPreviewBytes,
@@ -99,16 +100,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const checksumResult = checksumValue ? revisionSourceChecksum.safeParse(checksumValue) : { success: true as const, data: undefined };
   if (!checksumResult.success) return error("Source checksum must be a 64-character SHA-256 hex digest");
   let sourceChecksum = checksumResult.data?.toLowerCase();
-  const sourceEntry = form.get("source");
-  const sourceFile = sourceEntry instanceof File && sourceEntry.name.trim() ? sourceEntry : undefined;
+  const sourceFiles = [...form.getAll("sources"), ...form.getAll("source")].filter((value): value is File => value instanceof File && Boolean(value.name.trim()));
+  if (sourceFiles.length > 10) return error("Provide no more than 10 source files");
+  const sourceFileIds = form.getAll("sourceFileIds");
+  if (sourceFileIds.length && sourceFileIds.length !== sourceFiles.length) return error("Provide one existing file ID for each uploaded source file");
+  const mappedSourceFileIds = sourceFiles.map((_, index) => {
+    const value = sourceFileIds[index];
+    return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  });
+  const sourcePreviewIndexes = form.getAll("sourcePreviewIndexes");
+  if ((!sourceFiles.length && sourcePreviewIndexes.length) || (sourceFiles.length > 1 && sourcePreviewIndexes.length !== sourceFiles.length) || (sourceFiles.length === 1 && sourcePreviewIndexes.length > 1)) return error("Provide one preview mapping for each source file");
   const sourceUrlValue = form.get("sourceUrl");
   const sourceKeyValue = form.get("sourceKey");
   const sourceUrl = typeof sourceUrlValue === "string" && sourceUrlValue.trim() ? sourceUrlValue.trim() : undefined;
-  const sourceError = validateRevisionSource({ hasFile: Boolean(sourceFile), sourceUrl, sourceKey: typeof sourceKeyValue === "string" ? sourceKeyValue : undefined });
+  const sourceError = validateRevisionSource({ hasFile: Boolean(sourceFiles.length), sourceUrl, sourceKey: typeof sourceKeyValue === "string" ? sourceKeyValue : undefined });
   if (sourceError) return error(sourceError);
-  if (sourceFile && sourceFile.size > maxRevisionSourceBytes) return error("Source file exceeds the 100MB limit");
-  if (sourceFile) {
-    const computedChecksum = createHash("sha256").update(new Uint8Array(await sourceFile.arrayBuffer())).digest("hex");
+  if (sourceFiles.reduce((total, file) => total + file.size, 0) > maxRevisionSourceBytes) return error("Source files exceed the 100MB total limit");
+  if (sourceFiles.length > 1 && sourceChecksum) return error("Source checksum is only supported for a single source file");
+  if (sourceFiles.length === 1) {
+    const computedChecksum = createHash("sha256").update(new Uint8Array(await sourceFiles[0].arrayBuffer())).digest("hex");
     if (sourceChecksum && sourceChecksum !== computedChecksum) return error("Source checksum does not match the uploaded file");
     sourceChecksum = computedChecksum;
   }
@@ -126,14 +136,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const totalPreviewBytes = previews.reduce((total, file) => total + file.size, 0);
   if (previews.some((file) => !previewTypes.has(file.type) || file.size > maxRevisionPreviewBytes)) return error("Previews must be PNG/JPG/HTML files no larger than 10MB each");
   if (totalPreviewBytes > maxRevisionPreviewTotalBytes) return error("Preview quota exceeded (50MB total)");
+  const previewMappings = sourceFiles.length === 1 && !sourcePreviewIndexes.length
+    ? [previews.map((_, index) => index)]
+    : sourcePreviewIndexes.map((value) => [typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : Number.NaN]);
+  if (previewMappings.some((indexes) => indexes.some((index) => !Number.isInteger(index) || index < 0 || index >= previews.length))) return error("Each source file must map to an uploaded preview");
 
   const uploadedKeys: string[] = [];
   try {
     let publishedSourceKey: string | undefined;
-    if (sourceFile) {
-      publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/source-${safeName(sourceFile.name)}`;
-      await putObject(sourceFile, publishedSourceKey);
-      uploadedKeys.push(publishedSourceKey);
+    const sourceAssets: Array<{ file: File; key: string }> = [];
+    for (const [index, file] of sourceFiles.entries()) {
+      const key = `revisions/${project.id}/${crypto.randomUUID()}/source-${index}-${safeName(file.name)}`;
+      await putObject(file, key);
+      uploadedKeys.push(key);
+      sourceAssets.push({ file, key });
     }
     const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number; position: number; altText: string }>;
     for (const [index, file] of previews.entries()) {
@@ -142,14 +158,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       uploadedKeys.push(key);
       uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index, altText: altTexts[index] });
     }
-
     const revision = await prisma.$transaction(async (tx) => {
       const [lockedProject] = await tx.$queryRaw<Array<{ license: string }>>`SELECT license FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) throw new PublishError("Project not found", 404);
-      const latest = await tx.revision.findFirst({ where: { projectId: project.id }, orderBy: { number: "desc" } });
+      const latest = await tx.revision.findFirst({ where: { projectId: project.id, isPublished: true }, orderBy: { number: "desc" } });
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
       if ((latest && parentId !== latest.id) || (!latest && parentId)) throw new PublishError("parentId must be the latest revision", 409);
+      if (sourceAssets.length) {
+        const preservedIds = mappedSourceFileIds.filter((id): id is string => Boolean(id));
+        if (new Set(preservedIds).size !== preservedIds.length) throw new PublishError("Each existing file can be mapped only once", 400);
+        if (preservedIds.length) {
+          const latestBundle = await readRevisionBundle(latest?.sourceKey);
+          if (!latestBundle || preservedIds.some((id) => !latestBundle.files.some((file) => file.id === id))) throw new PublishError("An existing file mapping is no longer available", 409);
+        }
+        const bundle: RevisionBundle = {
+          version: 1,
+          files: sourceAssets.map(({ file, key }, index) => ({
+            id: mappedSourceFileIds[index] ?? crypto.randomUUID(),
+            name: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size: file.size,
+            assetKey: key,
+            previewKeys: previewMappings[index].map((previewIndex) => uploadedPreviews[previewIndex].key),
+          })),
+        };
+        publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/bundle.json`;
+        const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);
+        uploadedKeys.push(publishedSourceKey);
+        sourceChecksum = checksum;
+      }
       const stagedRevision = await tx.revision.create({
         data: {
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,

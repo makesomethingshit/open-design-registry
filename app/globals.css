@@ -26,6 +26,7 @@ a { color: inherit; text-decoration: none; }
 a:hover { color: var(--link); }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
 
 .skip-link { position: fixed; top: 8px; left: 8px; z-index: 10; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-raised); color: var(--fg); transform: translateY(-150%); transition: transform .18s ease; }
 .skip-link:focus { transform: translateY(0); }
@@ -225,6 +226,12 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; accent
 .proposal-form { display: grid; gap: 18px; max-width: 720px; }
 .proposal-form label { display: grid; gap: 7px; color: var(--fg); font-weight: 650; }
 .proposal-form textarea { min-height: 112px; resize: vertical; }
+.file-input-list { display: grid; gap: 10px; }
+.file-input-row { align-items: center; }
+.file-input-row > label:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.file-input-row .meta { width: 100%; }
+.proposal-filter { display: flex; gap: 8px; margin-bottom: 12px; }
+.proposal-filter [aria-pressed="true"] { border-color: var(--link); color: var(--fg); }
 .proposal-fixed, .whole-document-note { padding: 12px 14px; margin: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
 .proposal-fixed span { display: block; margin-bottom: 4px; color: var(--muted); font-size: .76rem; }
 .whole-document-note { color: var(--muted); }
@@ -242,6 +249,10 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; accent
 .stale-confirm { display: flex; align-items: start; gap: 8px; color: var(--fg); font-size: .9rem; }
 .change-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 17px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
 .change-row p { margin: 5px 0 0; }
+.change-main { min-width: 0; }
+.change-file-heading { display: flex; align-items: center; gap: 8px; }
+.link-button { padding: 0; border: 0; background: transparent; color: var(--link); font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.review-history { display: grid; gap: 2px; margin-top: 10px; }
 .change-actions, .review-form { display: flex; flex-wrap: wrap; justify-content: end; gap: 8px; grid-column: 1 / -1; }
 .review-form { width: 100%; }
 .review-form label { display: grid; flex: 1; gap: 6px; min-width: 240px; color: var(--muted); font-size: .8rem; }
@@ -251,7 +262,8 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; accent
 .review-state { display: grid; gap: 12px; }
 .review-state .section-heading { margin-bottom: 0; }
 .apply-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.apply-confirmation { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--panel-raised); }
+.apply-confirmation { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 10px; padding: 16px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--panel-raised); color: var(--fg); }
+.apply-confirmation::backdrop { background: rgba(1, 4, 9, .72); }
 .apply-confirmation h3, .apply-confirmation p { margin: 0; }
 .success-note { padding: 12px 14px; border: 1px solid rgba(63, 185, 80, .5); border-radius: var(--radius); color: var(--green); }
 
