@@ -20,7 +20,14 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.getByLabel("설명").fill("Real storage integration flow");
     await page.locator('input[name="cover"]').setInputFiles({ name: "cover.png", mimeType: "image/png", buffer: tinyPng });
     await page.locator('input[name="rightsConfirmed"]').check();
+    const createProjectResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/projects" && response.request().method() === "POST";
+    });
     await page.getByRole("button", { name: "생성하기" }).click();
+    const createProjectResponse = await createProjectResponsePromise;
+    expect(createProjectResponse.status()).toBe(201);
+    await expect(page).toHaveURL(/\/projects\/[^/]+$/, { timeout: 15_000 });
 
     await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
     const projectPath = new URL(page.url()).pathname;
@@ -28,12 +35,12 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(slug).toBeTruthy();
 
     await page.goto(`/?q=${encodeURIComponent(projectTitle)}&license=${encodeURIComponent("CC BY 4.0")}`);
-    await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
-    await expect(page.getByLabel("라이선스")).toHaveValue("CC BY 4.0");
+    await expect(page.getByRole("link", { name: projectTitle })).toBeVisible();
+    await expect(page.getByLabel("License")).toHaveValue("CC BY 4.0");
     await page.goto(`/?q=${encodeURIComponent(projectTitle)}&license=MIT`);
-    await expect(page.getByText("조건에 맞는 공개 프로젝트가 없습니다.")).toBeVisible();
+    await expect(page.getByText("No public projects match those filters.")).toBeVisible();
     await page.goto(`/?q=${encodeURIComponent("Real storage integration flow")}`);
-    await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
+    await expect(page.getByRole("link", { name: projectTitle })).toBeVisible();
     await page.goto(projectPath);
 
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
@@ -86,14 +93,14 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       const url = new URL(response.url());
       return url.pathname === "/api/auth/sign-out" && response.request().method() === "POST";
     });
-    await page.getByRole("button", { name: "로그아웃" }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
     const signOutResponse = await signOutResponsePromise;
     expect(signOutResponse.status()).toBe(200);
     const sessionResponse = await page.request.get("/api/auth/get-session");
     expect(sessionResponse.status()).toBe(200);
     const session = await sessionResponse.json() as { user?: unknown } | null;
     expect(session?.user ?? null).toBeNull();
-    await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await signUp(page, `Forker ${suffix}`, `forker-${suffix}@example.test`, password);
     await page.goto(projectPath);
     await page.getByLabel("Issue title").fill(issueTitle);
@@ -110,9 +117,9 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);
     await expect(page.getByRole("heading", { name: forkTitle })).toBeVisible();
     await expect(page.getByText(new RegExp(`Forked from ${projectTitle}`))).toBeVisible();
-    await page.getByRole("button", { name: "로그아웃" }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
     await signIn(page, ownerEmail, password);
-    await expect(page.getByRole("link", { name: /미확인 2개/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Activity, 2 unread/ })).toBeVisible();
     await page.goto("/notifications");
     await expect(page.getByRole("heading", { name: "알림" })).toBeVisible();
     const issueNotification = page.getByRole("listitem").filter({ hasText: issueTitle });
@@ -120,10 +127,10 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(issueNotification).toBeVisible();
     await expect(forkNotification).toBeVisible();
     await issueNotification.getByRole("button", { name: "읽음 처리" }).click();
-    await expect(page.getByRole("link", { name: /미확인 1개/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Activity, 1 unread/ })).toBeVisible();
     await forkNotification.getByRole("button", { name: "읽음 처리" }).click();
     await expect(page.getByText("미확인 알림 0개")).toBeVisible();
-    await expect(page.getByRole("link", { name: "알림" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Activity" })).toBeVisible();
   });
 });
 
@@ -134,7 +141,7 @@ async function signUp(page: Page, name: string, email: string, password: string)
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "가입하기" }).click();
-  await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
 
 async function signIn(page: Page, email: string, password: string) {
@@ -142,5 +149,5 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "로그인" }).click();
-  await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
