@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const filters = [
     { projectId: project.id, isPublished: true },
     ...(query ? [{ OR: [{ title: { contains: query, mode: "insensitive" as const } }, { changeDescription: { contains: query, mode: "insensitive" as const } }, { tool: { contains: query, mode: "insensitive" as const } }, { toolVersion: { contains: query, mode: "insensitive" as const } }, { tags: { hasEvery: [query.toLowerCase()] } }] }] : []),
-    ...(license ? [{ project: { license } }] : []),
+    ...(license ? [{ license }] : []),
     ...(tool ? [{ tool: { equals: tool } }] : []),
     ...(tags.length ? [{ tags: { hasEvery: tags } }] : []),
   ];
@@ -144,7 +144,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
 
     const revision = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+      const [lockedProject] = await tx.$queryRaw<Array<{ license: string }>>`SELECT license FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+      if (!lockedProject) throw new PublishError("Project not found", 404);
       const latest = await tx.revision.findFirst({ where: { projectId: project.id }, orderBy: { number: "desc" } });
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
@@ -153,6 +154,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         data: {
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,
           changeDescription,
+          license: lockedProject.license,
           sourceKey: publishedSourceKey, sourceUrl,
           tool,
           toolVersion: toolVersionResult.data,

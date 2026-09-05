@@ -31,6 +31,7 @@ describe("revision restore route", () => {
       number: 1,
       title: "First design",
       changeDescription: "Initial layout",
+      license: "CC BY 4.0",
       sourceKey: "revisions/project/source.zip",
       sourceUrl: null,
       isPublished: true,
@@ -105,6 +106,7 @@ describe("revision restore route", () => {
         toolVersion: undefined,
         tags: [],
         sourceChecksum: undefined,
+        license: "CC BY 4.0",
         isPublished: false,
         previews: { create: [{ position: 0, key: "revisions/project/preview.png", url: "/api/assets?key=revisions%2Fproject%2Fpreview.png", mimeType: "image/png", size: 123, altText: "Hero preview" }] },
       },
@@ -115,6 +117,12 @@ describe("revision restore route", () => {
       include: { previews: true },
     });
     expect(mocks.findSource).toHaveBeenCalledWith(expect.objectContaining({ where: { projectId_number: { projectId: "project", number: 1 } } }));
+  });
+
+  it("keeps an unknown legacy license unknown when restoring", async () => {
+    mocks.findSource.mockResolvedValueOnce({ id: "legacy", number: 1, title: "Legacy", license: null, sourceKey: "legacy/source", sourceUrl: null, isPublished: true, previews: [] });
+    expect((await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) })).status).toBe(201);
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ license: null }) }));
   });
 
   it("returns 404 for missing or unpublished historical revisions", async () => {

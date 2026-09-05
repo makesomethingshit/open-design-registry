@@ -25,12 +25,12 @@ describe("revision discovery listing", () => {
       },
     ]);
 
-    const response = await GET(new Request("http://localhost/api/projects/demo/revisions?limit=1&tool=figma&tag=ui&sort=recent"), { params: Promise.resolve({ slug: "demo" }) });
+    const response = await GET(new Request("http://localhost/api/projects/demo/revisions?license=MIT&limit=1&tool=figma&tag=ui&sort=recent"), { params: Promise.resolve({ slug: "demo" }) });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ items: [{ id: "revision-1", tool: "figma", tags: ["ui"] }], nextCursor: "revision-1" });
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: [{ projectId: "project", isPublished: true }, { tool: { equals: "figma" } }, { tags: { hasEvery: ["ui"] } }] },
+      where: { AND: [{ projectId: "project", isPublished: true }, { license: "MIT" }, { tool: { equals: "figma" } }, { tags: { hasEvery: ["ui"] } }] },
       take: 2,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }));

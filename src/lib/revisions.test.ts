@@ -4,6 +4,7 @@ import { toPublicRevision } from "./revisions";
 describe("public revision serialization", () => {
   it("hides storage state and exposes proxy URLs", () => {
     const revision = toPublicRevision({
+      license: "MIT",
       id: "revision-1",
       projectId: "project-1",
       number: 1,

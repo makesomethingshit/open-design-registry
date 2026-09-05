@@ -41,7 +41,7 @@ describe("revision publishing route", () => {
     mocks.createRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.updateRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.transaction.mockImplementation(async (callback) => callback({
-      $queryRaw: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([{ license: "CC BY 4.0" }]),
       revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
     }));
     mocks.putObject.mockImplementation(async (_file: File, key: string) => `https://cdn/${key}`);
@@ -68,7 +68,7 @@ describe("revision publishing route", () => {
   it("normalizes discovery metadata and computes an uploaded source checksum", async () => {
     const response = await POST(request({ tool: " Figma ", toolVersion: " 2025 ", tags: "UI, Mobile", source: new File(["source"], "source.zip", { type: "application/zip" }), previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
-    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ tool: "figma", toolVersion: "2025", tags: ["ui", "mobile"], sourceChecksum: "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d" }) }));
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ license: "CC BY 4.0", tool: "figma", toolVersion: "2025", tags: ["ui", "mobile"], sourceChecksum: "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d" }) }));
   });
 
   it("publishes an HTTP(S) source URL without a source key", async () => {

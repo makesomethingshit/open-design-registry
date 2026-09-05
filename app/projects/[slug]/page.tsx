@@ -36,7 +36,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           <p className="repo-path"><Link href="/">Open Design Registry</Link> / {project.slug}</p>
           <div className="repo-title-row"><h1>{project.title}</h1><span className={`repo-visibility ${project.isPublic ? "public" : "private"}`}>{project.isPublic ? "Public" : "Private"}</span></div>
           <p className="lede">{project.description || "No description provided."}</p>
-          {project.forkedFrom && <p className="repo-lineage">Forked from <Link href={`/projects/${project.forkedFrom.slug}`}>{project.forkedFrom.title}</Link> · Revision {project.forkedFromRevision?.number ?? "unknown"} · Original author {project.forkedFrom.owner.name} · License {project.forkedFromLicense ?? project.license}</p>}
+          {project.forkedFrom && <p className="repo-lineage">Forked from <Link href={`/projects/${project.forkedFrom.slug}`}>{project.forkedFrom.title}</Link> · Revision {project.forkedFromRevision?.number ?? "unknown"} · Original author {project.forkedFrom.owner.name} · Original revision license {project.forkedFromLicense ?? "not recorded"}</p>}
         </div>
       </div>
       <div className="repo-header-meta"><span>Owner <strong>{project.owner.name}</strong></span><span>License <strong>{project.license}</strong></span><span><strong>{project.revisions.length}</strong> revisions</span></div>

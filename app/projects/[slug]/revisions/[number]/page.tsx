@@ -34,10 +34,12 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <h1>{revision.title}</h1>
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
     <p>{revision.changeDescription}</p>
+    <p className="meta">Revision license: {revision.license ?? "Not recorded for this legacy revision"}</p>
+    {!revision.license && <p className="meta">The original publication license is unknown. Forking uses the current project license ({project.license}); confirm your rights before continuing.</p>}
     {(revision.tool || revision.toolVersion || revision.tags.length > 0 || revision.sourceChecksum) && <p className="meta">{revision.tool ?? "Unknown tool"}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}{revision.tags.length > 0 ? ` · ${revision.tags.map((tag) => `#${tag}`).join(" ")}` : ""}{revision.sourceChecksum ? ` · SHA-256 ${revision.sourceChecksum}` : ""}</p>}
     {sourceHref && <section aria-labelledby="revision-source"><h2 id="revision-source">Source</h2><a className="button secondary" href={sourceHref} {...(sourceUrl ? { target: "_blank", rel: "noreferrer" } : { download: true })}>{sourceUrl ? "Open source link" : "Download original file"}</a></section>}
     {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length)) && <RevisionDiff current={currentImagePreviews} previous={previousImagePreviews} currentNumber={revision.number} previousNumber={previous?.number} />}
     {htmlPreviews.length > 0 && <section aria-labelledby="html-previews"><h2 id="html-previews">HTML previews</h2><div className="html-previews">{htmlPreviews.map((preview) => <figure className="preview-diff" key={preview.id}><figcaption>{preview.altText}</figcaption><iframe className="html-preview" src={preview.url} title={preview.altText} sandbox="" loading="lazy" /></figure>)}</div></section>}
-    {session?.user.id === project.ownerId && <RestoreForm slug={project.slug} number={revision.number} />}<ForkForm slug={project.slug} number={revision.number} license={project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
+    {session?.user.id === project.ownerId && <RestoreForm slug={project.slug} number={revision.number} />}<ForkForm slug={project.slug} number={revision.number} license={revision.license ?? project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
   </article>;
 }

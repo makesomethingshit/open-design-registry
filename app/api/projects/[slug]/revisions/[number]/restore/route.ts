@@ -35,6 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           parentId: latest?.id,
           title: `Restored: ${source.title}`.slice(0, 120),
           changeDescription: `Restored from Revision ${source.number}`,
+          license: source.license,
           sourceKey: source.sourceKey,
           sourceUrl: source.sourceUrl,
           tool: source.tool,
