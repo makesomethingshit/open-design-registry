@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project, Revision } from "@prisma/client";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -19,7 +19,6 @@ postgres("contribution workflow with PostgreSQL", () => {
     for (const user of [owner, author, stranger]) await prisma.user.create({ data: { ...user, email: `${user.id}@example.test` } });
   });
   afterAll(() => prisma.$disconnect());
-  afterEach(() => vi.restoreAllMocks());
   async function publish(projectId: string, title: string, license = "MIT") {
     return prisma.$transaction(async (db) => {
       await db.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
@@ -95,14 +94,21 @@ postgres("contribution workflow with PostgreSQL", () => {
     const proposal = await createContribution(target.slug, author, input());
     const realTransaction = prisma.$transaction.bind(prisma);
     // Fail the final write inside a real DB transaction, after revision publication.
-    vi.spyOn(prisma, "$transaction").mockImplementation(((callback: (db: any) => Promise<any>) => realTransaction(async (db) => {
+    const transactionSpy = vi.spyOn(prisma, "$transaction").mockImplementation(((callback: (db: any) => Promise<any>) => realTransaction(async (db) => {
       const failure = vi.spyOn(db.notification, "create").mockRejectedValueOnce(new Error("notification storage failed"));
       try { return await callback(db); } finally { failure.mockRestore(); }
     })) as typeof prisma.$transaction);
-    await expect(actOnContribution(target.slug, proposal.id, owner, accept())).rejects.toThrow("notification storage failed");
-    expect(await prisma.revision.count({ where: { projectId: target.id } })).toBe(1);
-    expect((await prisma.contribution.findUniqueOrThrow({ where: { id: proposal.id } })).status).toBe("OPEN");
-    expect(await prisma.contributionEvent.count({ where: { contributionId: proposal.id } })).toBe(1);
+    try {
+      await expect(actOnContribution(target.slug, proposal.id, owner, accept())).rejects.toThrow("notification storage failed");
+      expect(await prisma.revision.count({ where: { projectId: target.id } })).toBe(1);
+      expect((await prisma.contribution.findUniqueOrThrow({ where: { id: proposal.id } })).status).toBe("OPEN");
+      expect(await prisma.contributionEvent.count({ where: { contributionId: proposal.id } })).toBe(1);
+    } finally {
+      transactionSpy.mockRestore();
+      // Prisma exposes methods through a proxy; descriptor restoration alone
+      // can remove the delegated method. Restore the callable explicitly.
+      prisma.$transaction = realTransaction;
+    }
   });
   it("hides private target proposals and notifications while preserving authorized review snapshots", async () => {
     const proposal = await createContribution(target.slug, author, input());
