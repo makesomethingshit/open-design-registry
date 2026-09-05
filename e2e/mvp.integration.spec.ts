@@ -20,7 +20,14 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.getByLabel("설명").fill("Real storage integration flow");
     await page.locator('input[name="cover"]').setInputFiles({ name: "cover.png", mimeType: "image/png", buffer: tinyPng });
     await page.locator('input[name="rightsConfirmed"]').check();
+    const createProjectResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/projects" && response.request().method() === "POST";
+    });
     await page.getByRole("button", { name: "생성하기" }).click();
+    const createProjectResponse = await createProjectResponsePromise;
+    expect(createProjectResponse.status()).toBe(201);
+    await expect(page).toHaveURL(/\/projects\/[^/]+$/, { timeout: 15_000 });
 
     await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
     const projectPath = new URL(page.url()).pathname;
