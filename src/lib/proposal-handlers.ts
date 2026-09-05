@@ -37,6 +37,17 @@ function isVisible(proposal: ProposalDetails, userId?: string) {
     && canReadProject(proposal.sourceRevision.project, userId);
 }
 
+type LockedProject = { id: string; ownerId: string; license: string; isPublic: boolean };
+
+async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) {
+  const projects = new Map<string, LockedProject>();
+  for (const projectId of [...new Set(projectIds)].sort()) {
+    const [project] = await tx.$queryRaw<LockedProject[]>`SELECT id, "ownerId", license, "isPublic" FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+    if (project) projects.set(project.id, project);
+  }
+  return projects;
+}
+
 export async function findVisibleProposal(id: string, userId?: string) {
   const proposal = await prisma.proposal.findUnique({ where: { id }, include: proposalDetails });
   return proposal && isVisible(proposal, userId) ? proposal : null;
@@ -126,14 +137,26 @@ export async function getProposal(request: Request, scope: { id: string }) {
 export async function closeProposal(request: Request, scope: { id: string }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return error("Sign-in required", 401);
-  const proposal = await findVisibleProposal(scope.id, session.user.id);
-  if (!proposal) return error("Proposal not found", 404);
-  if (proposal.authorId !== session.user.id && proposal.project.ownerId !== session.user.id) return error("Only the contributor or project owner can close a proposal", 403);
-  if (proposal.status === "ACCEPTED") return error("Accepted proposals cannot be closed", 409);
   const parsed = proposalCloseSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return error("Status must be CLOSED");
-  const updated = await prisma.proposal.update({ where: { id: proposal.id }, data: { status: "CLOSED" }, include: proposalDetails });
-  return NextResponse.json(publicProposal(updated));
+  const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true } });
+  if (!initial) return error("Proposal not found", 404);
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const lockedProjects = await lockProjects(tx, [initial.projectId]);
+      if (!lockedProjects.has(initial.projectId)) throw new ProposalError("Proposal not found", 404);
+      const proposal = await tx.proposal.findUnique({ where: { id: scope.id }, include: proposalDetails });
+      if (!proposal || !isVisible(proposal, session.user.id)) throw new ProposalError("Proposal not found", 404);
+      if (proposal.authorId !== session.user.id && proposal.project.ownerId !== session.user.id) throw new ProposalError("Only the contributor or project owner can close a proposal", 403);
+      if (proposal.status === "ACCEPTED") throw new ProposalError("Accepted proposals cannot be closed", 409);
+      return tx.proposal.update({ where: { id: proposal.id }, data: { status: "CLOSED" }, include: proposalDetails });
+    });
+    return NextResponse.json(publicProposal(updated));
+  } catch (cause) {
+    if (cause instanceof ProposalError) return error(cause.message, cause.status, cause.details);
+    console.error("proposal close failed", cause);
+    return error("Proposal could not be closed", 500);
+  }
 }
 
 export async function postProposalComment(request: Request, scope: { id: string }) {
@@ -151,27 +174,37 @@ export async function postProposalComment(request: Request, scope: { id: string 
 export async function reviewProposalChange(request: Request, scope: { id: string; changeId: string }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return error("Sign-in required", 401);
-  const proposal = await findVisibleProposal(scope.id, session.user.id);
-  if (!proposal) return error("Proposal not found", 404);
-  if (proposal.project.ownerId !== session.user.id) return error("Only the project owner can review changes", 403);
-  if (!proposal.changeSet || !proposalCanBeReviewed(proposal.status)) return error("Proposal cannot be reviewed", 409);
   const parsed = proposalReviewSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return error("A review status is required; change requests need a comment");
-  const change = proposal.changeSet.changes.find((candidate) => candidate.id === scope.changeId);
-  if (!change) return error("Change not found", 404);
-  const result = await prisma.$transaction(async (tx) => {
-    const reviewed = await tx.change.update({ where: { id: change.id }, data: { reviewStatus: parsed.data.status, reviewComment: parsed.data.comment || null, reviewedById: session.user.id, reviewedAt: new Date() } });
-    const changes = await tx.change.findMany({ where: { changeSetId: proposal.changeSet!.id }, select: { reviewStatus: true } });
-    const status = proposalStatusForChanges(changes.map((item) => item.reviewStatus));
-    await tx.proposal.update({ where: { id: proposal.id }, data: { status, reviewerId: session.user.id } });
-    return reviewed;
-  });
-  return NextResponse.json(result);
+  const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true } });
+  if (!initial) return error("Proposal not found", 404);
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const lockedProjects = await lockProjects(tx, [initial.projectId]);
+      if (!lockedProjects.has(initial.projectId)) throw new ProposalError("Proposal not found", 404);
+      const proposal = await tx.proposal.findUnique({ where: { id: scope.id }, include: proposalDetails });
+      if (!proposal || !isVisible(proposal, session.user.id)) throw new ProposalError("Proposal not found", 404);
+      if (proposal.project.ownerId !== session.user.id) throw new ProposalError("Only the project owner can review changes", 403);
+      if (!proposal.changeSet || !proposalCanBeReviewed(proposal.status)) throw new ProposalError("Proposal cannot be reviewed", 409);
+      const change = proposal.changeSet.changes.find((candidate) => candidate.id === scope.changeId);
+      if (!change) throw new ProposalError("Change not found", 404);
+      const reviewed = await tx.change.update({ where: { id: change.id }, data: { reviewStatus: parsed.data.status, reviewComment: parsed.data.comment || null, reviewedById: session.user.id, reviewedAt: new Date() } });
+      const changes = await tx.change.findMany({ where: { changeSetId: proposal.changeSet.id }, select: { reviewStatus: true } });
+      const status = proposalStatusForChanges(changes.map((item) => item.reviewStatus));
+      await tx.proposal.update({ where: { id: proposal.id }, data: { status, reviewerId: session.user.id } });
+      return reviewed;
+    });
+    return NextResponse.json(result);
+  } catch (cause) {
+    if (cause instanceof ProposalError) return error(cause.message, cause.status, cause.details);
+    console.error("proposal review failed", cause);
+    return error("Proposal could not be reviewed", 500);
+  }
 }
 
-type ApplyFailureDetails = { latestRevision?: { id: string; number: number } };
-class ApplyError extends Error {
-  constructor(message: string, readonly status: number, readonly details?: ApplyFailureDetails) { super(message); }
+type ProposalFailureDetails = { latestRevision?: { id: string; number: number } };
+class ProposalError extends Error {
+  constructor(message: string, readonly status: number, readonly details?: ProposalFailureDetails) { super(message); }
 }
 
 export async function applyProposal(request: Request, scope: { id: string }) {
@@ -179,29 +212,31 @@ export async function applyProposal(request: Request, scope: { id: string }) {
   if (!session) return error("Sign-in required", 401);
   const parsed = proposalApplySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return error("Latest revision confirmation is invalid");
-  const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true } });
+  const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true, sourceRevision: { select: { projectId: true } } } });
   if (!initial) return error("Proposal not found", 404);
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const [lockedProject] = await tx.$queryRaw<Array<{ id: string; ownerId: string; license: string }>>`SELECT id, "ownerId", license FROM "Project" WHERE id = ${initial.projectId} FOR UPDATE`;
-      if (!lockedProject) throw new ApplyError("Proposal not found", 404);
-      if (lockedProject.ownerId !== session.user.id) throw new ApplyError("Only the project owner can apply approved changes", 403);
+      const lockedProjects = await lockProjects(tx, [initial.projectId, initial.sourceRevision.projectId]);
+      const lockedProject = lockedProjects.get(initial.projectId);
+      if (!lockedProject) throw new ProposalError("Proposal not found", 404);
+      if (lockedProject.ownerId !== session.user.id) throw new ProposalError("Only the project owner can apply approved changes", 403);
       const proposal = await tx.proposal.findUnique({
         where: { id: scope.id },
         include: {
           baseRevision: { select: { id: true, projectId: true, isPublished: true } },
-          sourceRevision: { include: { project: { select: { ownerId: true, isPublic: true } }, previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } },
+          sourceRevision: { include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } },
           changeSet: { include: { changes: true } },
           appliedRevision: { select: { id: true, number: true, title: true } },
         },
       });
-      if (!proposal) throw new ApplyError("Proposal not found", 404);
+      if (!proposal) throw new ProposalError("Proposal not found", 404);
       if (proposal.appliedRevision) return { revision: proposal.appliedRevision, alreadyApplied: true };
-      if (proposal.status !== "APPROVED" || proposal.changeSet?.changes.length !== 1 || proposal.changeSet.changes[0].type !== "REPLACE_DOCUMENT" || proposal.changeSet.changes[0].target !== "whole_document" || proposal.changeSet.changes[0].reviewStatus !== "APPROVED") throw new ApplyError("The whole-document change must be approved before it can be applied", 409);
-      if (!proposal.baseRevision.isPublished || proposal.baseRevision.projectId !== initial.projectId || !proposal.sourceRevision.isPublished || !canReadProject(proposal.sourceRevision.project, session.user.id)) throw new ApplyError("Proposal source is not available", 404);
+      if (proposal.status !== "APPROVED" || proposal.changeSet?.changes.length !== 1 || proposal.changeSet.changes[0].type !== "REPLACE_DOCUMENT" || proposal.changeSet.changes[0].target !== "whole_document" || proposal.changeSet.changes[0].reviewStatus !== "APPROVED") throw new ProposalError("The whole-document change must be approved before it can be applied", 409);
+      const sourceProject = lockedProjects.get(proposal.sourceRevision.projectId);
+      if (!proposal.baseRevision.isPublished || proposal.baseRevision.projectId !== initial.projectId || proposal.sourceRevision.projectId !== initial.sourceRevision.projectId || !sourceProject || !proposal.sourceRevision.isPublished || !canReadProject(sourceProject, session.user.id)) throw new ProposalError("Proposal source is not available", 404);
       const latest = await tx.revision.findFirst({ where: { projectId: initial.projectId, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true } });
-      if (!latest) throw new ApplyError("Current revision not found", 409);
-      if (latest.id !== proposal.baseRevisionId && parsed.data.reviewedLatestRevisionId !== latest.id) throw new ApplyError("Review the latest revision before applying this proposal", 409, { latestRevision: latest });
+      if (!latest) throw new ProposalError("Current revision not found", 409);
+      if (latest.id !== proposal.baseRevisionId && parsed.data.reviewedLatestRevisionId !== latest.id) throw new ProposalError("Review the latest revision before applying this proposal", 409, { latestRevision: latest });
       const source = proposal.sourceRevision;
       const stagedRevision = await tx.revision.create({
         data: {
@@ -228,7 +263,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
     });
     return NextResponse.json(result, { status: result.alreadyApplied ? 200 : 201 });
   } catch (cause) {
-    if (cause instanceof ApplyError) return error(cause.message, cause.status, cause.details);
+    if (cause instanceof ProposalError) return error(cause.message, cause.status, cause.details);
     console.error("proposal apply failed", cause);
     return error("Proposal could not be applied", 500);
   }

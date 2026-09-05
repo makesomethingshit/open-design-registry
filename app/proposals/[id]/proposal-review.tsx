@@ -29,10 +29,11 @@ export default function ProposalReview({ proposalId, baseRevision, sourceRevisio
   }
   async function comment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const response = await fetch(`/api/proposals/${proposalId}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: form.get("body") }) });
     if (!response.ok) { setError((await response.json().catch(() => null))?.error ?? "Could not add comment"); return; }
-    event.currentTarget.reset();
+    formElement.reset();
     router.refresh();
   }
   async function apply() {
