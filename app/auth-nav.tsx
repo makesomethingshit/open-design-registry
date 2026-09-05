@@ -52,6 +52,7 @@ export default function AuthNav() {
     router.refresh();
   }
 
-  if (!loaded || !user) return <nav><a href="/projects/new">프로젝트 만들기</a><a href="/login">로그인</a></nav>;
-  return <nav><a href="/projects">내 프로젝트</a><a href="/projects/new">프로젝트 만들기</a><a href="/notifications" aria-label={unreadCount ? `알림, 미확인 ${unreadCount}개` : "알림"}>알림{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</a>{user.role === "admin" && <a href="/admin/reports">신고 검토</a>}<span className="nav-user">{user.name || "회원"}</span><button type="button" className="nav-button" onClick={signOut}>로그아웃</button></nav>;
+  if (!loaded || !user) return <nav className="auth-nav" aria-label="Account"><a href="/projects" className="nav-link">Explore</a><a href="/projects/new" className="nav-link nav-cta">New project</a><a href="/login" className="nav-link">Sign in</a></nav>;
+  const initial = (user.name || "A").slice(0, 1).toUpperCase();
+  return <nav className="auth-nav" aria-label="Account"><a href="/projects" className="nav-link">My projects</a><a href="/projects/new" className="nav-link nav-cta">New project</a><a href="/notifications" className="nav-link" aria-label={unreadCount ? `Activity, ${unreadCount} unread` : "Activity"}>Activity{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</a>{user.role === "admin" && <a href="/admin/reports" className="nav-link">Reports</a>}<span className="nav-profile"><span className="avatar avatar-small" aria-hidden="true">{initial}</span><span className="nav-user">{user.name || "Account"}</span></span><button type="button" className="nav-button" onClick={signOut}>Sign out</button></nav>;
 }

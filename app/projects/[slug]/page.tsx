@@ -14,19 +14,66 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const project = await prisma.project.findUnique({
     where: { slug },
-    include: { owner: { select: { name: true } }, revisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, altText: true } } } }, forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } }, forkedFromRevision: { select: { number: true } }, issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } } },
+    include: {
+      owner: { select: { name: true } },
+      revisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, altText: true } } } },
+      issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } },
+      forks: { where: { isPublic: true }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
+      forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } },
+      forkedFromRevision: { select: { number: true } },
+    },
   });
   if (!project) notFound();
   const session = await getSession();
   if (!project.isPublic && session?.user.id !== project.ownerId) notFound();
-  return <article className="detail">
-    <p className="meta">{project.owner.name} · {project.license} · {project.isPublic ? "Public" : "Private"}</p>
-    <h1>{project.title}</h1><p className="lede">{project.description}</p>
-    {project.forkedFrom && <p className="meta">Forked from <Link href={`/projects/${project.forkedFrom.slug}`}>{project.forkedFrom.title}</Link>, Revision {project.forkedFromRevision?.number ?? "unknown"} · Original author {project.forkedFrom.owner.name} · License {project.forkedFromLicense ?? project.license}</p>}
-    <img src={publicAssetUrl(project.coverUrl)} alt={`${project.title} cover`} />
+  const initial = project.title.slice(0, 1).toUpperCase();
+  return <article className="detail repo-detail">
+    <header className="repo-header">
+      <div className="repo-header-main">
+        <div className="repo-avatar" aria-hidden="true">{initial}</div>
+        <div>
+          <p className="repo-path"><Link href="/">Open Design Registry</Link> / {project.slug}</p>
+          <div className="repo-title-row"><h1>{project.title}</h1><span className={`repo-visibility ${project.isPublic ? "public" : "private"}`}>{project.isPublic ? "Public" : "Private"}</span></div>
+          <p className="lede">{project.description || "No description provided."}</p>
+          {project.forkedFrom && <p className="repo-lineage">Forked from <Link href={`/projects/${project.forkedFrom.slug}`}>{project.forkedFrom.title}</Link> · Revision {project.forkedFromRevision?.number ?? "unknown"} · Original author {project.forkedFrom.owner.name}</p>}
+        </div>
+      </div>
+      <div className="repo-header-meta"><span>Owner <strong>{project.owner.name}</strong></span><span>License <strong>{project.license}</strong></span><span><strong>{project.revisions.length}</strong> revisions</span></div>
+    </header>
+    <nav className="repo-tabs" aria-label="Project sections">
+      <a className="repo-tab" href="#preview">Preview</a>
+      <a className="repo-tab" href="#revisions">Revisions <span className="repo-tab-count">{project.revisions.length}</span></a>
+      <a className="repo-tab" href="#issues">Issues <span className="repo-tab-count">{project.issues.length}</span></a>
+      <a className="repo-tab" href="#forks">Forks <span className="repo-tab-count">{project.forks.length}</span></a>
+    </nav>
+    <section id="preview" className="repo-panel" aria-labelledby="preview-heading">
+      <div className="section-heading"><h2 id="preview-heading">Preview</h2><span className="meta">Latest project cover</span></div>
+      <img className="repo-preview-image" src={publicAssetUrl(project.coverUrl)} alt={`${project.title} cover`} />
+    </section>
     {session?.user.id === project.ownerId && <ProjectSettingsForm slug={project.slug} title={project.title} description={project.description} license={project.license} isPublic={project.isPublic} />}
-    <section aria-labelledby="revision-history"><h2 id="revision-history">Revision history</h2>{project.revisions.length ? <ol className="history">{project.revisions.map((revision) => <li key={revision.id}>
-      <div className="history-entry"><Link href={`/projects/${project.slug}/revisions/${revision.number}`}><strong>{revision.title}</strong><span className="meta">Revision {revision.number}</span></Link><span className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></span><p>{revision.changeDescription}</p>{(revision.tool || revision.toolVersion || revision.tags.length > 0) && <p className="meta">{revision.tool ?? "Unknown tool"}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}{revision.tags.length > 0 ? ` · ${revision.tags.map((tag) => `#${tag}`).join(" ")}` : ""}</p>}{revision.previews.length > 0 && <ul aria-label={`Revision ${revision.number} preview alt text`}>{revision.previews.map((preview) => <li key={preview.id}>Preview {preview.position + 1}: {preview.altText}</li>)}</ul>}</div>
-    </li>)}</ol> : <p>No revisions published yet.</p>}</section>{session?.user.id === project.ownerId && <RevisionPublishForm slug={project.slug} />}<IssueBoard slug={project.slug} issues={project.issues} revisions={project.revisions} canManage={project.isPublic && session?.user.id === project.ownerId} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm projectSlug={project.slug} />}
+    <section id="revisions" className="repo-panel" aria-labelledby="revision-history">
+      <div className="section-heading"><h2 id="revision-history">Revisions</h2><span className="meta">Commit history</span></div>
+      {project.revisions.length ? <ol className="commit-list">{project.revisions.map((revision) => <li className="commit-row" key={revision.id}>
+        <span className="commit-avatar" aria-hidden="true">{project.owner.name.slice(0, 1).toUpperCase()}</span>
+        <div className="commit-main">
+          <Link className="commit-title" href={`/projects/${project.slug}/revisions/${revision.number}`}>{revision.changeDescription || revision.title}</Link>
+          <p className="commit-subject">{revision.title}</p>
+          <div className="commit-meta"><span>{project.owner.name}</span><span>Revision <code>{revision.id.slice(0, 8)}</code></span>{revision.tool && <span>{revision.tool}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}</span>}{revision.tags.map((tag) => <span className="topic-tag" key={tag}>{tag}</span>)}</div>
+          {revision.previews.length > 0 && <ul className="commit-previews" aria-label={`Revision ${revision.number} preview alt text`}>{revision.previews.map((preview) => <li className="commit-chip" key={preview.id}>Preview {preview.position + 1}: {preview.altText}</li>)}</ul>}
+        </div>
+        <time className="commit-time" dateTime={revision.createdAt.toISOString()}>{formatDate(revision.createdAt)}</time>
+      </li>)}</ol> : <p className="empty-state">No revisions published yet.</p>}
+    </section>
+    {session?.user.id === project.ownerId && <RevisionPublishForm slug={project.slug} />}
+    <IssueBoard slug={project.slug} issues={project.issues} revisions={project.revisions} canManage={project.isPublic && session?.user.id === project.ownerId} signedIn={project.isPublic && Boolean(session)} />
+    <section id="forks" className="repo-panel" aria-labelledby="forks-heading">
+      <div className="section-heading"><h2 id="forks-heading">Forks</h2><span className="meta">Project descendants</span></div>
+      {project.forks.length ? <div className="repo-list">{project.forks.map((fork) => <article className="repo-row" key={fork.id}><div className="repo-row-main"><div className="repo-row-heading"><Link className="repo-name" href={`/projects/${fork.slug}`}>{fork.title}</Link><span className="repo-visibility public">Public</span></div><p className="repo-description">{fork.description || "No description provided."}</p><div className="repo-meta"><span>{fork.owner.name}</span><span>{fork.license}</span><span>Created <time dateTime={fork.createdAt.toISOString()}>{formatDate(fork.createdAt)}</time></span></div></div></article>)}</div> : <p className="empty-state">No forks yet.</p>}
+    </section>
+    {project.isPublic && <ReportForm projectSlug={project.slug} />}
   </article>;
+}
+
+function formatDate(value: Date) {
+  return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
