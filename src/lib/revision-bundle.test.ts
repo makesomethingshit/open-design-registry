@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getObject: vi.fn(), putBytes: vi.fn() }));
 vi.mock("./storage", () => ({ getObject: mocks.getObject, putBytes: mocks.putBytes }));
 
-const { encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, revisionBundleChecksum } = await import("./revision-bundle");
+const { capabilityForBundle, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, revisionBundleChecksum } = await import("./revision-bundle");
 
 describe("revision bundle", () => {
   const bundle = { version: 1 as const, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 2400, assetKey: "private/source-a", previewKeys: ["preview-a"] }] };
@@ -15,6 +15,11 @@ describe("revision bundle", () => {
 
   it("only exposes file metadata to form consumers", () => {
     expect(publicBundleFiles(bundle)).toEqual([{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 2400 }]);
+  });
+
+  it("counts files, not SVG internals, for structured capability", () => {
+    expect(capabilityForBundle({ version: 2, files: [{ ...bundle.files[0], kind: "artboard" }], })).toEqual({ mode: "structured", unitCount: 1 });
+    expect(capabilityForBundle(null)).toEqual({ mode: "whole_document", unitCount: 0 });
   });
 
   it("keeps v2 unit kinds, including unknown forward-compatible values", async () => {

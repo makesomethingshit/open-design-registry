@@ -9,8 +9,8 @@ import { normalizeUnitName, putRevisionBundle, readRevisionBundle, type Revision
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
-  baseRevision: { select: { id: true, projectId: true, number: true, title: true, isPublished: true, sourceKey: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } },
-  sourceRevision: { select: { id: true, projectId: true, number: true, title: true, isPublished: true, sourceKey: true, project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } }, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } },
+  baseRevision: { select: { id: true, projectId: true, number: true, title: true, isPublished: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } },
+  sourceRevision: { select: { id: true, projectId: true, number: true, title: true, isPublished: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } }, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } },
   author: { select: { id: true, name: true } },
   relatedIssue: { select: { id: true, title: true, status: true } },
   reviewer: { select: { id: true, name: true } },
@@ -31,6 +31,7 @@ const proposalSummary = {
   createdAt: true,
   updatedAt: true,
   author: { select: { name: true } },
+  baseRevision: { select: { capabilityMode: true, capabilityUnitCount: true } },
   changeSet: { select: { changes: { select: { id: true, type: true, action: true, target: true, name: true, newName: true, kind: true, reviewStatus: true, appliedRevisionId: true } } } },
 } satisfies Prisma.ProposalSelect;
 
@@ -86,6 +87,7 @@ export function publicProposalSummary(proposal: ProposalSummary) {
     total: changes.length,
     summaries: changes.slice(0, 2).map(changeSummary),
     moreChanges: Math.max(0, changes.length - 2),
+    capability: { mode: proposal.baseRevision.capabilityMode, unitCount: proposal.baseRevision.capabilityUnitCount },
   };
 }
 
@@ -186,8 +188,8 @@ export function publicProposal(proposal: ProposalDetails) {
     createdAt: proposal.createdAt,
     updatedAt: proposal.updatedAt,
     project: { slug: proposal.project.slug, title: proposal.project.title },
-    baseRevision: { id: proposal.baseRevision.id, number: proposal.baseRevision.number, title: proposal.baseRevision.title, previews: proposal.baseRevision.previews.map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) },
-    sourceRevision: { id: proposal.sourceRevision.id, number: proposal.sourceRevision.number, title: proposal.sourceRevision.title, project: { slug: proposal.sourceRevision.project.slug, title: proposal.sourceRevision.project.title }, previews: proposal.sourceRevision.previews.map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) },
+    baseRevision: { id: proposal.baseRevision.id, number: proposal.baseRevision.number, title: proposal.baseRevision.title, capabilityMode: proposal.baseRevision.capabilityMode, capabilityUnitCount: proposal.baseRevision.capabilityUnitCount, adapterId: proposal.baseRevision.adapterId, adapterVersion: proposal.baseRevision.adapterVersion, adapterConfidence: proposal.baseRevision.adapterConfidence, adapterMaturity: proposal.baseRevision.adapterMaturity, previews: proposal.baseRevision.previews.map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) },
+    sourceRevision: { id: proposal.sourceRevision.id, number: proposal.sourceRevision.number, title: proposal.sourceRevision.title, capabilityMode: proposal.sourceRevision.capabilityMode, capabilityUnitCount: proposal.sourceRevision.capabilityUnitCount, adapterId: proposal.sourceRevision.adapterId, adapterVersion: proposal.sourceRevision.adapterVersion, adapterConfidence: proposal.sourceRevision.adapterConfidence, adapterMaturity: proposal.sourceRevision.adapterMaturity, project: { slug: proposal.sourceRevision.project.slug, title: proposal.sourceRevision.project.title }, previews: proposal.sourceRevision.previews.map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) },
     author: proposal.author,
     relatedIssue: proposal.relatedIssue,
     reviewer: proposal.reviewer,
@@ -453,7 +455,7 @@ function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, 
     if (!sourceFile) throw new ProposalError("A selected source unit is no longer available", 409);
     files[index] = { ...current, mimeType: change.mimeType, size: change.size, assetKey: change.assetKey, previewKeys: sourceFile.previewKeys };
   }
-  if (!files.length) throw new ProposalError("A revision must contain at least one unit", 409);
+  if (!files.length) throw new ProposalError("At least one unit must remain.", 409);
   return { version: 2 as const, files };
 }
 
@@ -519,6 +521,12 @@ export async function applyProposal(request: Request, scope: { id: string }) {
             toolVersion: source.toolVersion,
             tags: source.tags,
             sourceChecksum: source.sourceChecksum,
+            capabilityMode: source.capabilityMode ?? "WHOLE_DOCUMENT",
+            capabilityUnitCount: source.capabilityUnitCount ?? 0,
+            adapterId: source.adapterId,
+            adapterVersion: source.adapterVersion,
+            adapterConfidence: source.adapterConfidence,
+            adapterMaturity: source.adapterMaturity,
             sourceProposalId: proposal.id,
             isPublished: false,
             previews: { create: source.previews.map(({ position, key, url, mimeType, size, altText }) => ({ position, key, url, mimeType, size, altText })) },
@@ -541,6 +549,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       ]);
       if (!latestBundle || (needsSourceBundle && !sourceBundle)) throw new ProposalError("This revision needs a file bundle before individual files can be replaced.", 409);
       const bundle = selectiveBundle(latestBundle, sourceBundle, selected);
+      const adapterRevision = needsSourceBundle && source.adapterId ? source : latestWithSource;
       const previewByKey = new Map([...latestWithSource.previews, ...source.previews].map((preview) => [preview.key, preview]));
       const previewKeys = [...new Set(bundle.files.flatMap((file) => file.previewKeys))];
       const previews = previewKeys.map((key) => previewByKey.get(key)).filter((preview): preview is NonNullable<typeof preview> => Boolean(preview)).map((preview, position) => ({ ...preview, position }));
@@ -561,6 +570,12 @@ export async function applyProposal(request: Request, scope: { id: string }) {
           toolVersion: latestWithSource.toolVersion,
           tags: latestWithSource.tags,
           sourceChecksum: checksum,
+          capabilityMode: "STRUCTURED",
+          capabilityUnitCount: bundle.files.length,
+          adapterId: adapterRevision.adapterId,
+          adapterVersion: adapterRevision.adapterVersion,
+          adapterConfidence: adapterRevision.adapterConfidence,
+          adapterMaturity: adapterRevision.adapterMaturity,
           sourceProposalId: proposal.id,
           isPublished: false,
           previews: { create: previews.map(({ position, key, url, mimeType, size, altText }) => ({ position, key, url, mimeType, size, altText })) },

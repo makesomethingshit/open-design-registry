@@ -22,6 +22,7 @@ vi.mock("@/src/lib/storage", () => ({ putObject: mocks.putObject, deleteObject: 
 vi.mock("@/src/lib/revision-bundle", () => ({
   putRevisionBundle: mocks.putBundle,
   readRevisionBundle: mocks.readBundle,
+  capabilityForBundle: (bundle: { files: unknown[] } | null) => bundle ? { mode: "structured", unitCount: bundle.files.length } : { mode: "whole_document", unitCount: 0 },
   normalizeUnitKind: (value: string) => ["artboard", "component", "asset", "token"].includes(value.trim().toLowerCase()) ? value.trim().toLowerCase() : null,
   normalizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() || null,
 }));
@@ -97,6 +98,46 @@ describe("revision publishing route", () => {
     expect(mocks.putObject).toHaveBeenCalledTimes(4);
   });
 
+  it("stores a finalized SVG capability and adapter provenance for an Auto selection", async () => {
+    const response = await POST(request({
+      sources: new File(["<svg viewBox=\"0 0 10 10\"><g /></svg>"], "hero.svg", { type: "image/svg+xml" }),
+      previews: new File(["png"], "hero.png", { type: "image/png" }),
+      sourceKinds: "artboard",
+      sourceKindModes: "auto",
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      capabilityMode: "STRUCTURED", capabilityUnitCount: 1, adapterId: "svg", adapterVersion: "0.4", adapterConfidence: "LOW", adapterMaturity: "beta",
+    }) }));
+    expect(mocks.putBundle.mock.calls[0][1].files[0]).toMatchObject({ kind: "artboard" });
+  });
+
+  it("keeps a manual SVG override as the published kind instead of persisting Auto", async () => {
+    const response = await POST(request({
+      sources: new File(["<svg viewBox=\"0 0 10 10\" />"], "hero.svg", { type: "image/svg+xml" }),
+      previews: new File(["png"], "hero.png", { type: "image/png" }),
+      sourceKinds: "component",
+      sourceKindModes: "manual",
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1].files[0]).toMatchObject({ kind: "component" });
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ adapterId: undefined }) }));
+  });
+
+  it("rejects an Auto selection when the current adapter result no longer matches", async () => {
+    const response = await POST(request({
+      sources: new File(["<svg />"], "hero.svg", { type: "image/svg+xml" }),
+      previews: new File(["png"], "hero.png", { type: "image/png" }),
+      sourceKinds: "component",
+      sourceKindModes: "auto",
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(mocks.putObject).not.toHaveBeenCalled();
+  });
+
   it("requires a kind for each uploaded unit", async () => {
     const response = await POST(request({ source: new File(["source"], "poster.ai", { type: "application/postscript" }), previews: new File(["png"], "preview.png", { type: "image/png" }) }, true, false), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(400);
@@ -137,7 +178,7 @@ describe("revision publishing route", () => {
     const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["jpg"], "preview.jpg", { type: "image/jpeg" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
     expect(mocks.putObject).toHaveBeenCalledTimes(1);
-    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceKey: undefined, sourceUrl: "https://example.com/design.zip" }) }));
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceKey: undefined, sourceUrl: "https://example.com/design.zip", capabilityMode: "WHOLE_DOCUMENT", capabilityUnitCount: 0 }) }));
   });
 
   it("publishes an HTML preview through the same atomic pipeline", async () => {

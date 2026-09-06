@@ -16,6 +16,11 @@ export type RevisionBundle = { version: 1 | 2; files: RevisionBundleFile[] };
 
 export const unitKinds = ["artboard", "component", "asset", "token"] as const;
 export type UnitKind = (typeof unitKinds)[number];
+export type CapabilityMode = "structured" | "whole_document";
+
+export function capabilityForBundle(bundle: RevisionBundle | null): { mode: CapabilityMode; unitCount: number } {
+  return bundle ? { mode: "structured", unitCount: bundle.files.length } : { mode: "whole_document", unitCount: 0 };
+}
 
 export function sanitizeUnitName(value: string) {
   return value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim();
