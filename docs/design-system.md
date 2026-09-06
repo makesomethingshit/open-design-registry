@@ -35,12 +35,14 @@ The shared primitives live under `src/components/ui/`:
 
 `/design-system` is a development-only fixture catalog. It exercises states, error wiring, themes, dialog scrolling, status mappings, and preview ratios without fetching production data. The server calls `notFound()` in production; the `(internal)` route group alone is not treated as access control.
 
-The Phase A browser captures are retained with this documentation:
+Browser captures are retained with this documentation:
 
 - [Light, 1440 × 900](design-system-screenshots/catalog-light-1440x900.png)
 - [Dark, 1440 × 900](design-system-screenshots/catalog-dark-1440x900.png)
 - [System/light, 390 × 844](design-system-screenshots/catalog-system-390x844.png)
+- [Proposal workspace, light 1440 × 900](design-system-screenshots/review-light-1440x900.png)
+- [Proposal workspace, light 390 × 844](design-system-screenshots/review-light-390x844.png)
 
 ## Next phase
 
-See [design-system-stage-b.md](design-system-stage-b.md) for the deliberate Phase B integration seams. No ODR review controller, API payload, database schema, or visibility rule changes are part of this foundation.
+Phase B realizes the [documented integration seams](design-system-stage-b.md): `DesignPreview`, `ChangeItem`, `ReviewInspector`, and `ReviewActionBar` now compose the Proposal Review workspace. The controller keeps its existing API payloads, server-side visibility checks, and database schema unchanged.

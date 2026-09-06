@@ -41,6 +41,15 @@
   --odr-source-canvas-bg: #e7e7e7;
   --odr-source-canvas-fg: #202020;
   --odr-source-canvas-border: #7a7a7a;
+  --odr-source-preview-bg-white: #ffffff;
+  --odr-source-preview-bg-gray: #bdbdbd;
+  --odr-source-preview-bg-black: #202020;
+  --odr-source-preview-checker-light: #ffffff;
+  --odr-source-preview-checker-dark: #e8e8e8;
+  --odr-source-preview-fg-dark: #202020;
+  --odr-source-preview-fg-light: #f2f2f2;
+  --odr-source-preview-border-dark: #7a7a7a;
+  --odr-source-preview-border-light: #939393;
 
   /* Semantic tokens */
   --odr-surface-page: var(--odr-source-surface-page);
@@ -82,6 +91,15 @@
   --odr-canvas-bg: var(--odr-source-canvas-bg);
   --odr-canvas-fg: var(--odr-source-canvas-fg);
   --odr-canvas-border: var(--odr-source-canvas-border);
+  --odr-preview-bg-white: var(--odr-source-preview-bg-white);
+  --odr-preview-bg-gray: var(--odr-source-preview-bg-gray);
+  --odr-preview-bg-black: var(--odr-source-preview-bg-black);
+  --odr-preview-checker-light: var(--odr-source-preview-checker-light);
+  --odr-preview-checker-dark: var(--odr-source-preview-checker-dark);
+  --odr-preview-fg-dark: var(--odr-source-preview-fg-dark);
+  --odr-preview-fg-light: var(--odr-source-preview-fg-light);
+  --odr-preview-border-dark: var(--odr-source-preview-border-dark);
+  --odr-preview-border-light: var(--odr-source-preview-border-light);
 
   /* Component aliases */
   --odr-control-bg: var(--odr-surface-panel);

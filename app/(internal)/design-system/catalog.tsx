@@ -12,11 +12,22 @@ import { Divider, Inline, PageHeader, Panel, SectionHeader, Stack } from "@/src/
 import { RouteNav, SectionNav } from "@/src/components/ui/section-nav";
 import { SegmentedControl } from "@/src/components/ui/segmented-control";
 import { Tabs } from "@/src/components/ui/tabs";
+import type { ReviewChange } from "@/src/components/design/review-types";
+import ProposalReview from "@/app/proposals/[id]/proposal-review";
 import { proposalStatuses, type ChangeReviewStatusValue } from "@/src/lib/proposal-status";
 import { changeReviewStatusPresentation, proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import styles from "./catalog.module.css";
 
 const changeStatuses: ChangeReviewStatusValue[] = ["PENDING", "APPROVED", "CHANGES_REQUESTED"];
+
+function fixtureImage(label: string, surface: string) {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><rect width="800" height="600" fill="${surface}"/><rect x="96" y="96" width="608" height="408" fill="none" stroke="currentColor" stroke-width="6"/><text x="400" y="320" fill="currentColor" font-family="sans-serif" font-size="54" text-anchor="middle">${label}</text></svg>`)}`;
+}
+
+const fixtureChanges: ReviewChange[] = [
+  { id: "fixture-poster", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "Poster", targetFileId: "poster", name: "Poster", newName: null, kind: "artboard", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: "The revised grid is ready to apply.", reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "Poster", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r12", reviewHistory: [], sourcePreviews: [{ id: "fixture-proposal", position: 0, url: fixtureImage("PROPOSAL", "white"), mimeType: "image/png", altText: "Proposal poster fixture" }], basePreviews: [{ id: "fixture-base", position: 0, url: fixtureImage("BASE", "white"), mimeType: "image/png", altText: "Base poster fixture" }], latestPreviews: [{ id: "fixture-latest", position: 0, url: fixtureImage("LATEST", "white"), mimeType: "image/png", altText: "Latest poster fixture" }] },
+  { id: "fixture-name", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Caption", targetFileId: "caption", name: "Event caption", newName: "Exhibition caption", kind: "component", mimeType: null, size: null, reviewStatus: "CHANGES_REQUESTED", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "Event caption", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r12", reviewHistory: [], sourcePreviews: [], basePreviews: [], latestPreviews: [] },
+];
 
 export default function DesignSystemCatalog() {
   const [name, setName] = useState("");
@@ -92,6 +103,11 @@ export default function DesignSystemCatalog() {
     <section aria-labelledby="previews-heading">
       <SectionHeader id="previews-heading" title="Preview fixtures" description="Explicit fictional fixtures exercise aspect ratio and state without reading production or private data." />
       <div className={styles.previewGrid}><PreviewFixture aspect="3 / 4" label="Portrait poster" /><PreviewFixture aspect="16 / 9" label="Landscape spread" /><PreviewFixture aspect="1 / 1" label="Square identity" /><PreviewFixture aspect="4 / 3" label="Transparent asset" state="checker" /><PreviewFixture aspect="4 / 3" label="Missing preview" state="missing" /><PreviewFixture aspect="4 / 3" label="Unsupported format" state="unsupported" /></div>
+    </section>
+
+    <section aria-labelledby="review-workspace-heading">
+      <SectionHeader id="review-workspace-heading" title="Proposal workspace fixture" description="Development-only presentation fixture. Production review receives the same component props from visible server data." />
+      <ProposalReview baseRevision={{ id: "fixture-r11", number: 11, title: "Original", previews: fixtureChanges[0].basePreviews }} canClose={false} changes={fixtureChanges} comments={[]} isOwner={false} knownConflictCount={0} latestRevision={null} latestUnitCount={2} projectSlug="fixture" proposalId="fixture-proposal" signedIn={false} sourceRevision={{ id: "fixture-r12", number: 12, title: "Proposal", previews: fixtureChanges[0].sourcePreviews }} stale={false} status="OPEN" unavailableConflictCount={0} />
     </section>
   </Stack>;
 }
