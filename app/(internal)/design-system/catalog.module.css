@@ -1,4 +1,5 @@
 .catalog { padding-top: var(--odr-space-1); }
+.catalog > section { scroll-margin-top: calc(var(--odr-header-height) + var(--odr-space-4)); }
 .matrix { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--odr-space-2); }
 .stateCell { display: grid; min-width: 0; gap: var(--odr-space-2); padding: var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-surface-panel); }
 .stateCell > span, .meta { color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }
@@ -13,5 +14,8 @@
 .fixtureArtwork { display: grid; width: 100%; height: 100%; min-height: 5rem; place-items: center; border: var(--odr-border-width) solid var(--odr-canvas-border); background: var(--odr-surface-panel); color: var(--odr-canvas-fg); font-family: var(--odr-font-mono); font-size: var(--odr-font-heading); }
 .previewCanvas[data-state="missing"] .fixtureArtwork, .previewCanvas[data-state="unsupported"] .fixtureArtwork { color: var(--odr-text-muted); font-family: var(--odr-font-sans); font-size: var(--odr-font-label); text-align: center; }
 .previewFixture figcaption { padding: var(--odr-space-2) var(--odr-space-3); color: var(--odr-text-secondary); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
+.projectFixture { display: grid; gap: var(--odr-space-4); padding: var(--odr-space-5); border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-surface-panel); }
+.fixtureRevisionList { padding: 0; margin: 0; list-style: none; }
+.projectCardGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--odr-space-5); margin-top: var(--odr-space-5); }
 @media (max-width: 80rem) { .matrix { grid-template-columns: repeat(3, minmax(0, 1fr)); } .statusGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 48rem) { .matrix, .formGrid, .statusGrid, .previewGrid { grid-template-columns: 1fr; } .formGrid { padding: var(--odr-space-4); } }
+@media (max-width: 48rem) { .matrix, .formGrid, .statusGrid, .previewGrid, .projectCardGrid { grid-template-columns: 1fr; } .formGrid, .projectFixture { padding: var(--odr-space-4); } }
