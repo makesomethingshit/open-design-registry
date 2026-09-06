@@ -56,7 +56,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const unavailableConflictCount = new Set(changes.filter((change) => !change.appliedRevision && change.conflictStatus === "CHECK_UNAVAILABLE" && change.targetFileId).map((change) => change.targetFileId)).size;
   const isOwner = session?.user.id === proposal.project.ownerId;
   const canClose = Boolean(session && (isOwner || session.user.id === proposal.authorId));
-  const proposalStatus = proposalStatusPresentation(proposal.status, proposal.appliedRevisions.length, changes.length);
+  const proposalStatus = proposalStatusPresentation(proposal.status, changes.filter((change) => change.appliedRevision).length, changes.length);
   return <article className={styles.page}>
     <header className={styles.header}>
       <p className={styles.breadcrumb}><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> - Proposal #{proposal.proposalNumber}</p>

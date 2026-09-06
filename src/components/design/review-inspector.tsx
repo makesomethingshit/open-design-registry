@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent } from "react";
 import { Banner } from "@/src/components/ui/banner";
 import { StatusBadge } from "@/src/components/ui/badge";
 import { Button } from "@/src/components/ui/button";
@@ -29,13 +29,15 @@ type ReviewInspectorProps = {
   applying: boolean;
   pending: boolean;
   error: string;
+  requestingChanges: boolean;
+  draft: string;
   projectSlug: string;
   onReview: (reviewStatus: "APPROVED" | "CHANGES_REQUESTED", comment?: string) => Promise<boolean>;
+  onRequestingChangesChange: (requesting: boolean) => void;
+  onDraftChange: (draft: string) => void;
 };
 
-export function ReviewInspector({ applying, canReview, change, error, onReview, pending, projectSlug }: ReviewInspectorProps) {
-  const [requestingChanges, setRequestingChanges] = useState(false);
-  const [draft, setDraft] = useState("");
+export function ReviewInspector({ applying, canReview, change, draft, error, onDraftChange, onRequestingChangesChange, onReview, pending, projectSlug, requestingChanges }: ReviewInspectorProps) {
 
   if (!change) return <section aria-labelledby="review-inspector-heading" className={styles.inspector}><h2 id="review-inspector-heading">Review inspector</h2><p className={styles.empty}>Select a change to inspect its actual review data.</p></section>;
 
@@ -46,11 +48,7 @@ export function ReviewInspector({ applying, canReview, change, error, onReview, 
 
   async function requestChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const saved = await onReview("CHANGES_REQUESTED", draft);
-    if (saved) {
-      setDraft("");
-      setRequestingChanges(false);
-    }
+    await onReview("CHANGES_REQUESTED", draft);
   }
 
   return <section aria-labelledby="review-inspector-heading" className={styles.inspector}>
@@ -74,10 +72,10 @@ export function ReviewInspector({ applying, canReview, change, error, onReview, 
     {change.reviewHistory.length > 0 && <section className={styles.history}><h3>Review history</h3><ol>{change.reviewHistory.map((entry) => <li key={entry.id}><strong>{historyLabel(change, entry)}</strong>{entry.author?.name && <span>{entry.author.name}</span>}{entry.comment && <p>{entry.comment}</p>}{entry.reason && <p>{entry.reason}</p>}{entry.causedByRevision && <span>Revision {entry.causedByRevision.number}</span>}</li>)}</ol></section>}
     {canReview && <div className={styles.actions}>
       <Button disabled={reviewDisabled || change.conflictStatus === "CONFLICT" || change.conflictStatus === "CHECK_UNAVAILABLE"} loading={pending && !requestingChanges} loadingLabel="Saving review" onClick={() => { void onReview("APPROVED"); }} variant="secondary">Approve change</Button>
-      <Button disabled={reviewDisabled} onClick={() => setRequestingChanges((current) => !current)} variant="secondary">Request changes</Button>
+      <Button disabled={reviewDisabled} onClick={() => onRequestingChangesChange(!requestingChanges)} variant="secondary">Request changes</Button>
     </div>}
     {canReview && requestingChanges && <form className={styles.requestForm} onSubmit={requestChanges}>
-      <Field id={`review-comment-${change.id}`} label="Review comment" required><Textarea disabled={reviewDisabled} maxLength={10000} name="comment" onChange={(event) => setDraft(event.target.value)} value={draft} /></Field>
+      <Field id={`review-comment-${change.id}`} label="Review comment" required><Textarea disabled={reviewDisabled} maxLength={10000} name="comment" onChange={(event) => onDraftChange(event.target.value)} value={draft} /></Field>
       <Button disabled={!draft.trim() || reviewDisabled} loading={pending} loadingLabel="Saving review" type="submit">Send request</Button>
     </form>}
     {error && <Banner tone="error" title="Could not save review">{error}</Banner>}

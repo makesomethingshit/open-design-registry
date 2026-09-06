@@ -1,5 +1,7 @@
 .inspector { display: grid; align-content: start; gap: var(--odr-space-4); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
 .header { display: flex; align-items: start; justify-content: space-between; gap: var(--odr-space-3); }
+.header > :first-child { min-width: 0; }
+.header > :last-child { flex: 0 0 auto; }
 .header h2, .history h3, .reviewComment h3 { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-section); line-height: var(--odr-line-section); overflow-wrap: anywhere; }
 .eyebrow, .description, .note, .empty { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); }
 .eyebrow { margin-bottom: var(--odr-space-1); color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }

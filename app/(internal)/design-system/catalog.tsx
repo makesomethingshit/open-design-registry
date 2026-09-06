@@ -12,6 +12,7 @@ import { Divider, Inline, PageHeader, Panel, SectionHeader, Stack } from "@/src/
 import { RouteNav, SectionNav } from "@/src/components/ui/section-nav";
 import { SegmentedControl } from "@/src/components/ui/segmented-control";
 import { Tabs } from "@/src/components/ui/tabs";
+import { DesignPreview } from "@/src/components/design/design-preview";
 import type { ReviewChange } from "@/src/components/design/review-types";
 import ProposalReview from "@/app/proposals/[id]/proposal-review";
 import { proposalStatuses, type ChangeReviewStatusValue } from "@/src/lib/proposal-status";
@@ -20,13 +21,27 @@ import styles from "./catalog.module.css";
 
 const changeStatuses: ChangeReviewStatusValue[] = ["PENDING", "APPROVED", "CHANGES_REQUESTED"];
 
-function fixtureImage(label: string, surface: string) {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><rect width="800" height="600" fill="${surface}"/><rect x="96" y="96" width="608" height="408" fill="none" stroke="currentColor" stroke-width="6"/><text x="400" y="320" fill="currentColor" font-family="sans-serif" font-size="54" text-anchor="middle">${label}</text></svg>`)}`;
+function fixtureImage(label: string, surface: string, width = 800, height = 600) {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="${surface}"/><rect x="12%" y="16%" width="76%" height="68%" fill="none" stroke="currentColor" stroke-width="6"/><text x="50%" y="52%" fill="currentColor" font-family="sans-serif" font-size="54" text-anchor="middle">${label}</text></svg>`)}`;
 }
 
+function fixturePreview(id: string, label: string, surface: string, width = 800, height = 600): ReviewChange["sourcePreviews"][number] {
+  return { id, position: 0, url: fixtureImage(label, surface, width, height), mimeType: "image/png", altText: `${label} fixture` };
+}
+
+const fixtureBasePreviews = [fixturePreview("fixture-base", "BASE", "white")];
+const fixtureSourcePreviews = [fixturePreview("fixture-proposal", "PROPOSAL", "white")];
+const fixtureLatestPreviews = [fixturePreview("fixture-latest", "LATEST", "white", 600, 800)];
+
 const fixtureChanges: ReviewChange[] = [
-  { id: "fixture-poster", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "Poster", targetFileId: "poster", name: "Poster", newName: null, kind: "artboard", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: "The revised grid is ready to apply.", reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "Poster", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r12", reviewHistory: [], sourcePreviews: [{ id: "fixture-proposal", position: 0, url: fixtureImage("PROPOSAL", "white"), mimeType: "image/png", altText: "Proposal poster fixture" }], basePreviews: [{ id: "fixture-base", position: 0, url: fixtureImage("BASE", "white"), mimeType: "image/png", altText: "Base poster fixture" }], latestPreviews: [{ id: "fixture-latest", position: 0, url: fixtureImage("LATEST", "white"), mimeType: "image/png", altText: "Latest poster fixture" }] },
-  { id: "fixture-name", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Caption", targetFileId: "caption", name: "Event caption", newName: "Exhibition caption", kind: "component", mimeType: null, size: null, reviewStatus: "CHANGES_REQUESTED", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "Event caption", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r12", reviewHistory: [], sourcePreviews: [], basePreviews: [], latestPreviews: [] },
+  { id: "fixture-pending", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "A deliberately long pending poster name for responsive review verification", targetFileId: "pending", name: "A deliberately long pending poster name for responsive review verification", newName: null, kind: "artboard", mimeType: "image/png", size: 284000, reviewStatus: "PENDING", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long pending poster name for responsive review verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
+  { id: "fixture-poster", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "A deliberately long approved poster name for responsive review verification", targetFileId: "poster", name: "A deliberately long approved poster name for responsive review verification", newName: null, kind: "artboard", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: "The revised grid is ready to apply.", reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long approved poster name for responsive review verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
+  { id: "fixture-add", type: "ADD_UNIT", action: "ADD_UNIT", target: "A deliberately long added unit name for application copy verification", targetFileId: "added", name: "A deliberately long added unit name for application copy verification", newName: null, kind: "component", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long added unit name for application copy verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: [], latestPreviews: [] },
+  { id: "fixture-remove", type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: "A deliberately long removable unit name for application copy verification", targetFileId: "removable", name: "A deliberately long removable unit name for application copy verification", newName: null, kind: "component", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long removable unit name for application copy verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: [], basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
+  { id: "fixture-rename", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "A deliberately long renameable unit name for application copy verification", targetFileId: "renameable", name: "A deliberately long renameable unit name for application copy verification", newName: "A renamed fixture unit", kind: "component", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long renameable unit name for application copy verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
+  { id: "fixture-name", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "A deliberately long requested caption name for responsive review verification", targetFileId: "caption", name: "A deliberately long requested caption name for responsive review verification", newName: "Exhibition caption", kind: "component", mimeType: null, size: null, reviewStatus: "CHANGES_REQUESTED", reviewComment: "Please confirm the editorial wording.", reviewedBy: { name: "Fixture reviewer" }, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long requested caption name for responsive review verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: [], basePreviews: [], latestPreviews: [] },
+  { id: "fixture-applied", type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: "A deliberately long applied asset name for responsive review verification", targetFileId: "applied", name: "A deliberately long applied asset name for responsive review verification", newName: null, kind: "asset", mimeType: "image/png", size: 284000, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: { name: "Fixture reviewer" }, appliedRevision: { id: "fixture-r13", number: 13, title: "Applied fixture revision" }, latestAvailable: true, latestName: "A deliberately long applied asset name for responsive review verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: [], basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
+  { id: "fixture-document", type: "REPLACE_DOCUMENT", action: "REPLACE_DOCUMENT", target: "whole_document", targetFileId: null, name: null, newName: null, kind: null, mimeType: null, size: null, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: null, conflictStatus: null, conflictReason: null, checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
 ];
 
 export default function DesignSystemCatalog() {
@@ -36,6 +51,8 @@ export default function DesignSystemCatalog() {
   const [selected, setSelected] = useState("side-by-side");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [fixtureOwner, setFixtureOwner] = useState(true);
+  const [fixtureStale, setFixtureStale] = useState(false);
 
   return <Stack className={styles.catalog} gap={7}>
     <PageHeader eyebrow="Foundation / Catalog" title="ODR design system" description="Development fixtures only. Theme is controlled from the global header; production requests return 404." />
@@ -105,15 +122,34 @@ export default function DesignSystemCatalog() {
       <div className={styles.previewGrid}><PreviewFixture aspect="3 / 4" label="Portrait poster" /><PreviewFixture aspect="16 / 9" label="Landscape spread" /><PreviewFixture aspect="1 / 1" label="Square identity" /><PreviewFixture aspect="4 / 3" label="Transparent asset" state="checker" /><PreviewFixture aspect="4 / 3" label="Missing preview" state="missing" /><PreviewFixture aspect="4 / 3" label="Unsupported format" state="unsupported" /></div>
     </section>
 
+    <PreviewCacheFixture />
+
     <section aria-labelledby="review-workspace-heading">
       <SectionHeader id="review-workspace-heading" title="Proposal workspace fixture" description="Development-only presentation fixture. Production review receives the same component props from visible server data." />
-      <ProposalReview baseRevision={{ id: "fixture-r11", number: 11, title: "Original", previews: fixtureChanges[0].basePreviews }} canClose={false} changes={fixtureChanges} comments={[]} isOwner={false} knownConflictCount={0} latestRevision={null} latestUnitCount={2} projectSlug="fixture" proposalId="fixture-proposal" signedIn={false} sourceRevision={{ id: "fixture-r12", number: 12, title: "Proposal", previews: fixtureChanges[0].sourcePreviews }} stale={false} status="OPEN" unavailableConflictCount={0} />
+      <Inline gap={4}><Checkbox checked={fixtureOwner} id="fixture-owner" label="Fixture owner" onChange={(event) => setFixtureOwner(event.target.checked)} /><Checkbox checked={fixtureStale} id="fixture-stale" label="Show stale revision state" onChange={(event) => setFixtureStale(event.target.checked)} /></Inline>
+      <ProposalReview baseRevision={{ id: "fixture-r11", number: 11, title: "Original", previews: fixtureBasePreviews }} canClose={false} changes={fixtureChanges} comments={[]} isOwner={fixtureOwner} knownConflictCount={0} latestRevision={fixtureStale ? { id: "fixture-r13", number: 13, title: "Latest", previews: fixtureLatestPreviews } : null} latestUnitCount={4} projectSlug="fixture" proposalId="fixture-proposal" signedIn={false} sourceRevision={{ id: "fixture-r12", number: 12, title: "Proposal", previews: fixtureSourcePreviews }} stale={fixtureStale} status="OPEN" unavailableConflictCount={0} />
     </section>
   </Stack>;
 }
 
 function StateCell({ children, label }: { children: React.ReactNode; label: string }) {
   return <div className={styles.stateCell}><span>{label}</span>{children}</div>;
+}
+
+function PreviewCacheFixture() {
+  const [currentKind, setCurrentKind] = useState<"broken" | "healthy" | "mismatched">("broken");
+  const current: ReviewChange["sourcePreviews"][number] = currentKind === "broken"
+    ? { id: "fixture-preview-broken", position: 0, url: "data:image/png;base64,invalid-preview", mimeType: "image/png", altText: "Broken preview fixture" }
+    : currentKind === "healthy"
+      ? fixturePreview("fixture-preview-healthy", "HEALTHY", "white")
+      : fixturePreview("fixture-preview-mismatched", "MISMATCHED", "white", 600, 800);
+  const previous = fixturePreview("fixture-preview-previous", "PREVIOUS", "white");
+
+  return <section aria-labelledby="preview-cache-heading">
+    <SectionHeader id="preview-cache-heading" title="Preview cache regression fixture" description="Switches same-position assets to prove failed and dimension state belongs to each asset identity." />
+    <Inline gap={2}><Button onClick={() => setCurrentKind("healthy")} variant="secondary">Show healthy replacement</Button><Button onClick={() => setCurrentKind("mismatched")} variant="secondary">Show mismatched replacement</Button></Inline>
+    <DesignPreview current={[current]} currentLabel="Proposal" currentNumber={12} previous={[previous]} previousLabel="Original" previousNumber={11} />
+  </section>;
 }
 
 function PreviewFixture({ aspect, label, state = "loaded" }: { aspect: string; label: string; state?: "loaded" | "checker" | "missing" | "unsupported" }) {

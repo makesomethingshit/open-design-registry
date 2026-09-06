@@ -71,10 +71,10 @@ export function ChangeItem({ applying, change, onSelect, onView, selectable, sel
   const displayName = changeDisplayName(change);
 
   return <li className={styles.item} data-viewed={viewed || undefined}>
-    {showSelection && <label className={styles.selection}>
+    <span className={styles.selectionSlot}>{showSelection && <label className={styles.selection}>
       <input aria-describedby={!selectable && change.conflictReason ? conflictId : undefined} aria-label={`Select ${displayName}`} checked={selected} disabled={!selectable || applying} onChange={(event) => onSelect(change.id, event.target.checked)} type="checkbox" />
       <span className="sr-only">Select {displayName}</span>
-    </label>}
+    </label>}</span>
     <button aria-current={viewed ? "true" : undefined} className={styles.summary} onClick={() => onView(change.id)} type="button">
       <span className={styles.icon}><Icon name={action.icon} size={16} /></span>
       <span className={styles.text}><strong>{displayName}</strong><span>{action.label} - {changeKindLabel(change.kind)}</span></span>

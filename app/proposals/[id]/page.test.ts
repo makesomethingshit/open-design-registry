@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const mocks = vi.hoisted(() => ({ findProposal: vi.fn(), findLatest: vi.fn(), getSession: vi.fn(), readBundle: vi.fn(), review: vi.fn(() => null) }));
+const mocks = vi.hoisted(() => ({ findProposal: vi.fn(), findLatest: vi.fn(), getSession: vi.fn(), readBundle: vi.fn(), review: vi.fn(() => null), proposalStatus: vi.fn(() => ({ label: "Status", tone: "neutral" as const, icon: "clock" as const })) }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("next/link", () => ({ default: () => null }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { revision: { findFirst: mocks.findLatest } } }));
@@ -9,6 +9,7 @@ vi.mock("@/src/lib/proposal-handlers", () => ({ findVisibleProposal: mocks.findP
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
 vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle }));
+vi.mock("@/src/lib/ui/status-presentation", () => ({ proposalStatusPresentation: mocks.proposalStatus }));
 vi.mock("./proposal-review", () => ({ default: mocks.review }));
 
 const { default: ProposalPage } = await import("./page");
@@ -31,5 +32,49 @@ describe("proposal review data", () => {
     renderToStaticMarkup(page);
     const reviewProps = (mocks.review.mock.calls as unknown as Array<[{ changes: Array<{ latestName: string | null; basePreviews: Array<{ position: number }>; latestPreviews: Array<{ position: number }> }> }]>).at(0)?.[0];
     expect(reviewProps?.changes[0]).toMatchObject({ latestName: "Latest card", basePreviews: [{ position: 0 }], latestPreviews: [{ position: 0 }] });
+  });
+
+  it("uses applied change count rather than applied revision count for partial application", async () => {
+    const appliedRevision = { id: "revision-3", number: 3, title: "Applied" };
+    const change = (id: string, applied: boolean) => ({ id, type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: id, targetFileId: id, name: id, newName: null, kind: "component", mimeType: "image/png", size: 1, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: null, appliedRevision: applied ? appliedRevision : null, reviewHistory: [] });
+    mocks.proposalStatus.mockClear();
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.findProposal.mockResolvedValue({
+      id: "proposal", project: { id: "project", slug: "project", title: "Project", ownerId: "owner" }, baseRevisionId: "base", authorId: "author", relatedIssue: null, appliedRevisions: [appliedRevision],
+      baseRevision: { id: "base", number: 1, title: "Base", sourceKey: null, previews: [] },
+      sourceRevision: { id: "source", number: 2, title: "Source", sourceKey: null, project: { slug: "source", title: "Source", isPublic: true }, previews: [] },
+      changeSet: { changes: [change("one", true), change("two", true), change("three", false), change("four", false)] },
+      comments: [], proposalNumber: 1, title: "Partial proposal", body: "Apply two changes", status: "PARTIALLY_ACCEPTED", author: { name: "Author" }, sourceRevisionId: "source",
+    });
+    mocks.findLatest.mockResolvedValue(null);
+    mocks.readBundle.mockResolvedValue(null);
+
+    const page = await ProposalPage({ params: Promise.resolve({ id: "proposal" }) });
+    renderToStaticMarkup(page);
+
+    expect(mocks.proposalStatus).toHaveBeenLastCalledWith("PARTIALLY_ACCEPTED", 2, 4);
+  });
+
+  it("normalizes a legacy accepted document replacement before presenting it", async () => {
+    const appliedRevision = { id: "revision-3", number: 3, title: "Applied" };
+    mocks.proposalStatus.mockClear();
+    mocks.review.mockClear();
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.findProposal.mockResolvedValue({
+      id: "proposal", project: { id: "project", slug: "project", title: "Project", ownerId: "owner" }, baseRevisionId: "base", authorId: "author", relatedIssue: null, appliedRevisions: [appliedRevision],
+      baseRevision: { id: "base", number: 1, title: "Base", sourceKey: null, previews: [] },
+      sourceRevision: { id: "source", number: 2, title: "Source", sourceKey: null, project: { slug: "source", title: "Source", isPublic: true }, previews: [] },
+      changeSet: { changes: [{ id: "document", type: "REPLACE_DOCUMENT", action: null, target: "whole_document", targetFileId: null, name: null, newName: null, kind: null, mimeType: null, size: null, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: null, appliedRevision: null, reviewHistory: [] }] },
+      comments: [], proposalNumber: 1, title: "Legacy proposal", body: "Replace the document", status: "ACCEPTED", author: { name: "Author" }, sourceRevisionId: "source",
+    });
+    mocks.findLatest.mockResolvedValue(null);
+    mocks.readBundle.mockResolvedValue(null);
+
+    const page = await ProposalPage({ params: Promise.resolve({ id: "proposal" }) });
+    renderToStaticMarkup(page);
+    const reviewProps = (mocks.review.mock.calls as unknown as Array<[{ changes: Array<{ appliedRevision: { id: string } | null }> }]>).at(0)?.[0];
+
+    expect(reviewProps?.changes[0].appliedRevision).toMatchObject({ id: "revision-3" });
+    expect(mocks.proposalStatus).toHaveBeenLastCalledWith("ACCEPTED", 1, 1);
   });
 });

@@ -31,6 +31,10 @@ function sameSize(current: ImageSize | undefined, previous: ImageSize | undefine
   return Boolean(current && previous && current[0] === previous[0] && current[1] === previous[1]);
 }
 
+export function previewAssetKey(side: "current" | "previous", asset: DesignPreviewAsset) {
+  return `${side}:${asset.id}:${asset.url}`;
+}
+
 function canvasStyle(zoom: number) {
   return { "--odr-preview-zoom": `${zoom}%` } as CSSProperties;
 }
@@ -50,8 +54,10 @@ export function DesignPreview({ current, currentLabel, currentNumber, missingCur
 
   const currentAsset = current.find((asset) => asset.position === position);
   const previousAsset = previous.find((asset) => asset.position === position);
-  const imagePair = isRaster(currentAsset) && isRaster(previousAsset) && !failed[`current-${position}`] && !failed[`previous-${position}`];
-  const overlayAvailable = imagePair && sameSize(sizes[`current-${position}`], sizes[`previous-${position}`]);
+  const currentKey = currentAsset && previewAssetKey("current", currentAsset);
+  const previousKey = previousAsset && previewAssetKey("previous", previousAsset);
+  const imagePair = isRaster(currentAsset) && isRaster(previousAsset) && !failed[currentKey!] && !failed[previousKey!];
+  const overlayAvailable = imagePair && sameSize(sizes[currentKey!], sizes[previousKey!]);
   const overlay = comparison === "overlay" && overlayAvailable;
   const canZoom = Boolean(currentAsset || previousAsset) && !rename;
 
@@ -60,7 +66,7 @@ export function DesignPreview({ current, currentLabel, currentNumber, missingCur
   }, [comparison, overlayAvailable]);
 
   const recordSize = useCallback((side: "current" | "previous", asset: DesignPreviewAsset, element: HTMLImageElement) => {
-    const key = `${side}-${asset.position}`;
+    const key = previewAssetKey(side, asset);
     const width = element.naturalWidth;
     const height = element.naturalHeight;
     if (!width || !height) return;
@@ -69,7 +75,7 @@ export function DesignPreview({ current, currentLabel, currentNumber, missingCur
   }, []);
 
   const markFailed = useCallback((side: "current" | "previous", asset: DesignPreviewAsset) => {
-    const key = `${side}-${asset.position}`;
+    const key = previewAssetKey(side, asset);
     setFailed((values) => values[key] ? values : { ...values, [key]: true });
   }, []);
 
@@ -110,19 +116,21 @@ function PreviewImage({ asset, label, onError, onLoad, side }: { asset: DesignPr
 
   useEffect(() => {
     const element = image.current;
-    if (element?.complete && element.naturalWidth && element.naturalHeight) onLoad(side, asset, element);
-  }, [asset, onLoad, side]);
+    if (!element?.complete) return;
+    if (element.naturalWidth && element.naturalHeight) onLoad(side, asset, element);
+    else onError(side, asset);
+  }, [asset, onError, onLoad, side]);
 
   return <img alt={asset.altText || `${label} preview`} onError={() => onError(side, asset)} onLoad={(event) => onLoad(side, asset, event.currentTarget)} ref={image} src={asset.url} />;
 }
 
 function PreviewPane({ asset, failed, label, missingLabel, number, onError, onLoad, side }: { asset: DesignPreviewAsset | undefined; failed: Record<string, boolean>; label: string; missingLabel: string; number?: number; onError: (side: "current" | "previous", asset: DesignPreviewAsset) => void; onLoad: (side: "current" | "previous", asset: DesignPreviewAsset, element: HTMLImageElement) => void; side: "current" | "previous" }) {
-  const failedAsset = asset && failed[`${side}-${asset.position}`];
+  const failedAsset = asset && failed[previewAssetKey(side, asset)];
   return <figure className={styles.pane}><figcaption>{label}{number ? ` Revision ${number}` : ""}</figcaption><div className={styles.canvas}>{!asset ? <p>{missingLabel}</p> : !isRaster(asset) ? <p>Unsupported preview format.</p> : failedAsset ? <p>Preview could not be loaded.</p> : <PreviewImage asset={asset} label={label} onError={onError} onLoad={onLoad} side={side} />}</div></figure>;
 }
 
 function OverlayCanvas({ current, currentLabel, currentNumber, failed, onError, onLoad, previous, previousLabel, previousNumber }: { current: DesignPreviewAsset; currentLabel: string; currentNumber: number; failed: Record<string, boolean>; onError: (side: "current" | "previous", asset: DesignPreviewAsset) => void; onLoad: (side: "current" | "previous", asset: DesignPreviewAsset, element: HTMLImageElement) => void; previous: DesignPreviewAsset; previousLabel: string; previousNumber?: number }) {
-  const currentFailed = failed[`current-${current.position}`];
-  const previousFailed = failed[`previous-${previous.position}`];
+  const currentFailed = failed[previewAssetKey("current", current)];
+  const previousFailed = failed[previewAssetKey("previous", previous)];
   return <figure className={styles.overlay}><figcaption>{previousLabel}{previousNumber ? ` Revision ${previousNumber}` : ""} overlaid with {currentLabel} Revision {currentNumber}</figcaption><div className={styles.overlayCanvas}>{previousFailed || currentFailed ? <p>Preview could not be loaded.</p> : <><PreviewImage asset={previous} label={previousLabel} onError={onError} onLoad={onLoad} side="previous" /><PreviewImage asset={current} label={currentLabel} onError={onError} onLoad={onLoad} side="current" /></>}</div></figure>;
 }

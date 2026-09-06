@@ -28,16 +28,27 @@
   .workspace { grid-template-columns: 13.5rem minmax(0, 1fr); align-items: start; }
   .rail { grid-column: 1; grid-row: 1; }
   .comparison { grid-column: 2; grid-row: 1; }
-  .inspector, .conversation, .actionBar { grid-column: 1 / -1; }
+  .inspector { grid-column: 2; grid-row: 2; }
+  .conversation { grid-column: 1 / -1; grid-row: 3; }
+  .actionBar { grid-column: 1 / -1; grid-row: 4; }
+  .workspace[data-stale] .stale { grid-column: 1 / -1; grid-row: 1; }
+  .workspace[data-stale] .rail, .workspace[data-stale] .comparison { grid-row: 2; }
+  .workspace[data-stale] .inspector { grid-row: 3; }
+  .workspace[data-stale] .conversation { grid-row: 4; }
+  .workspace[data-stale] .actionBar { grid-row: 5; }
 }
 
 @media (min-width: 80rem) {
   .workspace { grid-template-columns: var(--odr-review-rail) minmax(0, 1fr) var(--odr-review-inspector); }
   .inspector { grid-column: 3; grid-row: 1; }
-  .conversation, .actionBar { grid-column: 1 / -1; }
+  .conversation { grid-column: 1 / -1; grid-row: 2; }
+  .actionBar { grid-column: 1 / -1; grid-row: 3; }
+  .workspace[data-stale] .rail, .workspace[data-stale] .comparison, .workspace[data-stale] .inspector { grid-row: 2; }
+  .workspace[data-stale] .conversation { grid-row: 3; }
+  .workspace[data-stale] .actionBar { grid-row: 4; }
 }
 
-@media (max-width: 48rem) {
+@media (max-width: 47.9375rem) {
   .workspace { gap: var(--odr-space-4); }
   .railHeader, .changeList { display: none; }
   .rail { border: 0; background: transparent; }
