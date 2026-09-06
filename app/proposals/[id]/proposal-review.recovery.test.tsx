@@ -25,8 +25,13 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
-vi.mock("@/app/projects/[slug]/revision-diff", () => ({ default: () => null }));
 
+const { Button } = await import("@/src/components/ui/button");
+const { Checkbox } = await import("@/src/components/ui/checkbox");
+const { ChangeItem } = await import("@/src/components/design/change-item");
+const { Dialog } = await import("@/src/components/ui/dialog");
+const { ReviewActionBar } = await import("@/src/components/design/review-action-bar");
+const { ReviewInspector } = await import("@/src/components/design/review-inspector");
 const { default: ProposalReview } = await import("./proposal-review");
 
 const changes = [
@@ -63,10 +68,15 @@ function find(tree: unknown, predicate: (element: Element) => boolean) {
   return element;
 }
 
+function actionBar(tree: unknown) {
+  return find(tree, (element) => element.type === ReviewActionBar);
+}
+
 function selectBoth() {
   let tree = render();
-  for (const checkbox of elements(tree).filter((element) => element.type === "input" && typeof element.props["aria-label"] === "string" && String(element.props["aria-label"]).startsWith("Select "))) {
-    (checkbox.props.onChange as (event: { target: { checked: boolean } }) => void)({ target: { checked: true } });
+  for (const item of elements(tree).filter((element) => element.type === ChangeItem)) {
+    const props = item.props as { change: { id: string }; onSelect: (id: string, selected: boolean) => void };
+    props.onSelect(props.change.id, true);
     tree = render();
   }
   return tree;
@@ -84,26 +94,51 @@ describe("proposal review 409 recovery", () => {
 
   it("refreshes and keeps only eligible selected changes after an Apply 409", async () => {
     let tree = selectBoth();
-    (find(tree, (element) => element.type === "button" && text(element.props.children).startsWith("Apply 2 of")).props.onClick as () => void)();
+    (actionBar(tree).props.onOpenApply as () => void)();
     tree = render();
     mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Review latest changes", latestRevision: { id: "r14" }, conflictChangeIds: ["needs-review"] }), { status: 409 }));
 
-    await (find(tree, (element) => element.type === "button" && text(element.props.children).startsWith("Apply 2 changes")).props.onClick as () => Promise<void>)();
+    const dialog = find(tree, (element) => element.type === Dialog);
+    const applyButton = elements(dialog.props.actions).find((element) => element.type === Button && text(element.props.children).startsWith("Apply 2 selected"));
+    await (applyButton?.props.onClick as () => Promise<void>)();
 
     expect(mocks.refresh).toHaveBeenCalledOnce();
-    expect(harness.states[5]).toEqual(["still-eligible"]);
-    expect(harness.states[8]).toBe(false);
-    expect(text(render())).toContain("Review latest changes");
+    expect(actionBar(render()).props.selectedCount).toBe(1);
+    expect(actionBar(render()).props.selectionNotice).toContain("1 selected change needs conflict review");
   });
 
   it("refreshes a review 409 without discarding unaffected selections", async () => {
     const tree = selectBoth();
     mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Approval needs conflict review", conflictChangeIds: ["needs-review"] }), { status: 409 }));
 
-    await (find(tree, (element) => element.type === "button" && text(element.props.children) === "Approve change").props.onClick as () => Promise<void>)();
+    const inspector = find(tree, (element) => element.type === ReviewInspector);
+    await (inspector.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
 
     expect(mocks.refresh).toHaveBeenCalledOnce();
-    expect(harness.states[5]).toEqual(["still-eligible"]);
-    expect(text(render())).toContain("Approval needs conflict review");
+    expect(actionBar(render()).props.selectedCount).toBe(1);
+    expect(find(render(), (element) => element.type === ReviewInspector).props.error).toBe("Approval needs conflict review");
+  });
+
+  it("restores apply busy state and keeps the selection after a network failure", async () => {
+    let tree = selectBoth();
+    (actionBar(tree).props.onOpenApply as () => void)();
+    tree = render();
+    mocks.fetch.mockRejectedValue(new Error("network unavailable"));
+
+    const dialog = find(tree, (element) => element.type === Dialog);
+    const applyButton = elements(dialog.props.actions).find((element) => element.type === Button && text(element.props.children).startsWith("Apply 2 selected"));
+    await (applyButton?.props.onClick as () => Promise<void>)();
+
+    expect(actionBar(render()).props.applying).toBe(false);
+    expect(actionBar(render()).props.selectedCount).toBe(2);
+    expect(find(render(), (element) => element.type === Dialog).props.open).toBe(true);
+  });
+
+  it("keeps individual approved-change selection available in the mobile flow", () => {
+    const mobileSelection = find(render(), (element) => element.type === Checkbox && String(element.props.label).includes("Include Modify Home"));
+
+    (mobileSelection.props.onChange as (event: { target: { checked: boolean } }) => void)({ target: { checked: true } });
+
+    expect(actionBar(render()).props.selectedCount).toBe(1);
   });
 });

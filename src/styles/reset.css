@@ -1,0 +1,41 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html { min-width: 20rem; scroll-behavior: smooth; }
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--odr-surface-page);
+  color: var(--odr-text-primary);
+  font-family: var(--odr-font-sans);
+  font-size: var(--odr-font-body);
+  font-weight: var(--odr-weight-regular);
+  line-height: var(--odr-line-body);
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea { font: inherit; }
+button, select { color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+input, textarea, select { color: inherit; }
+img, picture, svg { display: block; max-width: 100%; }
+textarea { resize: vertical; }
+h1, h2, h3, h4, p { margin-top: 0; }
+a { color: inherit; }
+code, pre, kbd, samp { font-family: var(--odr-font-mono); }
+
+:focus-visible {
+  outline: var(--odr-focus-width) solid var(--odr-accent);
+  outline-offset: var(--odr-focus-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
