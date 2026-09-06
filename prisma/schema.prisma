@@ -253,6 +253,7 @@ model Proposal {
   relatedIssueId   String?
   reviewerId       String?
   acceptedById     String?
+  requestId        String?
   title            String
   body             String
   status           ProposalStatus @default(OPEN)
@@ -270,6 +271,7 @@ model Proposal {
   appliedRevisions Revision[]     @relation("ProposalAppliedRevisions")
 
   @@unique([projectId, proposalNumber])
+  @@unique([projectId, authorId, requestId])
   @@index([projectId, status, createdAt])
   @@index([baseRevisionId])
   @@index([sourceRevisionId])
@@ -289,9 +291,12 @@ model Change {
   id            String             @id @default(cuid())
   changeSetId   String
   type          ChangeType
+  action        ChangeType?
   target        String
   targetFileId  String?
   name          String?
+  newName       String?
+  kind          String?
   mimeType      String?
   size          Int?
   assetKey      String?
@@ -307,6 +312,7 @@ model Change {
   reviewHistory ChangeReview[]
 
   @@index([changeSetId])
+  @@unique([changeSetId, targetFileId])
   @@index([reviewedById])
   @@index([appliedRevisionId])
 }

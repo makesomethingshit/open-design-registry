@@ -19,13 +19,25 @@ vi.mock("@/src/lib/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
 } }));
 vi.mock("@/src/lib/storage", () => ({ putObject: mocks.putObject, deleteObject: mocks.deleteObject }));
-vi.mock("@/src/lib/revision-bundle", () => ({ putRevisionBundle: mocks.putBundle, readRevisionBundle: mocks.readBundle }));
+vi.mock("@/src/lib/revision-bundle", () => ({
+  putRevisionBundle: mocks.putBundle,
+  readRevisionBundle: mocks.readBundle,
+  normalizeUnitKind: (value: string) => ["artboard", "component", "asset", "token"].includes(value.trim().toLowerCase()) ? value.trim().toLowerCase() : null,
+  normalizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() || null,
+}));
 
 const { POST } = await import("./route");
 
-function request(fields: Record<string, string | File | Array<string | File>>, metadata = true) {
+function request(fields: Record<string, string | File | Array<string | File>>, metadata = true, withKinds = true) {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) for (const entry of Array.isArray(value) ? value : [value]) form.append(key, entry);
+  if (withKinds && !("sourceKinds" in fields)) {
+    const sources = ["source", "sources"].flatMap((key) => {
+      const value = fields[key];
+      return value === undefined ? [] : Array.isArray(value) ? value : [value];
+    }).filter((value): value is File => value instanceof File && Boolean(value.name));
+    for (const _source of sources) form.append("sourceKinds", "asset");
+  }
   if (metadata) {
     form.append("title", "Landing page update");
     form.append("changeDescription", "Updated the landing page layout");
@@ -83,6 +95,20 @@ describe("revision publishing route", () => {
     expect(bundle.files.map((file: { previewKeys: string[] }) => file.previewKeys)).toEqual([expect.any(Array), expect.any(Array)]);
     expect(bundle.files.every((file: { previewKeys: string[] }) => file.previewKeys.length === 1)).toBe(true);
     expect(mocks.putObject).toHaveBeenCalledTimes(4);
+  });
+
+  it("requires a kind for each uploaded unit", async () => {
+    const response = await POST(request({ source: new File(["source"], "poster.ai", { type: "application/postscript" }), previews: new File(["png"], "preview.png", { type: "image/png" }) }, true, false), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/kind/i) });
+  });
+
+  it("preserves an existing unit kind instead of reclassifying it", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r1", number: 1, sourceKey: "r1-bundle" });
+    mocks.readBundle.mockResolvedValue({ version: 2, files: [{ id: "file-a", name: "poster.ai", kind: "component", mimeType: "application/postscript", size: 1, assetKey: "old-a", previewKeys: [] }] });
+    const response = await POST(request({ sources: new File(["next"], "poster.ai", { type: "application/postscript" }), previews: new File(["preview"], "poster.png", { type: "image/png" }), sourceFileIds: "file-a", sourceKinds: "token", sourcePreviewIndexes: "0" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1]).toMatchObject({ version: 2, files: [{ id: "file-a", kind: "component" }] });
   });
 
   it("preserves an explicitly mapped file ID from the locked latest revision", async () => {

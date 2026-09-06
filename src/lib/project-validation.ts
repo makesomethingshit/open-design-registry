@@ -28,6 +28,12 @@ const proposalFileSchema = z.object({
   sourceFileId: recordId,
   targetFileId: recordId,
 }).strict();
+const proposalUnitChangeSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("MODIFY_UNIT"), targetFileId: recordId, sourceFileId: recordId }).strict(),
+  z.object({ action: z.literal("RENAME_UNIT"), targetFileId: recordId, newName: z.string().max(200) }).strict(),
+  z.object({ action: z.literal("REMOVE_UNIT"), targetFileId: recordId }).strict(),
+  z.object({ action: z.literal("ADD_UNIT"), sourceFileId: recordId }).strict(),
+]);
 export const proposalCreateSchema = z.object({
   baseRevisionId: recordId,
   sourceRevisionId: recordId,
@@ -35,6 +41,8 @@ export const proposalCreateSchema = z.object({
   body: z.string().trim().min(1).max(10000),
   relatedIssueId: recordId.nullable().optional(),
   files: z.array(proposalFileSchema).min(1).max(10).optional(),
+  changes: z.array(proposalUnitChangeSchema).min(1).max(10).optional(),
+  requestId: z.string().uuid().optional(),
 }).strict();
 export const proposalReviewSchema = z.object({
   status: z.enum(["APPROVED", "CHANGES_REQUESTED"]),
