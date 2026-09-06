@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), findRevision: vi.fn(), readBundle: vi.fn(), getObject: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findUnique: mocks.findRevision } } }));
-vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle }));
+vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle, sanitizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() }));
 vi.mock("@/src/lib/storage", () => ({ getObject: mocks.getObject }));
 
 const { GET } = await import("./route");

@@ -4,7 +4,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { toPublicRevision } from "@/src/lib/revisions";
 import { deleteObject, putObject } from "@/src/lib/storage";
-import { putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
+import { normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import {
   maxRevisionPreviewBytes,
@@ -108,6 +108,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const value = sourceFileIds[index];
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
   });
+  const sourceKinds = form.getAll("sourceKinds");
+  if (sourceFiles.length && sourceKinds.length !== sourceFiles.length) return error("Select a kind for each source file");
+  const requestedSourceKinds = sourceFiles.map((_, index) => typeof sourceKinds[index] === "string" ? normalizeUnitKind(sourceKinds[index] as string) : null);
+  const sourceNames = sourceFiles.map((file) => normalizeUnitName(file.name));
+  if (sourceNames.some((name) => !name)) return error("Each source file name must be 200 characters or fewer");
   const sourcePreviewIndexes = form.getAll("sourcePreviewIndexes");
   if ((!sourceFiles.length && sourcePreviewIndexes.length) || (sourceFiles.length > 1 && sourcePreviewIndexes.length !== sourceFiles.length) || (sourceFiles.length === 1 && sourcePreviewIndexes.length > 1)) return error("Provide one preview mapping for each source file");
   const sourceUrlValue = form.get("sourceUrl");
@@ -168,20 +173,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       if (sourceAssets.length) {
         const preservedIds = mappedSourceFileIds.filter((id): id is string => Boolean(id));
         if (new Set(preservedIds).size !== preservedIds.length) throw new PublishError("Each existing file can be mapped only once", 400);
-        if (preservedIds.length) {
-          const latestBundle = await readRevisionBundle(latest?.sourceKey);
-          if (!latestBundle || preservedIds.some((id) => !latestBundle.files.some((file) => file.id === id))) throw new PublishError("An existing file mapping is no longer available", 409);
-        }
+        const latestBundle = preservedIds.length ? await readRevisionBundle(latest?.sourceKey) : null;
+        if (preservedIds.length && (!latestBundle || preservedIds.some((id) => !latestBundle.files.some((file) => file.id === id)))) throw new PublishError("An existing file mapping is no longer available", 409);
         const bundle: RevisionBundle = {
-          version: 1,
-          files: sourceAssets.map(({ file, key }, index) => ({
-            id: mappedSourceFileIds[index] ?? crypto.randomUUID(),
-            name: file.name,
-            mimeType: file.type || "application/octet-stream",
-            size: file.size,
-            assetKey: key,
-            previewKeys: previewMappings[index].map((previewIndex) => uploadedPreviews[previewIndex].key),
-          })),
+          version: 2,
+          files: sourceAssets.map(({ file, key }, index) => {
+            const previous = mappedSourceFileIds[index] ? latestBundle?.files.find((candidate) => candidate.id === mappedSourceFileIds[index]) : undefined;
+            const kind = previous?.kind ?? requestedSourceKinds[index];
+            if (!kind) throw new PublishError("Select a kind for each source file", 400);
+            return {
+              id: mappedSourceFileIds[index] ?? crypto.randomUUID(),
+              name: sourceNames[index]!,
+              kind,
+              mimeType: file.type || "application/octet-stream",
+              size: file.size,
+              assetKey: key,
+              previewKeys: previewMappings[index].map((previewIndex) => uploadedPreviews[previewIndex].key),
+            };
+          }),
         };
         publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/bundle.json`;
         const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);

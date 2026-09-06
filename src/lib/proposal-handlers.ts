@@ -5,7 +5,7 @@ import { prisma } from "./prisma";
 import { proposalApplySchema, proposalCloseSchema, proposalCreateSchema, proposalReviewSchema, issueCommentSchema } from "./project-validation";
 import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-status";
 import { deleteObject, publicAssetUrl } from "./storage";
-import { putRevisionBundle, readRevisionBundle, type RevisionBundle } from "./revision-bundle";
+import { normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "./revision-bundle";
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
@@ -21,6 +21,20 @@ const proposalDetails = {
 } satisfies Prisma.ProposalInclude;
 
 export type ProposalDetails = Prisma.ProposalGetPayload<{ include: typeof proposalDetails }>;
+
+const proposalSummary = {
+  id: true,
+  proposalNumber: true,
+  title: true,
+  status: true,
+  authorId: true,
+  createdAt: true,
+  updatedAt: true,
+  author: { select: { name: true } },
+  changeSet: { select: { changes: { select: { id: true, type: true, action: true, target: true, name: true, newName: true, kind: true, reviewStatus: true, appliedRevisionId: true } } } },
+} satisfies Prisma.ProposalSelect;
+
+export type ProposalSummary = Prisma.ProposalGetPayload<{ select: typeof proposalSummary }>;
 
 function error(message: string, status = 400, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...extra }, { status });
@@ -38,7 +52,50 @@ function isVisible(proposal: ProposalDetails, userId?: string) {
     && canReadProject(proposal.sourceRevision.project, userId);
 }
 
+function visibleProposalWhere(projectId: string, userId?: string): Prisma.ProposalWhereInput {
+  return {
+    projectId,
+    baseRevision: { projectId, isPublished: true },
+    sourceRevision: { isPublished: true, project: userId ? { OR: [{ isPublic: true }, { ownerId: userId }] } : { isPublic: true } },
+  };
+}
+
+function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
+  const action = change.action ?? change.type;
+  const name = change.name ?? change.target;
+  if (action === "RENAME_UNIT") return `Rename ${name} → ${change.newName ?? "new name"}`;
+  if (action === "ADD_UNIT") return `Add ${name}`;
+  if (action === "REMOVE_UNIT") return `Remove ${name}`;
+  if (action === "MODIFY_UNIT") return `Modify ${name}`;
+  return action === "REPLACE_DOCUMENT" ? "Whole document" : `Replace ${name}`;
+}
+
+export function publicProposalSummary(proposal: ProposalSummary) {
+  const changes = proposal.changeSet?.changes ?? [];
+  return {
+    id: proposal.id,
+    proposalNumber: proposal.proposalNumber,
+    title: proposal.title,
+    status: proposal.status,
+    author: proposal.author.name,
+    authorId: proposal.authorId,
+    createdAt: proposal.createdAt.toISOString(),
+    updatedAt: proposal.updatedAt.toISOString(),
+    approved: changes.filter((change) => change.reviewStatus === "APPROVED" && !change.appliedRevisionId).length,
+    applied: changes.filter((change) => Boolean(change.appliedRevisionId)).length,
+    total: changes.length,
+    summaries: changes.slice(0, 2).map(changeSummary),
+    moreChanges: Math.max(0, changes.length - 2),
+  };
+}
+
 type LockedProject = { id: string; ownerId: string; license: string; isPublic: boolean };
+type ProposalChangeData = Prisma.ChangeCreateWithoutChangeSetInput;
+type UnitChangeRequest =
+  | { action: "MODIFY_UNIT"; targetFileId: string; sourceFileId: string }
+  | { action: "RENAME_UNIT"; targetFileId: string; newName: string }
+  | { action: "REMOVE_UNIT"; targetFileId: string }
+  | { action: "ADD_UNIT"; sourceFileId: string };
 
 async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) {
   const projects = new Map<string, LockedProject>();
@@ -49,6 +106,45 @@ async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) 
   return projects;
 }
 
+function unitChanges(base: RevisionBundle, source: RevisionBundle, requested: UnitChangeRequest[]) {
+  const targets = new Map(base.files.map((file) => [file.id, file]));
+  const sources = new Map(source.files.map((file) => [file.id, file]));
+  const changedTargets = new Set<string>();
+  const addedSources = new Set<string>();
+  const changes: ProposalChangeData[] = [];
+  for (const request of requested) {
+    if (request.action === "ADD_UNIT") {
+      const sourceFile = sources.get(request.sourceFileId);
+      if (!sourceFile) return { error: "Selected source unit is no longer available" };
+      if (targets.has(sourceFile.id) || addedSources.has(sourceFile.id)) return { error: "This unit already has a change in this proposal" };
+      if (!sourceFile.kind) return { error: "Added units need a published kind" };
+      addedSources.add(sourceFile.id);
+      const targetFileId = crypto.randomUUID();
+      changes.push({ type: "ADD_UNIT", action: "ADD_UNIT", target: sourceFile.name, targetFileId, name: sourceFile.name, kind: sourceFile.kind, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey });
+      continue;
+    }
+    const target = targets.get(request.targetFileId);
+    if (!target) return { error: "Selected target unit is no longer available" };
+    if (changedTargets.has(target.id)) return { error: "This unit already has a change in this proposal" };
+    changedTargets.add(target.id);
+    if (request.action === "RENAME_UNIT") {
+      const newName = normalizeUnitName(request.newName);
+      if (!newName) return { error: "A unit name is required and must be 200 characters or fewer" };
+      if (newName === target.name) return { error: "This unit name is unchanged" };
+      changes.push({ type: "RENAME_UNIT", action: "RENAME_UNIT", target: target.name, targetFileId: target.id, name: target.name, newName, kind: target.kind });
+      continue;
+    }
+    if (request.action === "REMOVE_UNIT") {
+      changes.push({ type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: target.name, targetFileId: target.id, name: target.name, kind: target.kind, mimeType: target.mimeType, size: target.size });
+      continue;
+    }
+    const sourceFile = sources.get(request.sourceFileId);
+    if (!sourceFile) return { error: "Selected source unit is no longer available" };
+    changes.push({ type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: target.name, targetFileId: target.id, name: target.name, kind: target.kind, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey });
+  }
+  return { changes };
+}
+
 export async function findVisibleProposal(id: string, userId?: string) {
   const proposal = await prisma.proposal.findUnique({ where: { id }, include: proposalDetails });
   return proposal && isVisible(proposal, userId) ? proposal : null;
@@ -57,6 +153,27 @@ export async function findVisibleProposal(id: string, userId?: string) {
 export async function listVisibleProjectProposals(projectId: string, userId?: string) {
   const proposals = await prisma.proposal.findMany({ where: { projectId }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], include: proposalDetails });
   return proposals.filter((proposal) => isVisible(proposal, userId));
+}
+
+export async function listVisibleProposalSummaries(projectId: string, userId?: string, options: { status?: "open" | "closed"; take?: number; cursor?: string | null } = {}) {
+  const where: Prisma.ProposalWhereInput = {
+    ...visibleProposalWhere(projectId, userId),
+    ...(options.status === "open" ? { status: { in: ["OPEN", "CHANGES_REQUESTED", "APPROVED", "PARTIALLY_ACCEPTED"] } } : options.status === "closed" ? { status: { in: ["ACCEPTED", "CLOSED"] } } : {}),
+  };
+  const take = options.take ?? 20;
+  const proposals = await prisma.proposal.findMany({ where, select: proposalSummary, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], cursor: options.cursor ? { id: options.cursor } : undefined, skip: options.cursor ? 1 : undefined, take: take + 1 });
+  const hasMore = proposals.length > take;
+  const page = proposals.slice(0, take);
+  return { items: page.map(publicProposalSummary), nextCursor: hasMore ? page.at(-1)?.id ?? null : null };
+}
+
+export async function countVisibleProposals(projectId: string, userId?: string, status?: "open" | "closed") {
+  return prisma.proposal.count({ where: { ...visibleProposalWhere(projectId, userId), ...(status === "open" ? { status: { in: ["OPEN", "CHANGES_REQUESTED", "APPROVED", "PARTIALLY_ACCEPTED"] } } : status === "closed" ? { status: { in: ["ACCEPTED", "CLOSED"] } } : {}) } });
+}
+
+export async function visibleProposalContributorIds(projectId: string, userId?: string) {
+  const proposals = await prisma.proposal.findMany({ where: { ...visibleProposalWhere(projectId, userId), changeSet: { changes: { some: { appliedRevisionId: { not: null } } } } }, select: { authorId: true } });
+  return proposals.map((proposal) => proposal.authorId);
 }
 
 export function publicProposal(proposal: ProposalDetails) {
@@ -78,9 +195,12 @@ export function publicProposal(proposal: ProposalDetails) {
     changeSet: proposal.changeSet && { id: proposal.changeSet.id, changes: proposal.changeSet.changes.map((change) => ({
       id: change.id,
       type: change.type,
+      action: change.action ?? change.type,
       target: change.target,
       targetFileId: change.targetFileId,
       name: change.name,
+      newName: change.newName,
+      kind: change.kind,
       mimeType: change.mimeType,
       size: change.size,
       reviewStatus: change.reviewStatus,
@@ -105,17 +225,13 @@ export async function listProjectProposals(request: Request, scope: { slug: stri
   const limitValue = Number(searchParams.get("limit") ?? "20");
   const limit = Number.isInteger(limitValue) && limitValue > 0 ? Math.min(limitValue, 50) : 20;
   const cursor = searchParams.get("cursor");
-  const proposals = await listVisibleProjectProposals(project.id, session?.user.id);
-  const filtered = filter === "open"
-    ? proposals.filter((proposal) => ["OPEN", "CHANGES_REQUESTED", "APPROVED", "PARTIALLY_ACCEPTED"].includes(proposal.status))
-    : filter === "closed"
-      ? proposals.filter((proposal) => ["ACCEPTED", "CLOSED"].includes(proposal.status))
-      : proposals;
-  const start = cursor ? filtered.findIndex((proposal) => proposal.id === cursor) + 1 : 0;
-  const page = filtered.slice(Math.max(0, start), Math.max(0, start) + limit);
-  const nextCursor = filtered.length > start + page.length ? page.at(-1)?.id ?? null : null;
-  if (!filter && !searchParams.has("cursor") && !searchParams.has("limit")) return NextResponse.json(page.map(publicProposal));
-  return NextResponse.json({ items: page.map(publicProposal), nextCursor, total: filtered.length });
+  const status = filter === "open" || filter === "closed" ? filter : undefined;
+  const [{ items, nextCursor }, total] = await Promise.all([
+    listVisibleProposalSummaries(project.id, session?.user.id, { status, take: limit, cursor }),
+    prisma.proposal.count({ where: { ...visibleProposalWhere(project.id, session?.user.id), ...(status === "open" ? { status: { in: ["OPEN", "CHANGES_REQUESTED", "APPROVED", "PARTIALLY_ACCEPTED"] } } : status === "closed" ? { status: { in: ["ACCEPTED", "CLOSED"] } } : {}) } }),
+  ]);
+  if (!filter && !searchParams.has("cursor") && !searchParams.has("limit")) return NextResponse.json(items);
+  return NextResponse.json({ items, nextCursor, total });
 }
 
 export async function createProjectProposal(request: Request, scope: { slug: string }) {
@@ -134,28 +250,35 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
   const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundle(baseRevision.sourceKey), readRevisionBundle(sourceRevision.sourceKey)]);
   const requestedFiles = input.files ?? [];
-  if (requestedFiles.length && (!baseBundle || !sourceBundle)) return error("This revision needs a file bundle before individual files can be replaced.", 409);
-  const changes = baseBundle && sourceBundle && requestedFiles.length
-    ? (() => {
-        const targetFiles = new Map(baseBundle.files.map((file) => [file.id, file]));
-        const sourceFiles = new Map(sourceBundle.files.map((file) => [file.id, file]));
-        const targetIds = requestedFiles.map((file) => file.targetFileId);
-        if (new Set(targetIds).size !== targetIds.length) return null;
-        return requestedFiles.map((file) => {
-          const sourceFile = sourceFiles.get(file.sourceFileId);
-          const targetFile = targetFiles.get(file.targetFileId);
-          if (!sourceFile || !targetFile) return null;
-          return { type: "REPLACE_ASSET" as const, target: targetFile.name, targetFileId: targetFile.id, name: sourceFile.name, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey };
-        });
-      })()
-    : [{ type: "REPLACE_DOCUMENT" as const, target: "whole_document" }];
-  if (!changes || changes.some((change) => !change)) return error("Selected files no longer match their published revisions", 400);
+  const requestedUnitChanges = input.changes ?? [];
+  if (requestedFiles.length && requestedUnitChanges.length) return error("Use either legacy file replacements or unit changes, not both");
+  if ((requestedFiles.length || requestedUnitChanges.length) && (!baseBundle || !sourceBundle)) return error("This revision needs a file bundle before individual units can be changed.", 409);
+  let changes: ProposalChangeData[];
+  if (requestedUnitChanges.length) {
+    const prepared = unitChanges(baseBundle!, sourceBundle!, requestedUnitChanges as UnitChangeRequest[]);
+    if ("error" in prepared) return error(prepared.error ?? "Selected unit is invalid");
+    changes = prepared.changes;
+  } else if (requestedFiles.length) {
+    const targetFiles = new Map(baseBundle!.files.map((file) => [file.id, file]));
+    const sourceFiles = new Map(sourceBundle!.files.map((file) => [file.id, file]));
+    const targetIds = requestedFiles.map((file) => file.targetFileId);
+    if (new Set(targetIds).size !== targetIds.length) return error("This unit already has a change in this proposal");
+    changes = requestedFiles.map((file) => {
+      const sourceFile = sourceFiles.get(file.sourceFileId);
+      const targetFile = targetFiles.get(file.targetFileId);
+      if (!sourceFile || !targetFile) return null;
+      return { type: "REPLACE_ASSET", action: "REPLACE_ASSET", target: targetFile.name, targetFileId: targetFile.id, name: sourceFile.name, kind: targetFile.kind, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey } as ProposalChangeData;
+    }).filter((change): change is ProposalChangeData => Boolean(change));
+    if (changes.length !== requestedFiles.length) return error("Selected files no longer match their published revisions", 400);
+  } else {
+    changes = [{ type: "REPLACE_DOCUMENT", action: "REPLACE_DOCUMENT", target: "whole_document" }];
+  }
   const relatedIssueId = input.relatedIssueId || undefined;
   if (relatedIssueId) {
     const relatedIssue = await prisma.issue.findFirst({ where: { id: relatedIssueId, projectId: project.id }, select: { id: true } });
     if (!relatedIssue) return error("Related issue not found", 400);
   }
-  const proposal = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const lockedProjects = await lockProjects(tx, [project.id, sourceRevision.project.id]);
     if (!lockedProjects.has(project.id) || !lockedProjects.has(sourceRevision.project.id)) throw new Error("Project not found");
     const [lockedBase, lockedSource] = await Promise.all([
@@ -163,8 +286,12 @@ export async function createProjectProposal(request: Request, scope: { slug: str
       tx.revision.findFirst({ where: { id: sourceRevision.id, projectId: sourceRevision.project.id, isPublished: true }, select: { id: true } }),
     ]);
     if (!lockedBase || !lockedSource) throw new Error("Revision not found");
+    if (input.requestId) {
+      const existing = await tx.proposal.findFirst({ where: { projectId: project.id, authorId: session.user.id, requestId: input.requestId }, include: proposalDetails });
+      if (existing) return { proposal: existing, created: false };
+    }
     const latestProposal = await tx.proposal.findFirst({ where: { projectId: project.id }, orderBy: { proposalNumber: "desc" }, select: { proposalNumber: true } });
-    return tx.proposal.create({
+    const proposal = await tx.proposal.create({
       data: {
         projectId: project.id,
         proposalNumber: (latestProposal?.proposalNumber ?? 0) + 1,
@@ -172,14 +299,16 @@ export async function createProjectProposal(request: Request, scope: { slug: str
         sourceRevisionId: sourceRevision.id,
         authorId: session.user.id,
         relatedIssueId,
+        requestId: input.requestId,
         title: input.title,
         body: input.body,
-        changeSet: { create: { changes: { create: changes as Array<NonNullable<typeof changes[number]>> } } },
+        changeSet: { create: { changes: { create: changes } } },
       },
       include: proposalDetails,
     });
+    return { proposal, created: true };
   });
-  return NextResponse.json(publicProposal(proposal), { status: 201 });
+  return NextResponse.json(publicProposal(result.proposal), { status: result.created ? 201 : 200 });
 }
 
 export async function getProposal(request: Request, scope: { id: string }) {
@@ -272,18 +401,55 @@ function sameIds(left: string[], right: string[]) {
   return left.length === right.length && left.every((id) => right.includes(id));
 }
 
-function selectiveBundle(latest: RevisionBundle, source: RevisionBundle, changes: Array<{ targetFileId: string; assetKey: string; mimeType: string; size: number }>) {
-  const replacements = new Map(changes.map((change) => [change.targetFileId, change]));
+type SelectedUnitChange = {
+  type: string;
+  action: string | null;
+  targetFileId: string | null;
+  assetKey: string | null;
+  mimeType: string | null;
+  size: number | null;
+  name: string | null;
+  newName: string | null;
+  kind: string | null;
+};
+
+function selectiveBundle(latest: RevisionBundle, source: RevisionBundle, changes: SelectedUnitChange[]) {
   const sourceFiles = new Map(source.files.map((file) => [file.assetKey, file]));
-  const files = latest.files.map((file) => {
-    const replacement = replacements.get(file.id);
-    if (!replacement) return file;
-    const sourceFile = sourceFiles.get(replacement.assetKey);
-    if (!sourceFile) throw new ProposalError("A selected source file is no longer available", 409);
-    return { ...file, mimeType: replacement.mimeType, size: replacement.size, assetKey: replacement.assetKey, previewKeys: sourceFile.previewKeys };
-  });
-  if (files.length !== latest.files.length || replacements.size !== changes.length || changes.some((change) => !latest.files.some((file) => file.id === change.targetFileId))) throw new ProposalError("A selected target file is no longer available", 409);
-  return { version: 1 as const, files };
+  const files = [...latest.files];
+  const changedIds = new Set<string>();
+  for (const change of changes) {
+    const action = change.action ?? change.type;
+    const targetFileId = change.targetFileId;
+    if (!targetFileId || changedIds.has(targetFileId)) throw new ProposalError("A selected unit is invalid", 409);
+    changedIds.add(targetFileId);
+    const index = files.findIndex((file) => file.id === targetFileId);
+    if (action === "ADD_UNIT") {
+      if (index >= 0 || !change.assetKey) throw new ProposalError("A selected unit is no longer available", 409);
+      const sourceFile = sourceFiles.get(change.assetKey);
+      if (!sourceFile) throw new ProposalError("A selected source unit is no longer available", 409);
+      files.push({ ...sourceFile, id: targetFileId, name: change.name ?? sourceFile.name, kind: change.kind ?? sourceFile.kind });
+      continue;
+    }
+    if (index < 0) throw new ProposalError("A selected target file is no longer available", 409);
+    const current = files[index];
+    if (action === "REMOVE_UNIT") {
+      files.splice(index, 1);
+      continue;
+    }
+    if (action === "RENAME_UNIT") {
+      const newName = change.newName && normalizeUnitName(change.newName);
+      if (!newName || newName === current.name) throw new ProposalError("A selected unit name is invalid", 409);
+      files[index] = { ...current, name: newName };
+      continue;
+    }
+    if (action !== "MODIFY_UNIT" && action !== "REPLACE_ASSET") throw new ProposalError("Selected changes are not supported", 409);
+    if (!change.assetKey || !change.mimeType || change.size == null) throw new ProposalError("Selected changes are not file replacements", 409);
+    const sourceFile = sourceFiles.get(change.assetKey);
+    if (!sourceFile) throw new ProposalError("A selected source unit is no longer available", 409);
+    files[index] = { ...current, mimeType: change.mimeType, size: change.size, assetKey: change.assetKey, previewKeys: sourceFile.previewKeys };
+  }
+  if (!files.length) throw new ProposalError("A revision must contain at least one unit", 409);
+  return { version: 2 as const, files };
 }
 
 export async function applyProposal(request: Request, scope: { id: string }) {
@@ -358,14 +524,10 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         await tx.proposal.update({ where: { id: proposal.id }, data: { status: "ACCEPTED", acceptedById: session.user.id } });
         return { revision, alreadyApplied: false };
       }
-      const assetChanges = selected.map((change) => {
-        if (change.type !== "REPLACE_ASSET" || !change.targetFileId || !change.assetKey || !change.mimeType || change.size == null) throw new ProposalError("Selected changes are not file replacements", 409);
-        return { targetFileId: change.targetFileId, assetKey: change.assetKey, mimeType: change.mimeType, size: change.size };
-      });
       const latestWithSource = await tx.revision.findUnique({ where: { id: latest.id }, include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } });
       const [latestBundle, sourceBundle] = await Promise.all([readRevisionBundle(latestWithSource?.sourceKey), readRevisionBundle(source.sourceKey)]);
       if (!latestWithSource || !latestBundle || !sourceBundle) throw new ProposalError("This revision needs a file bundle before individual files can be replaced.", 409);
-      const bundle = selectiveBundle(latestBundle, sourceBundle, assetChanges);
+      const bundle = selectiveBundle(latestBundle, sourceBundle, selected);
       const previewByKey = new Map([...latestWithSource.previews, ...source.previews].map((preview) => [preview.key, preview]));
       const previewKeys = [...new Set(bundle.files.flatMap((file) => file.previewKeys))];
       const previews = previewKeys.map((key) => previewByKey.get(key)).filter((preview): preview is NonNullable<typeof preview> => Boolean(preview)).map((preview, position) => ({ ...preview, position }));
@@ -378,7 +540,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
           number: latest.number + 1,
           parentId: latest.id,
           title: `Accepted: ${proposal.title}`.slice(0, 120),
-          changeDescription: `Applied ${selected.length} ${selected.length === 1 ? "file" : "files"} from Proposal #${proposal.proposalNumber}`,
+          changeDescription: `Applied ${selected.length} ${selected.length === 1 ? "change" : "changes"} from Proposal #${proposal.proposalNumber}`,
           license: lockedProject.license,
           sourceKey: uploadedBundleKey,
           sourceUrl: null,

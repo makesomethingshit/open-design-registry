@@ -3,48 +3,81 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type BundleFile = { id: string; name: string; mimeType: string; size: number };
+type BundleFile = { id: string; name: string; kind?: string; mimeType: string; size: number };
 type SourceRevision = { id: string; number: number; title: string; projectTitle: string; projectSlug: string; files: BundleFile[] };
 type RelatedIssue = { id: string; title: string };
-type SelectedFile = { sourceFileId: string; targetFileId: string };
+type UnitAction = "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
+type DraftChange = { key: string; action: UnitAction; targetFileId?: string; sourceFileId?: string; newName?: string };
 
-function fileSize(size: number) {
-  return new Intl.NumberFormat("en", { style: "unit", unit: "byte", notation: "compact", maximumFractionDigits: 1 }).format(size);
+function unitLabel(file: BundleFile) {
+  const kind = file.kind ? `${file.kind.slice(0, 1).toUpperCase()}${file.kind.slice(1)}` : "Asset · legacy";
+  return `${file.name} · ${kind} · ${file.id.slice(0, 8)}`;
+}
+
+function actionLabel(action: UnitAction) {
+  return { MODIFY_UNIT: "Modify", RENAME_UNIT: "Rename", REMOVE_UNIT: "Remove", ADD_UNIT: "Add" }[action];
 }
 
 export default function ProposalForm({ slug, baseRevision, sourceRevisions, relatedIssues, defaultSourceRevisionId }: { slug: string; baseRevision: { id: string; number: number; title: string; files: BundleFile[] }; sourceRevisions: SourceRevision[]; relatedIssues: RelatedIssue[]; defaultSourceRevisionId: string }) {
   const router = useRouter();
   const [sourceRevisionId, setSourceRevisionId] = useState(defaultSourceRevisionId);
-  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [changes, setChanges] = useState<DraftChange[]>([]);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const sourceRevision = useMemo(() => sourceRevisions.find((revision) => revision.id === sourceRevisionId) ?? sourceRevisions[0], [sourceRevisionId, sourceRevisions]);
-  const canChooseFiles = Boolean(baseRevision.files.length && sourceRevision?.files.length);
+  const canChooseUnits = Boolean(baseRevision.files.length && sourceRevision?.files.length);
+  const sourceOnlyFiles = useMemo(() => sourceRevision?.files.filter((file) => !baseRevision.files.some((target) => target.id === file.id)) ?? [], [baseRevision.files, sourceRevision]);
+
+  function resetRequest() {
+    setRequestId(crypto.randomUUID());
+  }
 
   function selectSourceRevision(nextId: string) {
     if (nextId === sourceRevisionId) return;
-    if (selectedFiles.length && !window.confirm("Changing From will clear the selected files. Your text draft will be kept.")) return;
+    if (changes.length && !window.confirm("Changing From will clear the selected changes. Your text draft will be kept.")) return;
     setSourceRevisionId(nextId);
-    setSelectedFiles([]);
+    setChanges([]);
+    resetRequest();
   }
 
-  function toggleFile(sourceFileId: string, checked: boolean) {
-    setSelectedFiles((current) => {
-      if (!checked) return current.filter((file) => file.sourceFileId !== sourceFileId);
-      const firstTarget = baseRevision.files.find((target) => !current.some((file) => file.targetFileId === target.id));
-      return firstTarget ? [...current, { sourceFileId, targetFileId: firstTarget.id }] : current;
-    });
+  function addChange() {
+    if (!canChooseUnits || changes.length >= 10) return;
+    setChanges((current) => [...current, { key: crypto.randomUUID(), action: "MODIFY_UNIT", targetFileId: baseRevision.files[0]?.id, sourceFileId: sourceRevision?.files[0]?.id }]);
+    resetRequest();
   }
 
-  function setTarget(sourceFileId: string, targetFileId: string) {
-    setSelectedFiles((current) => current.map((file) => file.sourceFileId === sourceFileId ? { ...file, targetFileId } : file));
+  function updateChange(key: string, patch: Partial<DraftChange>) {
+    setChanges((current) => current.map((change) => change.key === key ? { ...change, ...patch } : change));
+    resetRequest();
+  }
+
+  function removeChange(key: string) {
+    setChanges((current) => current.filter((change) => change.key !== key));
+    resetRequest();
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
-    if (canChooseFiles && !selectedFiles.length) {
-      setError("Select at least one file to propose.");
+    if (canChooseUnits && !changes.length) {
+      setError("Add at least one unit change to propose.");
+      return;
+    }
+    const targetIds = changes.flatMap((change) => change.targetFileId ? [change.targetFileId] : []);
+    const addedSources = changes.filter((change) => change.action === "ADD_UNIT").flatMap((change) => change.sourceFileId ? [change.sourceFileId] : []);
+    if (new Set(targetIds).size !== targetIds.length || new Set(addedSources).size !== addedSources.length) {
+      setError("This unit already has a change in this proposal.");
+      return;
+    }
+    const payloadChanges = changes.map((change) => {
+      if (change.action === "ADD_UNIT") return { action: change.action, sourceFileId: change.sourceFileId };
+      if (change.action === "RENAME_UNIT") return { action: change.action, targetFileId: change.targetFileId, newName: change.newName };
+      if (change.action === "REMOVE_UNIT") return { action: change.action, targetFileId: change.targetFileId };
+      return { action: change.action, targetFileId: change.targetFileId, sourceFileId: change.sourceFileId };
+    });
+    if (payloadChanges.some((change) => Object.values(change).some((value) => !value))) {
+      setError("Complete every unit change before creating the proposal.");
       return;
     }
     setError("");
@@ -53,7 +86,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     const whatChanged = String(form.get("whatChanged") ?? "").trim();
     const why = String(form.get("why") ?? "").trim();
     try {
-      const response = await fetch(`/api/projects/${slug}/proposals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevisionId: baseRevision.id, sourceRevisionId, title: form.get("title"), body: `What changed:\n${whatChanged}\n\nWhy:\n${why}`, relatedIssueId: form.get("relatedIssueId") || null, ...(canChooseFiles ? { files: selectedFiles } : {}) }) });
+      const response = await fetch(`/api/projects/${slug}/proposals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseRevisionId: baseRevision.id, sourceRevisionId, title: form.get("title"), body: `What changed:\n${whatChanged}\n\nWhy:\n${why}`, relatedIssueId: form.get("relatedIssueId") || null, requestId, ...(canChooseUnits ? { changes: payloadChanges } : {}) }) });
       if (!response.ok) {
         setError((await response.json().catch(() => null))?.error ?? "Could not create proposal");
         return;
@@ -73,15 +106,25 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     <label>What changed? <span aria-hidden="true">*</span><textarea name="whatChanged" required maxLength={4900} /></label>
     <label>Why? <span aria-hidden="true">*</span><textarea name="why" required maxLength={4900} /></label>
     <label>Related issue <select name="relatedIssueId" defaultValue=""><option value="">None</option>{relatedIssues.map((issue) => <option value={issue.id} key={issue.id}>{issue.title}</option>)}</select></label>
-    <section className="file-input-list" aria-labelledby="files-to-propose-heading">
-      <div className="section-heading"><h2 id="files-to-propose-heading">Files to propose</h2>{sourceRevision && <span className="meta">Choose files from Revision {sourceRevision.number}</span>}</div>
-      {!canChooseFiles ? <p className="empty-state">Whole-document only. This format does not expose independently replaceable files.</p> : sourceRevision.files.map((file) => {
-        const selected = selectedFiles.find((item) => item.sourceFileId === file.id);
-        return <article className="change-row file-input-row" key={file.id}><label><input type="checkbox" checked={Boolean(selected)} onChange={(event) => toggleFile(file.id, event.target.checked)} aria-label={`Select ${file.name}`} /><strong>{file.name}</strong><span className="meta">{file.mimeType} · {fileSize(file.size)}</span></label>{selected && <label>Replace <select value={selected.targetFileId} onChange={(event) => setTarget(file.id, event.target.value)}>{baseRevision.files.map((target) => <option value={target.id} key={target.id} disabled={target.id !== selected.targetFileId && selectedFiles.some((item) => item.targetFileId === target.id)}>{target.name}</option>)}</select></label>}</article>;
+    <section className="file-input-list" aria-labelledby="units-to-propose-heading">
+      <div className="section-heading"><h2 id="units-to-propose-heading">Units to propose</h2>{canChooseUnits && <button type="button" className="button secondary" onClick={addChange} disabled={changes.length >= 10}>Add change</button>}</div>
+      {!canChooseUnits ? <p className="empty-state">Whole-document only. This format does not expose independently changeable units.</p> : changes.map((change) => {
+        const target = baseRevision.files.find((file) => file.id === change.targetFileId);
+        const needsTarget = change.action !== "ADD_UNIT";
+        return <article className="change-row file-input-row" key={change.key}>
+          <label>Action <select value={change.action} onChange={(event) => updateChange(change.key, { action: event.target.value as UnitAction, targetFileId: event.target.value === "ADD_UNIT" ? undefined : change.targetFileId ?? baseRevision.files[0]?.id, sourceFileId: event.target.value === "RENAME_UNIT" || event.target.value === "REMOVE_UNIT" ? undefined : event.target.value === "ADD_UNIT" ? sourceOnlyFiles[0]?.id : change.sourceFileId ?? sourceRevision?.files[0]?.id, newName: event.target.value === "RENAME_UNIT" ? change.newName ?? "" : undefined })}><option value="MODIFY_UNIT">Modify</option><option value="RENAME_UNIT">Rename</option><option value="REMOVE_UNIT">Remove</option><option value="ADD_UNIT">Add</option></select></label>
+          {needsTarget && <label>Target <select value={change.targetFileId ?? ""} onChange={(event) => updateChange(change.key, { targetFileId: event.target.value })}>{baseRevision.files.map((file) => <option value={file.id} key={file.id}>{unitLabel(file)}</option>)}</select></label>}
+          {change.action === "MODIFY_UNIT" && <label>Replacement source <select value={change.sourceFileId ?? ""} onChange={(event) => updateChange(change.key, { sourceFileId: event.target.value })}>{sourceRevision?.files.map((file) => <option value={file.id} key={file.id}>{unitLabel(file)}</option>)}</select></label>}
+          {change.action === "ADD_UNIT" && <label>Source unit <select value={change.sourceFileId ?? ""} onChange={(event) => updateChange(change.key, { sourceFileId: event.target.value })}><option value="">Choose source unit</option>{sourceOnlyFiles.map((file) => <option value={file.id} key={file.id}>{unitLabel(file)}</option>)}</select>{sourceOnlyFiles.length === 0 && <span className="meta">Publish a new source unit before adding one.</span>}</label>}
+          {change.action === "RENAME_UNIT" && <label>New name <input required maxLength={200} value={change.newName ?? ""} aria-describedby={`${change.key}-rename-help`} onChange={(event) => updateChange(change.key, { newName: event.target.value })} /><span className="meta" id={`${change.key}-rename-help`}>Current name: {target?.name}. Same ID and source content will be kept.</span></label>}
+          {change.action === "REMOVE_UNIT" && <p className="meta">This unit will be absent from the new revision. Earlier revisions remain available.</p>}
+          <button type="button" className="button secondary" onClick={() => removeChange(change.key)}>Discard change</button>
+        </article>;
       })}
-      {canChooseFiles && !selectedFiles.length && <p className="empty-state">Select files to propose.</p>}
+      {canChooseUnits && !changes.length && <p className="empty-state">Add a change to begin. A unit can appear only once in a proposal.</p>}
+      {changes.length > 0 && <p className="meta">Summary: {changes.map((change) => actionLabel(change.action).toLowerCase()).join(" · ")}</p>}
     </section>
-    <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => router.back()}>Cancel</button><button className="button" disabled={submitting || (canChooseFiles && !selectedFiles.length)}>{submitting ? "Creating…" : "Create proposal"}</button></div>
+    <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => router.back()}>Cancel</button><button className="button" disabled={submitting || (canChooseUnits && !changes.length)}>{submitting ? "Creating…" : "Create proposal"}</button></div>
     {error && <p className="error" role="alert">{error}</p>}
   </form>;
 }

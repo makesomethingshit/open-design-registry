@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/src/lib/prisma";
-import { listVisibleProjectProposals } from "@/src/lib/proposal-handlers";
+import { countVisibleProposals, findVisibleProposal, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
@@ -13,7 +13,6 @@ import ContributeDialog from "./contribute-dialog";
 import ProposalList, { type ProposalListItem } from "./proposal-list";
 
 export const dynamic = "force-dynamic";
-const activeProposalStatuses = new Set(["OPEN", "CHANGES_REQUESTED", "APPROVED", "PARTIALLY_ACCEPTED"]);
 
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string }> }) {
   const { slug } = await params;
@@ -33,18 +32,22 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   if (!project) notFound();
   const session = await getSession();
   if (!project.isPublic && session?.user.id !== project.ownerId) notFound();
-  const proposals = await listVisibleProjectProposals(project.id, session?.user.id);
-  const activeProposals = proposals.filter((proposal) => activeProposalStatuses.has(proposal.status));
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
-  const filteredProposals = proposalFilter === "open" ? activeProposals : proposals.filter((proposal) => proposal.status === "ACCEPTED" || proposal.status === "CLOSED");
-  const proposalRows: ProposalListItem[] = filteredProposals.slice(0, 20).map((proposal) => ({ id: proposal.id, proposalNumber: proposal.proposalNumber, title: proposal.title, status: proposal.status, author: proposal.author.name, updatedAt: proposal.updatedAt.toISOString(), approved: proposal.changeSet?.changes.filter((change) => change.reviewStatus === "APPROVED" && !change.appliedRevision).length ?? 0, applied: proposal.changeSet?.changes.filter((change) => Boolean(change.appliedRevision)).length ?? 0, total: proposal.changeSet?.changes.length ?? 0 }));
-  const proposalCursor = filteredProposals.length > proposalRows.length ? proposalRows.at(-1)?.id ?? null : null;
   const latestRevision = project.revisions.at(-1);
+  const [proposalPage, activeProposalPage, activeProposalCount, contributorIds, latestProposal] = await Promise.all([
+    listVisibleProposalSummaries(project.id, session?.user.id, { status: proposalFilter, take: 20 }),
+    listVisibleProposalSummaries(project.id, session?.user.id, { status: "open", take: 3 }),
+    countVisibleProposals(project.id, session?.user.id, "open"),
+    visibleProposalContributorIds(project.id, session?.user.id),
+    latestRevision?.appliedProposal ? findVisibleProposal(latestRevision.appliedProposal.id, session?.user.id) : Promise.resolve(null),
+  ]);
+  const activeProposals = activeProposalPage.items;
+  const proposalRows: ProposalListItem[] = proposalPage.items;
+  const proposalCursor = proposalPage.nextCursor;
   const latestFiles = publicBundleFiles(await readRevisionBundle(latestRevision?.sourceKey));
   const latestPreview = latestRevision?.previews.find((preview) => preview.mimeType !== "text/html");
   const openIssues = project.issues.filter((issue) => issue.status === "OPEN");
-  const contributors = new Set([project.ownerId, ...proposals.filter((proposal) => proposal.appliedRevisions.length > 0).map((proposal) => proposal.authorId)]).size;
-  const latestProposal = latestRevision?.appliedProposal && proposals.find((proposal) => proposal.id === latestRevision.appliedProposal?.id);
+  const contributors = new Set([project.ownerId, ...contributorIds]).size;
   const initial = project.title.slice(0, 1).toUpperCase();
   return <article className="detail repo-detail">
     <header className="repo-header">
@@ -64,15 +67,15 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       <a className="repo-tab" href="#overview">Overview</a>
       <a className="repo-tab" href="#revisions">Revisions <span className="repo-tab-count">{project.revisions.length}</span></a>
       <a className="repo-tab" href="#issues">Issues <span className="repo-tab-count">{project.issues.length}</span></a>
-      <a className="repo-tab" href="#proposals">Proposals <span className="repo-tab-count">{activeProposals.length}</span></a>
+      <a className="repo-tab" href="#proposals">Proposals <span className="repo-tab-count">{activeProposalCount}</span></a>
       <a className="repo-tab" href="#forks">Forks <span className="repo-tab-count">{project._count.forks}</span></a>
     </nav>
     <section id="overview" className="repo-panel" aria-labelledby="overview-heading">
       <div className="section-heading"><h2 id="overview-heading">Overview</h2>{latestRevision && <Link className="button secondary" href={`/projects/${project.slug}/revisions/${latestRevision.number}`}>View revision</Link>}</div>
       <div id="preview"><img className="repo-preview-image" src={publicAssetUrl(latestPreview?.url ?? project.coverUrl)} alt={latestPreview?.altText ?? `${project.title} cover`} /></div>
-      <section className="overview-about"><h3>About</h3><p>{project.description || "No description provided."}</p><dl className="project-counts"><div><dt>Contributors</dt><dd>{contributors}</dd></div><div><dt>Revisions</dt><dd>{project.revisions.length}</dd></div><div><dt>Open Issues</dt><dd>{openIssues.length}</dd></div><div><dt>Open Proposals</dt><dd>{activeProposals.length}</dd></div></dl></section>
-      <div className="overview-grid"><section><div className="section-heading"><h3>Looking for contributions</h3><a href="#issues">View issues</a></div>{openIssues.length ? <div className="overview-list">{openIssues.slice(0, 3).map((issue) => <article className="overview-row" key={issue.id}><strong>{issue.title}</strong><span className="meta">Opened by {issue.author.name}</span></article>)}</div> : <p className="empty-state">No open issues you can help with.</p>}</section><section><div className="section-heading"><h3>Active proposals</h3><a href="#proposals">View proposals</a></div>{activeProposals.length ? <div className="overview-list">{activeProposals.slice(0, 3).map((proposal) => { const approved = proposal.changeSet?.changes.filter((change) => change.reviewStatus === "APPROVED" && !change.appliedRevision).length ?? 0; const applied = proposal.changeSet?.changes.filter((change) => Boolean(change.appliedRevision)).length ?? 0; const total = proposal.changeSet?.changes.length ?? 0; return <article className="overview-row" key={proposal.id}><Link href={`/proposals/${proposal.id}`}>#{proposal.proposalNumber} · {proposal.title}</Link><span className="meta">{proposal.status.replaceAll("_", " ")} · Approved {approved}/{total}{applied ? ` · Applied ${applied}/${total}` : ""}</span></article>; })}</div> : <p className="empty-state">No active proposals yet.</p>}</section></div>
-      {latestRevision && <section className="latest-revision"><h3>Latest revision</h3><Link href={`/projects/${project.slug}/revisions/${latestRevision.number}`}>Revision {latestRevision.number}</Link>{latestProposal ? <p className="meta">Applied {Math.max(1, latestRevision.appliedChanges.length)} files from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> · Contributor {latestProposal.author.name}</p> : <p className="meta">{latestRevision.changeDescription}</p>}</section>}
+      <section className="overview-about"><h3>About</h3><p>{project.description || "No description provided."}</p><dl className="project-counts"><div><dt>Contributors</dt><dd>{contributors}</dd></div><div><dt>Revisions</dt><dd>{project.revisions.length}</dd></div><div><dt>Open Issues</dt><dd>{openIssues.length}</dd></div><div><dt>Open Proposals</dt><dd>{activeProposalCount}</dd></div></dl></section>
+      <div className="overview-grid"><section><div className="section-heading"><h3>Looking for contributions</h3><a href="#issues">View issues</a></div>{openIssues.length ? <div className="overview-list">{openIssues.slice(0, 3).map((issue) => <article className="overview-row" key={issue.id}><strong>{issue.title}</strong><span className="meta">Opened by {issue.author.name}</span></article>)}</div> : <p className="empty-state">No open issues you can help with.</p>}</section><section><div className="section-heading"><h3>Active proposals</h3><a href="#proposals">View proposals</a></div>{activeProposals.length ? <div className="overview-list">{activeProposals.map((proposal) => <article className="overview-row" key={proposal.id}><Link href={`/proposals/${proposal.id}`}>#{proposal.proposalNumber} · {proposal.title}</Link><span className="meta">{proposal.status.replaceAll("_", " ")} · Approved {proposal.approved}/{proposal.total}{proposal.applied ? ` · Applied ${proposal.applied}/${proposal.total}` : ""}</span>{proposal.summaries.length > 0 && <span className="meta">{proposal.summaries.join(" · ")}{proposal.moreChanges ? ` · ${proposal.moreChanges} more changes` : ""}</span>}</article>)}</div> : <p className="empty-state">No active proposals yet.</p>}</section></div>
+      {latestRevision && <section className="latest-revision"><h3>Latest revision</h3><Link href={`/projects/${project.slug}/revisions/${latestRevision.number}`}>Revision {latestRevision.number}</Link>{latestProposal ? <><p className="meta">Applied {Math.max(1, latestRevision.appliedChanges.length)} changes from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> · Contributor {latestProposal.author.name}</p><p className="meta">{latestProposal.changeSet?.changes.filter((change) => change.appliedRevisionId === latestRevision.id).slice(0, 2).map(changeSummary).join(" · ")}</p></> : <p className="meta">{latestRevision.changeDescription}</p>}</section>}
     </section>
     {session?.user.id === project.ownerId && <ProjectSettingsForm slug={project.slug} title={project.title} description={project.description} license={project.license} isPublic={project.isPublic} />}
     <section id="revisions" className="repo-panel" aria-labelledby="revision-history">
@@ -104,4 +107,14 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
 function formatDate(value: Date) {
   return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
+  const name = change.name ?? change.target;
+  const action = change.action ?? change.type;
+  if (action === "RENAME_UNIT") return `Rename ${name} → ${change.newName ?? "new name"}`;
+  if (action === "ADD_UNIT") return `Add ${name}`;
+  if (action === "REMOVE_UNIT") return `Remove ${name}`;
+  if (action === "MODIFY_UNIT") return `Modify ${name}`;
+  return action === "REPLACE_DOCUMENT" ? "Whole document" : `Replace ${name}`;
 }

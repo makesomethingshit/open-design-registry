@@ -22,14 +22,16 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const [baseBundle, sourceBundle, latestBundle] = await Promise.all([readRevisionBundle(proposal.baseRevision.sourceKey), readRevisionBundle(proposal.sourceRevision.sourceKey), readRevisionBundle(latest?.sourceKey)]);
   const previewsFor = (revision: { previews: Array<{ key: string; id: string; position: number; url: string; mimeType: string; altText: string }> }, keys: string[] | undefined) => (keys ?? []).map((key) => revision.previews.find((preview) => preview.key === key)).filter((preview): preview is { id: string; position: number; key: string; url: string; mimeType: string; altText: string } => Boolean(preview)).filter((preview) => preview.mimeType !== "text/html").map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) }));
   const changes = proposal.changeSet?.changes.map((change) => {
+    const action = change.action ?? change.type;
     const sourceFile = sourceBundle?.files.find((file) => file.assetKey === change.assetKey);
     const baseFile = baseBundle?.files.find((file) => file.id === change.targetFileId);
     const latestFile = latestBundle?.files.find((file) => file.id === change.targetFileId);
     return {
-      id: change.id, type: change.type, target: change.target, targetFileId: change.targetFileId, name: change.name, mimeType: change.mimeType, size: change.size,
+      id: change.id, type: change.type, action: change.action ?? change.type, target: change.target, targetFileId: change.targetFileId, name: change.name, newName: change.newName, kind: change.kind, mimeType: change.mimeType, size: change.size,
       reviewStatus: change.reviewStatus, reviewComment: change.reviewComment, reviewedBy: change.reviewedBy && { name: change.reviewedBy.name }, appliedRevision: change.appliedRevision ?? (change.type === "REPLACE_DOCUMENT" ? proposal.appliedRevisions[0] ?? null : null), reviewHistory: change.reviewHistory.map((review) => ({ id: review.id, status: review.status, comment: review.comment, createdAt: review.createdAt, author: { name: review.author.name } })),
-      sourcePreviews: sourceFile ? previewsFor(proposal.sourceRevision, sourceFile.previewKeys) : sourceRevision.previews,
-      basePreviews: baseFile ? previewsFor(proposal.baseRevision, baseFile.previewKeys) : baseRevision.previews,
+      latestAvailable: action === "ADD_UNIT" || action === "REPLACE_DOCUMENT" || Boolean(latestFile),
+      sourcePreviews: action === "REMOVE_UNIT" ? [] : sourceFile ? previewsFor(proposal.sourceRevision, sourceFile.previewKeys) : sourceRevision.previews,
+      basePreviews: action === "ADD_UNIT" ? [] : baseFile ? previewsFor(proposal.baseRevision, baseFile.previewKeys) : baseRevision.previews,
       latestPreviews: latestFile && latest ? previewsFor(latest, latestFile.previewKeys) : latestRevision?.previews ?? [],
     };
   }) ?? [];

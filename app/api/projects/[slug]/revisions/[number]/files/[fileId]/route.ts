@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { readRevisionBundle } from "@/src/lib/revision-bundle";
+import { readRevisionBundle, sanitizeUnitName } from "@/src/lib/revision-bundle";
 import { getObject } from "@/src/lib/storage";
 
 function notFound() {
@@ -9,7 +9,7 @@ function notFound() {
 }
 
 function downloadName(name: string) {
-  return name.replace(/[\\/\r\n"]/g, "-").trim() || "source-file";
+  return sanitizeUnitName(name) || "source-file";
 }
 
 function encodedDownloadName(name: string) {

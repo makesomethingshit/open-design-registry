@@ -4,24 +4,44 @@ import { getObject, putBytes } from "./storage";
 export type RevisionBundleFile = {
   id: string;
   name: string;
+  /** A v2 unit classification. Unknown strings are retained for forward compatibility. */
+  kind?: string;
   mimeType: string;
   size: number;
   assetKey: string;
   previewKeys: string[];
 };
 
-export type RevisionBundle = { version: 1; files: RevisionBundleFile[] };
+export type RevisionBundle = { version: 1 | 2; files: RevisionBundleFile[] };
+
+export const unitKinds = ["artboard", "component", "asset", "token"] as const;
+export type UnitKind = (typeof unitKinds)[number];
+
+export function sanitizeUnitName(value: string) {
+  return value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim();
+}
+
+export function normalizeUnitName(value: string) {
+  const name = sanitizeUnitName(value);
+  return name && name.length <= 200 ? name : null;
+}
+
+export function normalizeUnitKind(value: string) {
+  const kind = value.trim().toLowerCase();
+  return (unitKinds as readonly string[]).includes(kind) ? kind as UnitKind : null;
+}
 
 function isBundleFile(value: unknown): value is RevisionBundleFile {
   if (!value || typeof value !== "object") return false;
   const file = value as Record<string, unknown>;
   return ["id", "name", "mimeType", "assetKey"].every((key) => typeof file[key] === "string" && file[key])
     && typeof file.size === "number" && Number.isInteger(file.size) && file.size >= 0
-    && Array.isArray(file.previewKeys) && file.previewKeys.every((key) => typeof key === "string" && key);
+    && Array.isArray(file.previewKeys) && file.previewKeys.every((key) => typeof key === "string" && key)
+    && (file.kind === undefined || (typeof file.kind === "string" && Boolean(file.kind.trim())));
 }
 
 function normalize(bundle: RevisionBundle): RevisionBundle | null {
-  if (bundle.version !== 1 || !Array.isArray(bundle.files) || !bundle.files.length || !bundle.files.every(isBundleFile)) return null;
+  if ((bundle.version !== 1 && bundle.version !== 2) || !Array.isArray(bundle.files) || !bundle.files.length || !bundle.files.every(isBundleFile)) return null;
   const ids = new Set(bundle.files.map((file) => file.id));
   return ids.size === bundle.files.length ? bundle : null;
 }
@@ -57,5 +77,5 @@ export async function putRevisionBundle(key: string, bundle: RevisionBundle) {
 }
 
 export function publicBundleFiles(bundle: RevisionBundle | null) {
-  return bundle?.files.map(({ id, name, mimeType, size }) => ({ id, name, mimeType, size })) ?? [];
+  return bundle?.files.map(({ id, name, kind, mimeType, size }) => kind === undefined ? { id, name, mimeType, size } : { id, name, kind, mimeType, size }) ?? [];
 }
