@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conflictForChange } from "./proposal-conflicts";
+import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
 
 const checksum = (value: string) => value.repeat(64).slice(0, 64);
 const file = (id: string, value?: string, name = "Home") => ({ id, name, kind: "artboard", mimeType: "image/png", size: 10, assetKey: `${id}-key`, previewKeys: [], ...(value === undefined ? {} : { checksum: checksum(value) }) });
@@ -21,5 +21,12 @@ describe("proposal unit conflict checks", () => {
     expect(conflictForChange(change, { version: 2, files: [] }, { version: 2, files: [file("home", "a")] })).toMatchObject({ status: "CHECK_UNAVAILABLE" });
     expect(conflictForChange({ type: "ADD_UNIT", action: "ADD_UNIT", targetFileId: "new" }, { version: 2, files: [] }, { version: 2, files: [] })).toMatchObject({ status: "NO_CONFLICT" });
     expect(conflictForChange({ type: "ADD_UNIT", action: "ADD_UNIT", targetFileId: "new" }, { version: 2, files: [] }, { version: 2, files: [file("new", "a")] })).toMatchObject({ status: "CONFLICT" });
+  });
+
+  it("finds every changed unit when a whole document is applied", () => {
+    const before = { version: 2 as const, files: [file("changed", "a"), file("removed", "b"), file("same", "c")] };
+    const after = { version: 2 as const, files: [file("changed", "d"), file("same", "c"), file("unrelated", "e")] };
+    expect(changedUnitIds(before, after, null).sort()).toEqual(["changed", "removed", "unrelated"]);
+    expect(changedUnitIds(before, after, ["same"])).toEqual([]);
   });
 });

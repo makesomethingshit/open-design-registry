@@ -44,10 +44,11 @@ export function conflictForChange(change: ConflictChange, base: RevisionBundle |
     : unavailable();
 }
 
-export function changedUnitIds(before: RevisionBundle, after: RevisionBundle, targetFileIds: string[]) {
+export function changedUnitIds(before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null) {
   const previous = new Map(before.files.map((file) => [file.id, file]));
   const next = new Map(after.files.map((file) => [file.id, file]));
-  return targetFileIds.filter((id) => {
+  const ids = targetFileIds ?? [...new Set([...previous.keys(), ...next.keys()])];
+  return ids.filter((id) => {
     const left = previous.get(id);
     const right = next.get(id);
     if (!left || !right) return Boolean(left || right);

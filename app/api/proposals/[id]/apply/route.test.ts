@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChanges: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: mocks.deleteObject }));
@@ -39,6 +39,13 @@ function request(body: Record<string, unknown>) {
   return new Request("http://localhost/api/proposals/proposal/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
 
+function wholeDocumentProposal(overrides: Record<string, unknown> = {}) {
+  return proposal({
+    changeSet: { id: "whole-set", changes: [{ id: "whole-change", type: "REPLACE_DOCUMENT", action: "REPLACE_DOCUMENT", target: "whole_document", targetFileId: null, name: null, newName: null, kind: null, mimeType: null, size: null, assetKey: null, reviewStatus: "APPROVED", appliedRevisionId: null }] },
+    ...overrides,
+  });
+}
+
 describe("selective proposal apply route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -50,6 +57,8 @@ describe("selective proposal apply route", () => {
     mocks.findRevision.mockResolvedValue(latest());
     mocks.findAffectedChanges.mockResolvedValue([]);
     mocks.findChangeSets.mockResolvedValue([]);
+    mocks.createHistory.mockResolvedValue(undefined);
+    mocks.deleteObject.mockResolvedValue(undefined);
     mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? sourceBundle : latestBundle));
     mocks.putBundle.mockResolvedValue({ checksum: "b".repeat(64) });
     mocks.createRevision.mockResolvedValue({ id: "staged" });
@@ -58,7 +67,7 @@ describe("selective proposal apply route", () => {
       $queryRaw: mocks.lockProject,
       proposal: { findUnique: mocks.findProposal, update: mocks.updateProposal },
       revision: { findFirst: mocks.findLatest, findUnique: mocks.findRevision, create: mocks.createRevision, update: mocks.publishRevision },
-      change: { updateMany: mocks.updateChanges, findMany: mocks.findAffectedChanges },
+      change: { update: mocks.updateChange, updateMany: mocks.updateChanges, findMany: mocks.findAffectedChanges },
       changeReview: { createMany: mocks.createHistory },
       changeSet: { findMany: mocks.findChangeSets },
     }));
@@ -71,6 +80,81 @@ describe("selective proposal apply route", () => {
     expect(mocks.putBundle).toHaveBeenCalledOnce();
     expect(mocks.updateChanges).toHaveBeenCalledWith({ where: { id: { in: ["change-a"] } }, data: { appliedRevisionId: "revision-11" } });
     expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "proposal" }, data: { status: "PARTIALLY_ACCEPTED", acceptedById: "owner" } });
+  });
+
+  it("invalidates changed and removed units after a whole-document apply", async () => {
+    mocks.findProposal.mockResolvedValue(wholeDocumentProposal());
+    mocks.findLatest.mockResolvedValue({ id: "base", number: 10, sourceKey: "latest-bundle" });
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "latest-bundle"
+      ? { version: 2, files: [
+        { id: "changed", name: "Changed", kind: "asset", mimeType: "image/png", size: 1, assetKey: "changed-a", previewKeys: [], checksum: "a".repeat(64) },
+        { id: "removed", name: "Removed", kind: "asset", mimeType: "image/png", size: 1, assetKey: "removed-a", previewKeys: [], checksum: "b".repeat(64) },
+        { id: "same", name: "Same", kind: "asset", mimeType: "image/png", size: 1, assetKey: "same", previewKeys: [], checksum: "c".repeat(64) },
+      ] }
+      : { version: 2, files: [
+        { id: "changed", name: "Changed", kind: "asset", mimeType: "image/png", size: 1, assetKey: "changed-b", previewKeys: [], checksum: "d".repeat(64) },
+        { id: "same", name: "Same", kind: "asset", mimeType: "image/png", size: 1, assetKey: "same", previewKeys: [], checksum: "c".repeat(64) },
+      ] }));
+    mocks.findAffectedChanges.mockResolvedValue([{ id: "other-changed", changeSetId: "other-set" }, { id: "other-removed", changeSetId: "other-set" }]);
+    mocks.findChangeSets.mockResolvedValue([{ proposalId: "other-proposal", changes: [{ reviewStatus: "PENDING", appliedRevisionId: null }] }]);
+
+    const response = await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ targetFileId: { in: ["changed", "removed"] } }) }));
+    expect(mocks.createHistory).toHaveBeenCalledWith({ data: expect.arrayContaining([
+      expect.objectContaining({ changeId: "other-changed", eventType: "INVALIDATED_UPSTREAM", causedByRevisionId: "revision-11" }),
+      expect.objectContaining({ changeId: "other-removed", eventType: "INVALIDATED_UPSTREAM", causedByRevisionId: "revision-11" }),
+    ]), skipDuplicates: true });
+  });
+
+  it("keeps same-checksum and unrelated approvals out of a whole-document invalidation", async () => {
+    mocks.findProposal.mockResolvedValue(wholeDocumentProposal());
+    mocks.findLatest.mockResolvedValue({ id: "base", number: 10, sourceKey: "latest-bundle" });
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "latest-bundle"
+      ? { version: 2, files: [
+        { id: "target", name: "Target", kind: "asset", mimeType: "image/png", size: 1, assetKey: "target", previewKeys: [], checksum: "a".repeat(64) },
+        { id: "unrelated", name: "Unrelated", kind: "asset", mimeType: "image/png", size: 1, assetKey: "unrelated-a", previewKeys: [], checksum: "b".repeat(64) },
+      ] }
+      : { version: 2, files: [
+        { id: "target", name: "Target", kind: "asset", mimeType: "image/png", size: 1, assetKey: "target", previewKeys: [], checksum: "a".repeat(64) },
+        { id: "unrelated", name: "Unrelated", kind: "asset", mimeType: "image/png", size: 1, assetKey: "unrelated-b", previewKeys: [], checksum: "c".repeat(64) },
+      ] }));
+
+    const response = await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ targetFileId: { in: ["unrelated"] } }) }));
+  });
+
+  it("writes no second whole-document invalidation event on an idempotent retry", async () => {
+    const first = wholeDocumentProposal();
+    mocks.findProposal.mockResolvedValueOnce(first).mockResolvedValueOnce({ ...first, appliedRevisions: [{ id: "revision-11", number: 11, title: "Accepted: Improve header" }] });
+    mocks.findLatest.mockResolvedValue({ id: "base", number: 10, sourceKey: "latest-bundle" });
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "latest-bundle"
+      ? { version: 2, files: [{ id: "unit", name: "Unit", kind: "asset", mimeType: "image/png", size: 1, assetKey: "a", previewKeys: [], checksum: "a".repeat(64) }] }
+      : { version: 2, files: [{ id: "unit", name: "Unit", kind: "asset", mimeType: "image/png", size: 1, assetKey: "b", previewKeys: [], checksum: "b".repeat(64) }] }));
+    mocks.findAffectedChanges.mockResolvedValue([{ id: "other-change", changeSetId: "other-set" }]);
+    mocks.findChangeSets.mockResolvedValue([{ proposalId: "other-proposal", changes: [{ reviewStatus: "PENDING", appliedRevisionId: null }] }]);
+
+    expect((await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) })).status).toBe(201);
+    expect((await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) })).status).toBe(200);
+    expect(mocks.createHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails the whole-document transaction when invalidation history cannot be written", async () => {
+    mocks.findProposal.mockResolvedValue(wholeDocumentProposal());
+    mocks.findLatest.mockResolvedValue({ id: "base", number: 10, sourceKey: "latest-bundle" });
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "latest-bundle"
+      ? { version: 2, files: [{ id: "unit", name: "Unit", kind: "asset", mimeType: "image/png", size: 1, assetKey: "a", previewKeys: [], checksum: "a".repeat(64) }] }
+      : { version: 2, files: [{ id: "unit", name: "Unit", kind: "asset", mimeType: "image/png", size: 1, assetKey: "b", previewKeys: [], checksum: "b".repeat(64) }] }));
+    mocks.findAffectedChanges.mockResolvedValue([{ id: "other-change", changeSetId: "other-set" }]);
+    mocks.createHistory.mockRejectedValue(new Error("history unavailable"));
+
+    const response = await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(500);
+    expect(mocks.updateProposal).not.toHaveBeenCalled();
   });
 
   it("preserves a previously applied file and reaches ACCEPTED after the remaining file is reapproved", async () => {

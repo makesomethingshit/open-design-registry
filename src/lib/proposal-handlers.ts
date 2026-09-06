@@ -477,8 +477,8 @@ function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, 
   return { version: 2 as const, files };
 }
 
-async function invalidateUpstreamApprovals(tx: Prisma.TransactionClient, projectId: string, proposalId: string, before: RevisionBundle, after: RevisionBundle, selected: SelectedUnitChange[], revision: { id: string; number: number }) {
-  const changedIds = changedUnitIds(before, after, selected.map((change) => change.targetFileId).filter((id): id is string => Boolean(id)));
+async function invalidateUpstreamApprovals(tx: Prisma.TransactionClient, projectId: string, proposalId: string, before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null, revision: { id: string; number: number }) {
+  const changedIds = changedUnitIds(before, after, targetFileIds);
   if (!changedIds.length) return;
   const affected = await tx.change.findMany({
     where: {
@@ -541,11 +541,12 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       if (selected.some((change) => change.appliedRevisionId)) throw new ProposalError("One or more selected changes were already applied", 409);
       if (proposal.status === "CLOSED" || proposal.status === "ACCEPTED") throw new ProposalError("Proposal cannot be applied", 409);
       if (selected.some((change) => change.reviewStatus !== "APPROVED")) throw new ProposalError("Only approved changes can be applied", 409);
-      const latest = await tx.revision.findFirst({ where: { projectId: initial.projectId, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true } });
+      const latest = await tx.revision.findFirst({ where: { projectId: initial.projectId, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, sourceKey: true } });
       if (!latest) throw new ProposalError("Current revision not found", 409);
       if (latest.id !== proposal.baseRevisionId && (parsed.data.reviewedLatestRevisionId !== latest.id || !sameIds(parsed.data.reviewedChangeIds ?? [], requestedIds))) throw new ProposalError("Review the latest revision before applying these selected changes", 409, { latestRevision: latest });
       const source = proposal.sourceRevision;
       if (legacyChange) {
+        const [beforeBundle, afterBundle] = await Promise.all([readRevisionBundle(latest.sourceKey), readRevisionBundle(source.sourceKey)]);
         const stagedRevision = await tx.revision.create({
           data: {
             projectId: initial.projectId,
@@ -573,6 +574,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         });
         const revision = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, select: { id: true, number: true, title: true } });
         await tx.change.update({ where: { id: selected[0].id }, data: { appliedRevisionId: revision.id } });
+        if (beforeBundle && afterBundle) await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, beforeBundle, afterBundle, null, revision);
         await tx.proposal.update({ where: { id: proposal.id }, data: { status: "ACCEPTED", acceptedById: session.user.id } });
         return { revision, alreadyApplied: false };
       }
@@ -632,7 +634,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         await tx.change.updateMany({ where: { id: { in: remainingChanges.map((change) => change.id) } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
         await tx.changeReview.createMany({ data: remainingChanges.map((change) => ({ changeId: change.id, authorId: null, status: "PENDING", eventType: "PARTIAL_APPLICATION_RESET", reason: "Re-review required after partial application", causedByRevisionId: revision.id })), skipDuplicates: true });
       }
-      await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, latestBundle, bundle, selected, revision);
+      await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, latestBundle, bundle, selected.map((change) => change.targetFileId).filter((id): id is string => Boolean(id)), revision);
       const appliedCount = proposal.changeSet.changes.filter((change) => change.appliedRevisionId).length + selected.length;
       await tx.proposal.update({ where: { id: proposal.id }, data: { status: proposalStatusForChanges(proposal.changeSet.changes.map((change) => change.reviewStatus), appliedCount), acceptedById: session.user.id } });
       return { revision, alreadyApplied: false };
