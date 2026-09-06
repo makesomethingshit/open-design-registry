@@ -168,6 +168,8 @@ model Revision {
   appliedProposal Proposal? @relation("ProposalAppliedRevisions", fields: [sourceProposalId], references: [id], onDelete: Restrict)
   sourceProposalId String?
   appliedChanges Change[] @relation("ChangeAppliedRevision")
+  reviewAnchors ChangeReview[] @relation("ChangeReviewCheckedLatestRevision")
+  reviewInvalidations ChangeReview[] @relation("ChangeReviewCausedByRevision")
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -216,6 +218,12 @@ enum ChangeReviewStatus {
   PENDING
   APPROVED
   CHANGES_REQUESTED
+}
+
+enum ChangeReviewEventType {
+  REVIEW
+  INVALIDATED_UPSTREAM
+  PARTIAL_APPLICATION_RESET
 }
 
 enum NotificationType {
@@ -336,17 +344,26 @@ model Change {
 }
 
 model ChangeReview {
-  id         String             @id @default(cuid())
-  changeId   String
-  authorId   String
-  status     ChangeReviewStatus
-  comment    String?
-  createdAt  DateTime           @default(now())
-  change     Change             @relation(fields: [changeId], references: [id], onDelete: Cascade)
-  author     User               @relation("ChangeReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  id                      String                @id @default(cuid())
+  changeId                String
+  authorId                String?
+  status                  ChangeReviewStatus
+  eventType               ChangeReviewEventType @default(REVIEW)
+  comment                 String?
+  reason                  String?
+  checkedLatestRevisionId String?
+  causedByRevisionId      String?
+  createdAt               DateTime              @default(now())
+  change                  Change                @relation(fields: [changeId], references: [id], onDelete: Cascade)
+  author                  User?                 @relation("ChangeReviewAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  checkedLatestRevision   Revision?             @relation("ChangeReviewCheckedLatestRevision", fields: [checkedLatestRevisionId], references: [id], onDelete: SetNull)
+  causedByRevision        Revision?             @relation("ChangeReviewCausedByRevision", fields: [causedByRevisionId], references: [id], onDelete: SetNull)
 
   @@index([changeId, createdAt])
   @@index([authorId])
+  @@index([checkedLatestRevisionId])
+  @@index([causedByRevisionId])
+  @@unique([changeId, eventType, causedByRevisionId])
 }
 
 model ProposalComment {

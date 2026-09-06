@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -95,6 +96,7 @@ describe("revision publishing route", () => {
     expect(bundle.files.map((file: { name: string }) => file.name)).toEqual(["poster.ai", "logo.svg"]);
     expect(bundle.files.map((file: { previewKeys: string[] }) => file.previewKeys)).toEqual([expect.any(Array), expect.any(Array)]);
     expect(bundle.files.every((file: { previewKeys: string[] }) => file.previewKeys.length === 1)).toBe(true);
+    expect(bundle.files.map((file: { checksum: string }) => file.checksum)).toEqual([createHash("sha256").update("a").digest("hex"), createHash("sha256").update("b").digest("hex")]);
     expect(mocks.putObject).toHaveBeenCalledTimes(4);
   });
 

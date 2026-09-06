@@ -6,6 +6,7 @@ import { proposalApplySchema, proposalCloseSchema, proposalCreateSchema, proposa
 import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-status";
 import { deleteObject, publicAssetUrl } from "./storage";
 import { normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "./revision-bundle";
+import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
@@ -15,7 +16,7 @@ const proposalDetails = {
   relatedIssue: { select: { id: true, title: true, status: true } },
   reviewer: { select: { id: true, name: true } },
   acceptedBy: { select: { id: true, name: true } },
-  changeSet: { include: { changes: { orderBy: { createdAt: "asc" }, include: { reviewedBy: { select: { id: true, name: true } }, appliedRevision: { select: { id: true, number: true, title: true } }, reviewHistory: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } } } } } },
+  changeSet: { include: { changes: { orderBy: { createdAt: "asc" }, include: { reviewedBy: { select: { id: true, name: true } }, appliedRevision: { select: { id: true, number: true, title: true } }, reviewHistory: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } }, causedByRevision: { select: { id: true, number: true } } } } } } } },
   comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } },
   appliedRevisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true } },
 } satisfies Prisma.ProposalInclude;
@@ -31,7 +32,7 @@ const proposalSummary = {
   createdAt: true,
   updatedAt: true,
   author: { select: { name: true } },
-  baseRevision: { select: { capabilityMode: true, capabilityUnitCount: true } },
+  baseRevision: { select: { capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true } },
   changeSet: { select: { changes: { select: { id: true, type: true, action: true, target: true, name: true, newName: true, kind: true, reviewStatus: true, appliedRevisionId: true } } } },
 } satisfies Prisma.ProposalSelect;
 
@@ -87,7 +88,7 @@ export function publicProposalSummary(proposal: ProposalSummary) {
     total: changes.length,
     summaries: changes.slice(0, 2).map(changeSummary),
     moreChanges: Math.max(0, changes.length - 2),
-    capability: { mode: proposal.baseRevision.capabilityMode, unitCount: proposal.baseRevision.capabilityUnitCount },
+    capability: { mode: proposal.baseRevision.capabilityMode, unitCount: proposal.baseRevision.capabilityUnitCount, adapterId: proposal.baseRevision.adapterId, adapterVersion: proposal.baseRevision.adapterVersion, adapterConfidence: proposal.baseRevision.adapterConfidence, adapterMaturity: proposal.baseRevision.adapterMaturity },
   };
 }
 
@@ -210,7 +211,17 @@ export function publicProposal(proposal: ProposalDetails) {
       reviewedAt: change.reviewedAt,
       reviewedBy: change.reviewedBy,
       appliedRevision: change.appliedRevision ?? (change.type === "REPLACE_DOCUMENT" ? proposal.appliedRevisions[0] ?? null : null),
-      reviewHistory: change.reviewHistory,
+      reviewHistory: change.reviewHistory.map((review) => ({
+        id: review.id,
+        status: review.status,
+        eventType: review.eventType,
+        comment: review.comment,
+        reason: review.reason,
+        createdAt: review.createdAt,
+        author: review.author,
+        checkedLatestRevisionId: review.checkedLatestRevisionId,
+        causedByRevision: review.causedByRevision,
+      })),
     })) },
     comments: proposal.comments,
     appliedRevisions: proposal.appliedRevisions,
@@ -383,9 +394,16 @@ export async function reviewProposalChange(request: Request, scope: { id: string
       const change = proposal.changeSet.changes.find((candidate) => candidate.id === scope.changeId);
       if (!change) throw new ProposalError("Change not found", 404);
       if (change.appliedRevisionId) throw new ProposalError("Applied changes cannot be reviewed", 409);
+      const latest = await tx.revision.findFirst({ where: { projectId: proposal.projectId, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, sourceKey: true } });
+      if (!latest) throw new ProposalError("Current revision not found", 409);
+      if (parsed.data.status === "APPROVED" && (change.action ?? change.type) !== "REPLACE_DOCUMENT" && latest.id !== proposal.baseRevision.id) {
+        const [baseBundle, latestBundle] = await Promise.all([readRevisionBundle(proposal.baseRevision.sourceKey), readRevisionBundle(latest.sourceKey)]);
+        const conflict = conflictForChange(change, baseBundle, latestBundle);
+        if (!conflict || conflict.status !== "NO_CONFLICT") throw new ProposalError("Review conflicts before approving this change", 409);
+      }
       const reviewedAt = new Date();
       const reviewed = await tx.change.update({ where: { id: change.id }, data: { reviewStatus: parsed.data.status, reviewComment: parsed.data.comment || null, reviewedById: session.user.id, reviewedAt } });
-      await tx.changeReview.create({ data: { changeId: change.id, authorId: session.user.id, status: parsed.data.status, comment: parsed.data.comment || null, createdAt: reviewedAt } });
+      await tx.changeReview.create({ data: { changeId: change.id, authorId: session.user.id, status: parsed.data.status, eventType: "REVIEW", comment: parsed.data.comment || null, checkedLatestRevisionId: latest.id, createdAt: reviewedAt } });
       const changes = await tx.change.findMany({ where: { changeSetId: proposal.changeSet.id }, select: { reviewStatus: true, appliedRevisionId: true } });
       const status = proposalStatusForChanges(changes.map((item) => item.reviewStatus), changes.filter((item) => item.appliedRevisionId).length);
       await tx.proposal.update({ where: { id: proposal.id }, data: { status, reviewerId: session.user.id } });
@@ -399,7 +417,7 @@ export async function reviewProposalChange(request: Request, scope: { id: string
   }
 }
 
-type ProposalFailureDetails = { latestRevision?: { id: string; number: number } };
+type ProposalFailureDetails = { latestRevision?: { id: string; number: number }; conflictChangeIds?: string[] };
 class ProposalError extends Error {
   constructor(message: string, readonly status: number, readonly details?: ProposalFailureDetails) { super(message); }
 }
@@ -453,10 +471,31 @@ function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, 
     if (!change.assetKey || !change.mimeType || change.size == null) throw new ProposalError("Selected changes are not file replacements", 409);
     const sourceFile = sourceFiles.get(change.assetKey);
     if (!sourceFile) throw new ProposalError("A selected source unit is no longer available", 409);
-    files[index] = { ...current, mimeType: change.mimeType, size: change.size, assetKey: change.assetKey, previewKeys: sourceFile.previewKeys };
+    files[index] = { ...current, mimeType: change.mimeType, size: change.size, assetKey: change.assetKey, previewKeys: sourceFile.previewKeys, checksum: sourceFile.checksum };
   }
   if (!files.length) throw new ProposalError("At least one unit must remain.", 409);
   return { version: 2 as const, files };
+}
+
+async function invalidateUpstreamApprovals(tx: Prisma.TransactionClient, projectId: string, proposalId: string, before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null, revision: { id: string; number: number }) {
+  const changedIds = changedUnitIds(before, after, targetFileIds);
+  if (!changedIds.length) return;
+  const affected = await tx.change.findMany({
+    where: {
+      targetFileId: { in: changedIds }, reviewStatus: "APPROVED", appliedRevisionId: null,
+      changeSet: { proposal: { projectId, id: { not: proposalId }, status: { notIn: ["CLOSED", "ACCEPTED"] } } },
+    },
+    select: { id: true, changeSetId: true },
+  });
+  if (!affected.length) return;
+  const affectedIds = affected.map((change) => change.id);
+  await tx.change.updateMany({ where: { id: { in: affectedIds } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
+  await tx.changeReview.createMany({
+    data: affectedIds.map((changeId) => ({ changeId, authorId: null, status: "PENDING", eventType: "INVALIDATED_UPSTREAM", reason: `Changed upstream in Revision ${revision.number}`, causedByRevisionId: revision.id })),
+    skipDuplicates: true,
+  });
+  const changeSets = await tx.changeSet.findMany({ where: { id: { in: [...new Set(affected.map((change) => change.changeSetId))] } }, select: { proposalId: true, changes: { select: { reviewStatus: true, appliedRevisionId: true } } } });
+  await Promise.all(changeSets.map((changeSet) => tx.proposal.update({ where: { id: changeSet.proposalId }, data: { status: proposalStatusForChanges(changeSet.changes.map((change) => change.reviewStatus), changeSet.changes.filter((change) => change.appliedRevisionId).length) } })));
 }
 
 export async function applyProposal(request: Request, scope: { id: string }) {
@@ -476,7 +515,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       const proposal = await tx.proposal.findUnique({
         where: { id: scope.id },
         include: {
-          baseRevision: { select: { id: true, projectId: true, isPublished: true } },
+          baseRevision: { select: { id: true, projectId: true, isPublished: true, sourceKey: true } },
           sourceRevision: { include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } },
           changeSet: { include: { changes: { include: { appliedRevision: { select: { id: true, number: true, title: true } } } } } },
           appliedRevisions: { orderBy: { number: "asc" }, select: { id: true, number: true, title: true } },
@@ -502,11 +541,12 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       if (selected.some((change) => change.appliedRevisionId)) throw new ProposalError("One or more selected changes were already applied", 409);
       if (proposal.status === "CLOSED" || proposal.status === "ACCEPTED") throw new ProposalError("Proposal cannot be applied", 409);
       if (selected.some((change) => change.reviewStatus !== "APPROVED")) throw new ProposalError("Only approved changes can be applied", 409);
-      const latest = await tx.revision.findFirst({ where: { projectId: initial.projectId, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true } });
+      const latest = await tx.revision.findFirst({ where: { projectId: initial.projectId, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, sourceKey: true } });
       if (!latest) throw new ProposalError("Current revision not found", 409);
       if (latest.id !== proposal.baseRevisionId && (parsed.data.reviewedLatestRevisionId !== latest.id || !sameIds(parsed.data.reviewedChangeIds ?? [], requestedIds))) throw new ProposalError("Review the latest revision before applying these selected changes", 409, { latestRevision: latest });
       const source = proposal.sourceRevision;
       if (legacyChange) {
+        const [beforeBundle, afterBundle] = await Promise.all([readRevisionBundle(latest.sourceKey), readRevisionBundle(source.sourceKey)]);
         const stagedRevision = await tx.revision.create({
           data: {
             projectId: initial.projectId,
@@ -534,6 +574,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         });
         const revision = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, select: { id: true, number: true, title: true } });
         await tx.change.update({ where: { id: selected[0].id }, data: { appliedRevisionId: revision.id } });
+        if (beforeBundle && afterBundle) await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, beforeBundle, afterBundle, null, revision);
         await tx.proposal.update({ where: { id: proposal.id }, data: { status: "ACCEPTED", acceptedById: session.user.id } });
         return { revision, alreadyApplied: false };
       }
@@ -547,7 +588,12 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         readRevisionBundle(latestWithSource.sourceKey),
         needsSourceBundle ? readRevisionBundle(source.sourceKey) : Promise.resolve(null),
       ]);
-      if (!latestBundle || (needsSourceBundle && !sourceBundle)) throw new ProposalError("This revision needs a file bundle before individual files can be replaced.", 409);
+      const baseBundle = latest.id !== proposal.baseRevisionId ? await readRevisionBundle(proposal.baseRevision.sourceKey) : latestBundle;
+      if (!latestBundle || (needsSourceBundle && !sourceBundle) || (latest.id !== proposal.baseRevisionId && !baseBundle)) throw new ProposalError("This revision needs a file bundle before individual files can be replaced.", 409);
+      if (latest.id !== proposal.baseRevisionId) {
+        const conflicts = selected.map((change) => ({ id: change.id, result: conflictForChange(change, baseBundle, latestBundle) })).filter((item) => item.result?.status !== "NO_CONFLICT");
+        if (conflicts.length) throw new ProposalError("One or more selected changes need conflict review", 409, { latestRevision: latest, conflictChangeIds: conflicts.map((item) => item.id) });
+      }
       const bundle = selectiveBundle(latestBundle, sourceBundle, selected);
       const adapterRevision = needsSourceBundle && source.adapterId ? source : latestWithSource;
       const previewByKey = new Map([...latestWithSource.previews, ...source.previews].map((preview) => [preview.key, preview]));
@@ -583,7 +629,12 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       });
       const revision = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, select: { id: true, number: true, title: true } });
       await tx.change.updateMany({ where: { id: { in: requestedIds } }, data: { appliedRevisionId: revision.id } });
-      await tx.change.updateMany({ where: { changeSetId: proposal.changeSet.id, appliedRevisionId: null, id: { notIn: requestedIds } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
+      const remainingChanges = proposal.changeSet.changes.filter((change) => !change.appliedRevisionId && !requestedIds.includes(change.id));
+      if (remainingChanges.length) {
+        await tx.change.updateMany({ where: { id: { in: remainingChanges.map((change) => change.id) } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
+        await tx.changeReview.createMany({ data: remainingChanges.map((change) => ({ changeId: change.id, authorId: null, status: "PENDING", eventType: "PARTIAL_APPLICATION_RESET", reason: "Re-review required after partial application", causedByRevisionId: revision.id })), skipDuplicates: true });
+      }
+      await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, latestBundle, bundle, selected.map((change) => change.targetFileId).filter((id): id is string => Boolean(id)), revision);
       const appliedCount = proposal.changeSet.changes.filter((change) => change.appliedRevisionId).length + selected.length;
       await tx.proposal.update({ where: { id: proposal.id }, data: { status: proposalStatusForChanges(proposal.changeSet.changes.map((change) => change.reviewStatus), appliedCount), acceptedById: session.user.id } });
       return { revision, alreadyApplied: false };
