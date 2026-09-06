@@ -12,6 +12,21 @@ function kindLabel(kind?: string) {
   return kind ? `${kind.slice(0, 1).toUpperCase()}${kind.slice(1)}` : "Asset · legacy";
 }
 
+export function nextSuggestionRequest(requests: number[], counter: { current: number }, index: number) {
+  const request = counter.current + 1;
+  counter.current = request;
+  requests[index] = request;
+  return request;
+}
+
+export function isCurrentSuggestionRequest(requests: readonly number[], index: number, request: number) {
+  return requests[index] === request;
+}
+
+export function applySuggestedKind(kinds: string[], index: number, request: number, currentRequest: number | undefined) {
+  return request === currentRequest ? kinds.map((value, currentIndex) => currentIndex === index && !value ? "auto" : value) : kinds;
+}
+
 export default function RevisionPublishForm({ slug, existingFiles }: { slug: string; existingFiles: ExistingFile[] }) {
   const router = useRouter();
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
@@ -22,6 +37,7 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const suggestionRequests = useRef<number[]>([]);
+  const suggestionRequestCounter = useRef(0);
   const sourceFileIdsRef = useRef<string[]>([]);
 
   function updateSuggestion(index: number, suggestion: SuggestionState) {
@@ -29,26 +45,24 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
   }
 
   function detectSuggestion(file: File, index: number) {
-    const request = (suggestionRequests.current[index] ?? 0) + 1;
-    suggestionRequests.current[index] = request;
+    const request = nextSuggestionRequest(suggestionRequests.current, suggestionRequestCounter, index);
     updateSuggestion(index, { status: "detecting" });
     void suggestFile(file).then((result) => {
-      if (suggestionRequests.current[index] !== request) return;
+      if (!isCurrentSuggestionRequest(suggestionRequests.current, index, request)) return;
       if (result.status !== "available" || result.suggestion.confidence === "not_assessed") {
         updateSuggestion(index, { status: "unsupported" });
         return;
       }
       updateSuggestion(index, { status: "available", suggestion: result.suggestion });
       const mapped = existingFiles.find((candidate) => candidate.id === sourceFileIdsRef.current[index]);
-      if (!mapped?.kind) setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index && !value ? "auto" : value));
+      if (!mapped?.kind) setSourceKinds((current) => applySuggestedKind(current, index, request, suggestionRequests.current[index]));
     }).catch(() => {
-      if (suggestionRequests.current[index] === request) updateSuggestion(index, { status: "error" });
+      if (isCurrentSuggestionRequest(suggestionRequests.current, index, request)) updateSuggestion(index, { status: "error" });
     });
   }
 
   function selectSources(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    suggestionRequests.current = [];
     sourceFileIdsRef.current = files.map(() => "");
     setSourceFiles(files);
     setSourceFileIds(sourceFileIdsRef.current);
@@ -63,7 +77,7 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
     setSourceFileIds(sourceFileIdsRef.current);
     setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? "" : value));
     if (existing?.kind) {
-      suggestionRequests.current[index] = (suggestionRequests.current[index] ?? 0) + 1;
+      nextSuggestionRequest(suggestionRequests.current, suggestionRequestCounter, index);
       updateSuggestion(index, { status: "preserved" });
     } else if (sourceFiles[index]) {
       detectSuggestion(sourceFiles[index], index);
