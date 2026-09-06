@@ -13,6 +13,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     const projectTitle = `Integration project ${suffix}`;
     const forkTitle = `Integration fork ${suffix}`;
     const issueTitle = `Integration issue ${suffix}`;
+    const sourceBytes = Buffer.from("PK\\x03\\x04integration-source");
 
     await signUp(page, `Owner ${suffix}`, ownerEmail, password);
     await page.goto("/projects/new");
@@ -45,7 +46,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Upload the first source and previews");
-    await page.locator('input[name="sources"]').setInputFiles({ name: "source.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04integration-source") });
+    await page.locator('input[name="sources"]').setInputFiles({ name: "source.zip", mimeType: "application/zip", buffer: sourceBytes });
     await page.locator('select[name="sourceKinds"]').selectOption("asset");
     await page.locator('input[name="previews"]').setInputFiles([
       { name: "design.png", mimeType: "image/png", buffer: tinyPng },
@@ -59,12 +60,13 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.getByRole("heading", { name: "Initial revision" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "HTML previews" })).toBeVisible();
     await expect(page.locator('iframe[title="HTML design preview"]')).toBeVisible();
-    const sourceLink = page.getByRole("link", { name: "Download original file" });
-    await expect(sourceLink).toHaveAttribute("href", /\/api\/assets\?key=/);
+    const sourceLink = page.getByRole("list", { name: "Revision source files" }).getByRole("listitem").filter({ hasText: "source.zip" }).getByRole("link", { name: "Download" });
+    await expect(sourceLink).toHaveAttribute("href", new RegExp(`/api/projects/${slug}/revisions/1/files/[^/]+$`));
     const sourceResponse = await page.request.get(await sourceLink.getAttribute("href") as string);
     expect(sourceResponse.status()).toBe(200);
     const originalBytes = await sourceResponse.body();
     expect(originalBytes.length).toBeGreaterThan(0);
+    expect(originalBytes).toEqual(sourceBytes);
 
     await page.goto(`/projects/${slug}`);
     await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
@@ -132,7 +134,11 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(forkRevisions).toHaveLength(1);
     expect(forkRevisions[0]).toMatchObject({ number: 1, parentId: null, license: "CC BY 4.0", title: "Restored: Initial revision" });
     expect(forkRevisions[0].previews).toHaveLength(2);
-    const forkSourceUrl = forkRevisions[0].sourceUrl as string;
+    const forkSlug = forkPath.split("/").at(-1)!;
+    await page.goto(`${forkPath}/revisions/1`);
+    const forkSourceLink = page.getByRole("list", { name: "Revision source files" }).getByRole("listitem").filter({ hasText: "source.zip" }).getByRole("link", { name: "Download" });
+    await expect(forkSourceLink).toHaveAttribute("href", new RegExp(`/api/projects/${forkSlug}/revisions/1/files/[^/]+$`));
+    const forkSourceUrl = await forkSourceLink.getAttribute("href") as string;
     const forkDownload = await page.request.get(forkSourceUrl);
     expect(forkDownload.status()).toBe(200);
     expect(await forkDownload.body()).toEqual(originalBytes);
