@@ -26,7 +26,8 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const sourceRevision = useMemo(() => sourceRevisions.find((revision) => revision.id === sourceRevisionId) ?? sourceRevisions[0], [sourceRevisionId, sourceRevisions]);
-  const canChooseUnits = Boolean(baseRevision.files.length && sourceRevision?.files.length);
+  const canChooseUnits = Boolean(baseRevision.files.length);
+  const canUseSourceUnits = Boolean(sourceRevision?.files.length);
   const sourceOnlyFiles = useMemo(() => sourceRevision?.files.filter((file) => !baseRevision.files.some((target) => target.id === file.id)) ?? [], [baseRevision.files, sourceRevision]);
 
   function resetRequest() {
@@ -43,7 +44,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
 
   function addChange() {
     if (!canChooseUnits || changes.length >= 10) return;
-    setChanges((current) => [...current, { key: crypto.randomUUID(), action: "MODIFY_UNIT", targetFileId: baseRevision.files[0]?.id, sourceFileId: sourceRevision?.files[0]?.id }]);
+    setChanges((current) => [...current, { key: crypto.randomUUID(), action: canUseSourceUnits ? "MODIFY_UNIT" : "RENAME_UNIT", targetFileId: baseRevision.files[0]?.id, sourceFileId: canUseSourceUnits ? sourceRevision?.files[0]?.id : undefined, newName: canUseSourceUnits ? undefined : "" }]);
     resetRequest();
   }
 
@@ -112,7 +113,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
         const target = baseRevision.files.find((file) => file.id === change.targetFileId);
         const needsTarget = change.action !== "ADD_UNIT";
         return <article className="change-row file-input-row" key={change.key}>
-          <label>Action <select value={change.action} onChange={(event) => updateChange(change.key, { action: event.target.value as UnitAction, targetFileId: event.target.value === "ADD_UNIT" ? undefined : change.targetFileId ?? baseRevision.files[0]?.id, sourceFileId: event.target.value === "RENAME_UNIT" || event.target.value === "REMOVE_UNIT" ? undefined : event.target.value === "ADD_UNIT" ? sourceOnlyFiles[0]?.id : change.sourceFileId ?? sourceRevision?.files[0]?.id, newName: event.target.value === "RENAME_UNIT" ? change.newName ?? "" : undefined })}><option value="MODIFY_UNIT">Modify</option><option value="RENAME_UNIT">Rename</option><option value="REMOVE_UNIT">Remove</option><option value="ADD_UNIT">Add</option></select></label>
+          <label>Action <select value={change.action} onChange={(event) => updateChange(change.key, { action: event.target.value as UnitAction, targetFileId: event.target.value === "ADD_UNIT" ? undefined : change.targetFileId ?? baseRevision.files[0]?.id, sourceFileId: event.target.value === "RENAME_UNIT" || event.target.value === "REMOVE_UNIT" ? undefined : event.target.value === "ADD_UNIT" ? sourceOnlyFiles[0]?.id : change.sourceFileId ?? sourceRevision?.files[0]?.id, newName: event.target.value === "RENAME_UNIT" ? change.newName ?? "" : undefined })}><option value="MODIFY_UNIT" disabled={!canUseSourceUnits}>Modify</option><option value="RENAME_UNIT">Rename</option><option value="REMOVE_UNIT">Remove</option><option value="ADD_UNIT" disabled={!canUseSourceUnits}>Add</option></select></label>
           {needsTarget && <label>Target <select value={change.targetFileId ?? ""} onChange={(event) => updateChange(change.key, { targetFileId: event.target.value })}>{baseRevision.files.map((file) => <option value={file.id} key={file.id}>{unitLabel(file)}</option>)}</select></label>}
           {change.action === "MODIFY_UNIT" && <label>Replacement source <select value={change.sourceFileId ?? ""} onChange={(event) => updateChange(change.key, { sourceFileId: event.target.value })}>{sourceRevision?.files.map((file) => <option value={file.id} key={file.id}>{unitLabel(file)}</option>)}</select></label>}
           {change.action === "ADD_UNIT" && <label>Source unit <select value={change.sourceFileId ?? ""} onChange={(event) => updateChange(change.key, { sourceFileId: event.target.value })}><option value="">Choose source unit</option>{sourceOnlyFiles.map((file) => <option value={file.id} key={file.id}>{unitLabel(file)}</option>)}</select>{sourceOnlyFiles.length === 0 && <span className="meta">Publish a new source unit before adding one.</span>}</label>}
@@ -121,6 +122,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
           <button type="button" className="button secondary" onClick={() => removeChange(change.key)}>Discard change</button>
         </article>;
       })}
+      {canChooseUnits && !canUseSourceUnits && <p className="meta">This From revision has no file bundle, so rename and remove changes are available.</p>}
       {canChooseUnits && !changes.length && <p className="empty-state">Add a change to begin. A unit can appear only once in a proposal.</p>}
       {changes.length > 0 && <p className="meta">Summary: {changes.map((change) => actionLabel(change.action).toLowerCase()).join(" · ")}</p>}
     </section>

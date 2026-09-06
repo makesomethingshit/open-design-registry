@@ -45,7 +45,8 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Upload the first source and previews");
-    await page.locator('input[name="source"]').setInputFiles({ name: "source.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04integration-source") });
+    await page.locator('input[name="sources"]').setInputFiles({ name: "source.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04integration-source") });
+    await page.locator('select[name="sourceKinds"]').selectOption("asset");
     await page.locator('input[name="previews"]').setInputFiles([
       { name: "design.png", mimeType: "image/png", buffer: tinyPng },
       { name: "preview.html", mimeType: "text/html", buffer: Buffer.from("<main><h1>Integration preview</h1></main>") },

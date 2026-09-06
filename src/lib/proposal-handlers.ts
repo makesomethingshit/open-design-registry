@@ -106,9 +106,9 @@ async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) 
   return projects;
 }
 
-function unitChanges(base: RevisionBundle, source: RevisionBundle, requested: UnitChangeRequest[]) {
+function unitChanges(base: RevisionBundle, source: RevisionBundle | null, requested: UnitChangeRequest[]) {
   const targets = new Map(base.files.map((file) => [file.id, file]));
-  const sources = new Map(source.files.map((file) => [file.id, file]));
+  const sources = new Map(source?.files.map((file) => [file.id, file]) ?? []);
   const changedTargets = new Set<string>();
   const addedSources = new Set<string>();
   const changes: ProposalChangeData[] = [];
@@ -248,14 +248,19 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   ]);
   if (!baseRevision) return error("Base revision not found", 400);
   if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
-  const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundle(baseRevision.sourceKey), readRevisionBundle(sourceRevision.sourceKey)]);
   const requestedFiles = input.files ?? [];
   const requestedUnitChanges = input.changes ?? [];
   if (requestedFiles.length && requestedUnitChanges.length) return error("Use either legacy file replacements or unit changes, not both");
-  if ((requestedFiles.length || requestedUnitChanges.length) && (!baseBundle || !sourceBundle)) return error("This revision needs a file bundle before individual units can be changed.", 409);
+  const needsBaseBundle = Boolean(requestedFiles.length || requestedUnitChanges.length);
+  const needsSourceBundle = Boolean(requestedFiles.length || requestedUnitChanges.some((change) => change.action === "ADD_UNIT" || change.action === "MODIFY_UNIT"));
+  const [baseBundle, sourceBundle] = await Promise.all([
+    needsBaseBundle ? readRevisionBundle(baseRevision.sourceKey) : Promise.resolve(null),
+    needsSourceBundle ? readRevisionBundle(sourceRevision.sourceKey) : Promise.resolve(null),
+  ]);
+  if ((needsBaseBundle && !baseBundle) || (needsSourceBundle && !sourceBundle)) return error("This revision needs a file bundle before individual units can be changed.", 409);
   let changes: ProposalChangeData[];
   if (requestedUnitChanges.length) {
-    const prepared = unitChanges(baseBundle!, sourceBundle!, requestedUnitChanges as UnitChangeRequest[]);
+    const prepared = unitChanges(baseBundle!, sourceBundle, requestedUnitChanges as UnitChangeRequest[]);
     if ("error" in prepared) return error(prepared.error ?? "Selected unit is invalid");
     changes = prepared.changes;
   } else if (requestedFiles.length) {
@@ -413,8 +418,8 @@ type SelectedUnitChange = {
   kind: string | null;
 };
 
-function selectiveBundle(latest: RevisionBundle, source: RevisionBundle, changes: SelectedUnitChange[]) {
-  const sourceFiles = new Map(source.files.map((file) => [file.assetKey, file]));
+function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, changes: SelectedUnitChange[]) {
+  const sourceFiles = new Map(source?.files.map((file) => [file.assetKey, file]) ?? []);
   const files = [...latest.files];
   const changedIds = new Set<string>();
   for (const change of changes) {
@@ -525,8 +530,16 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         return { revision, alreadyApplied: false };
       }
       const latestWithSource = await tx.revision.findUnique({ where: { id: latest.id }, include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } });
-      const [latestBundle, sourceBundle] = await Promise.all([readRevisionBundle(latestWithSource?.sourceKey), readRevisionBundle(source.sourceKey)]);
-      if (!latestWithSource || !latestBundle || !sourceBundle) throw new ProposalError("This revision needs a file bundle before individual files can be replaced.", 409);
+      if (!latestWithSource) throw new ProposalError("Current revision not found", 409);
+      const needsSourceBundle = selected.some((change) => {
+        const action = change.action ?? change.type;
+        return action === "ADD_UNIT" || action === "MODIFY_UNIT" || action === "REPLACE_ASSET";
+      });
+      const [latestBundle, sourceBundle] = await Promise.all([
+        readRevisionBundle(latestWithSource.sourceKey),
+        needsSourceBundle ? readRevisionBundle(source.sourceKey) : Promise.resolve(null),
+      ]);
+      if (!latestBundle || (needsSourceBundle && !sourceBundle)) throw new ProposalError("This revision needs a file bundle before individual files can be replaced.", 409);
       const bundle = selectiveBundle(latestBundle, sourceBundle, selected);
       const previewByKey = new Map([...latestWithSource.previews, ...source.previews].map((preview) => [preview.key, preview]));
       const previewKeys = [...new Set(bundle.files.flatMap((file) => file.previewKeys))];

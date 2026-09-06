@@ -99,6 +99,27 @@ describe("proposal creation route", () => {
     expect(created[3].targetFileId).not.toBe("hero");
   });
 
+  it("creates rename and non-last removal changes without a source bundle", async () => {
+    const base = { version: 2, files: [
+      { id: "card", name: "Card", kind: "component", mimeType: "image/png", size: 20, assetKey: "card-key", previewKeys: [] },
+      { id: "logo", name: "Logo", kind: "asset", mimeType: "image/png", size: 20, assetKey: "logo-key", previewKeys: [] },
+      { id: "footer", name: "Footer", kind: "component", mimeType: "image/png", size: 20, assetKey: "footer-key", previewKeys: [] },
+    ] };
+    mocks.findSource.mockResolvedValue({ id: "source", isPublished: true, sourceKey: null, sourceUrl: "https://example.com/source", project: { id: "source-project", ownerId: "contributor" } });
+    mocks.readBundle.mockImplementation((key: string | null | undefined) => Promise.resolve(key === "base-bundle" ? base : null));
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Metadata changes", body: "Explain", changes: [
+      { action: "RENAME_UNIT", targetFileId: "card", newName: "Project Card" },
+      { action: "REMOVE_UNIT", targetFileId: "logo" },
+    ] }), { params: Promise.resolve({ slug: "target" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.readBundle).toHaveBeenCalledTimes(1);
+    expect(mocks.readBundle).toHaveBeenCalledWith("base-bundle");
+    expect(mocks.createProposal.mock.calls[0][0].data.changeSet.create.changes.create).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "RENAME_UNIT", targetFileId: "card", newName: "Project Card" }),
+      expect.objectContaining({ action: "REMOVE_UNIT", targetFileId: "logo" }),
+    ]));
+  });
+
   it("blocks duplicate targets and unchanged rename values", async () => {
     const duplicate = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Duplicate", body: "Explain", changes: [{ action: "RENAME_UNIT", targetFileId: "target-file", newName: "Poster" }, { action: "REMOVE_UNIT", targetFileId: "target-file" }] }), { params: Promise.resolve({ slug: "target" }) });
     expect(duplicate.status).toBe(400);

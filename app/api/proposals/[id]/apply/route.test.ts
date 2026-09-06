@@ -150,6 +150,31 @@ describe("selective proposal apply route", () => {
     expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "proposal" }, data: { status: "ACCEPTED", acceptedById: "owner" } });
   });
 
+  it("applies approved rename and non-last removal changes without a source bundle", async () => {
+    const unitLatest = { version: 2, files: [
+      { id: "card", name: "Card", kind: "component", mimeType: "image/png", size: 10, assetKey: "card-key", previewKeys: ["target-a-preview"] },
+      { id: "logo", name: "Logo", kind: "asset", mimeType: "image/png", size: 11, assetKey: "logo-key", previewKeys: ["target-b-preview"] },
+      { id: "footer", name: "Footer", kind: "component", mimeType: "image/png", size: 12, assetKey: "footer-key", previewKeys: ["target-b-preview"] },
+    ] };
+    const unitChanges = [
+      { id: "rename", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Card", targetFileId: "card", name: "Card", newName: "Project Card", kind: "component", mimeType: null, size: null, assetKey: null, reviewStatus: "APPROVED", appliedRevisionId: null },
+      { id: "remove", type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: "Logo", targetFileId: "logo", name: "Logo", newName: null, kind: "asset", mimeType: "image/png", size: 11, assetKey: null, reviewStatus: "APPROVED", appliedRevisionId: null },
+    ];
+    const sourceRevision = { ...proposal().sourceRevision, sourceKey: null, sourceUrl: "https://example.com/source" };
+    mocks.findProposal.mockResolvedValue(proposal({ sourceRevision, changeSet: { id: "set", changes: unitChanges } }));
+    mocks.readBundle.mockResolvedValue(unitLatest);
+    const response = await POST(request({ changeIds: ["rename", "remove"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.readBundle).toHaveBeenCalledTimes(1);
+    expect(mocks.readBundle).toHaveBeenCalledWith("latest-bundle");
+    const bundle = mocks.putBundle.mock.calls[0][1];
+    expect(bundle.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "card", name: "Project Card", assetKey: "card-key" }),
+      expect.objectContaining({ id: "footer", name: "Footer", assetKey: "footer-key" }),
+    ]));
+    expect(bundle.files.some((file: { id: string }) => file.id === "logo")).toBe(false);
+  });
+
   it("blocks the last remaining unit from being removed", async () => {
     mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: [{ id: "remove", type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: "old-a.ai", targetFileId: "target-a", name: "old-a.ai", newName: null, kind: "asset", mimeType: "application/postscript", size: 10, assetKey: null, reviewStatus: "APPROVED", appliedRevisionId: null }] } }));
     mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? sourceBundle : { version: 2, files: [latestBundle.files[0]] }));
