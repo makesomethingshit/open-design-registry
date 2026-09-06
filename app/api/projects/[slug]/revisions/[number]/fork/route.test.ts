@@ -5,7 +5,7 @@ vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession }
 vi.mock("@/src/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 const { POST } = await import("./route");
 const preview = { position: 0, key: "revisions/source/preview.png", url: "/api/assets?key=revisions/source/preview.png", mimeType: "image/png", size: 12, altText: "Design preview" };
-const revision = { id: "revision", number: 2, title: "Original", license: "CC BY 4.0", sourceKey: "revisions/source/design.zip", sourceUrl: null, tool: "penpot", toolVersion: "2", tags: ["poster"], sourceChecksum: "a".repeat(64), previews: [preview] };
+const revision = { id: "revision", number: 2, title: "Original", license: "CC BY 4.0", sourceKey: "revisions/source/design.zip", sourceUrl: null, tool: "penpot", toolVersion: "2", tags: ["poster"], sourceChecksum: "a".repeat(64), capabilityMode: "STRUCTURED", capabilityUnitCount: 2, adapterId: "svg", adapterVersion: "0.4", adapterConfidence: "LOW", adapterMaturity: "beta", previews: [preview] };
 const source = { id: "project", slug: "demo", title: "Design", description: "Notes", license: "MIT", coverUrl: "/api/assets?key=cover", isPublic: true, ownerId: "owner", revisions: [revision] };
 function request(rightsConfirmed: unknown = true) {
   return new Request("http://localhost/api/projects/demo/revisions/2/fork", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "Fork", rightsConfirmed }) });
@@ -47,6 +47,7 @@ describe("revision fork route", () => {
       projectId: "fork", number: 1, title: "Original", changeDescription: "Forked from Revision 2 of demo",
       license: "CC BY 4.0", sourceKey: revision.sourceKey, sourceUrl: null,
       tool: "penpot", toolVersion: "2", tags: ["poster"], sourceChecksum: revision.sourceChecksum,
+      capabilityMode: "STRUCTURED", capabilityUnitCount: 2, adapterId: "svg", adapterVersion: "0.4", adapterConfidence: "LOW", adapterMaturity: "beta",
       isPublished: false, previews: { create: [preview] },
     } });
     expect(mocks.publishRevision).toHaveBeenCalledWith({ where: { id: "fork-revision" }, data: { isPublished: true } });

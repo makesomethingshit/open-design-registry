@@ -148,6 +148,12 @@ model Revision {
   toolVersion String?
   tags       String[] @default([])
   sourceChecksum String?
+  capabilityMode RevisionCapabilityMode?
+  capabilityUnitCount Int?
+  adapterId String?
+  adapterVersion String?
+  adapterConfidence AdapterConfidence?
+  adapterMaturity String?
   isPublished Boolean   @default(true)
   createdAt  DateTime  @default(now())
   project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -173,6 +179,18 @@ model Revision {
 enum IssueStatus {
   OPEN
   CLOSED
+}
+
+enum RevisionCapabilityMode {
+  STRUCTURED
+  WHOLE_DOCUMENT
+}
+
+enum AdapterConfidence {
+  HIGH
+  MEDIUM
+  LOW
+  NOT_ASSESSED
 }
 
 enum ProposalStatus {

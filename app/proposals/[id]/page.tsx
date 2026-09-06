@@ -5,6 +5,7 @@ import { findVisibleProposal } from "@/src/lib/proposal-handlers";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
+import CapabilityBadge from "@/app/capability-badge";
 import ProposalReview from "./proposal-review";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +15,8 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const session = await getSession();
   const proposal = await findVisibleProposal(id, session?.user.id);
   if (!proposal) notFound();
-  const latest = await prisma.revision.findFirst({ where: { projectId: proposal.project.id, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, sourceKey: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } });
-  const toRevision = (revision: { id: string; number: number; title: string; previews: Array<{ id: string; position: number; key: string; url: string; mimeType: string; altText: string }> }) => ({ ...revision, previews: revision.previews.filter((preview) => preview.mimeType !== "text/html").map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) });
+  const latest = await prisma.revision.findFirst({ where: { projectId: proposal.project.id, isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } });
+  const toRevision = (revision: { id: string; number: number; title: string; capabilityMode?: string | null; capabilityUnitCount?: number | null; previews: Array<{ id: string; position: number; key: string; url: string; mimeType: string; altText: string }> }) => ({ ...revision, previews: revision.previews.filter((preview) => preview.mimeType !== "text/html").map(({ key: _key, ...preview }) => ({ ...preview, url: publicAssetUrl(preview.url) })) });
   const baseRevision = toRevision(proposal.baseRevision);
   const sourceRevision = toRevision(proposal.sourceRevision);
   const latestRevision = latest ? toRevision(latest) : null;
@@ -37,16 +38,20 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
     };
   }) ?? [];
   const stale = Boolean(latest && latest.id !== proposal.baseRevisionId);
+  const latestUnitCount = latestBundle?.files.length ?? null;
   const isOwner = session?.user.id === proposal.project.ownerId;
   const canClose = Boolean(session && (isOwner || session.user.id === proposal.authorId));
   return <article className="detail proposal-page">
     <p className="meta"><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> · Proposal #{proposal.proposalNumber}</p>
     <div className="proposal-heading"><h1>{proposal.title}</h1><span className={`proposal-status ${proposal.status.toLowerCase()}`}>{proposal.status.replaceAll("_", " ")}</span></div>
     <p className="meta">{proposal.author.name} proposes {proposal.sourceRevision.project.title} Revision {proposal.sourceRevision.number} → {proposal.project.title} Revision {proposal.baseRevision.number}</p>
+    <CapabilityBadge mode={proposal.baseRevision.capabilityMode} unitCount={proposal.baseRevision.capabilityUnitCount} label={`Base Revision ${proposal.baseRevision.number}`} />
+    <CapabilityBadge mode={proposal.sourceRevision.capabilityMode} unitCount={proposal.sourceRevision.capabilityUnitCount} label={`Source Revision ${proposal.sourceRevision.number}`} />
+    {proposal.sourceRevision.adapterId && <p className="meta">Suggested by {proposal.sourceRevision.adapterId.toUpperCase()} adapter{proposal.sourceRevision.adapterVersion ? ` ${proposal.sourceRevision.adapterVersion}` : ""} · {proposal.sourceRevision.adapterMaturity ?? "beta"} · Suggestion confidence: {proposal.sourceRevision.adapterConfidence?.replaceAll("_", " ") ?? "not assessed"}</p>}
     <p className="proposal-body">{proposal.body}</p>
     {proposal.relatedIssue && <p className="meta">Related issue: {proposal.relatedIssue.title}</p>}
     {proposal.appliedRevisions.length > 0 && <p className="success-note">Applied changes: {proposal.appliedRevisions.map((revision) => <Link key={revision.id} href={`/projects/${proposal.project.slug}/revisions/${revision.number}`}>Revision {revision.number}</Link>)}</p>}
     {!proposal.sourceRevision.project.isPublic && session?.user.id === proposal.authorId && <p className="stale-banner">Private workspace · visible to you. The project owner cannot review this proposal while its source is private.</p>}
-    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} stale={stale} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
+    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} latestUnitCount={latestUnitCount} stale={stale} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
   </article>;
 }

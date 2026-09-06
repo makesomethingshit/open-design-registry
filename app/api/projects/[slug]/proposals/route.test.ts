@@ -136,7 +136,7 @@ describe("proposal creation route", () => {
 
   it("returns lightweight cursor summaries without change assets", async () => {
     const now = new Date();
-    mocks.findMany.mockResolvedValue([{ id: "summary", proposalNumber: 3, title: "Rename card", status: "OPEN", authorId: "contributor", createdAt: now, updatedAt: now, author: { name: "Contributor" }, changeSet: { changes: [{ id: "change", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Card", name: "Card", newName: "Project Card", kind: "component", reviewStatus: "APPROVED", appliedRevisionId: null }] } }]);
+    mocks.findMany.mockResolvedValue([{ id: "summary", proposalNumber: 3, title: "Rename card", status: "OPEN", authorId: "contributor", createdAt: now, updatedAt: now, author: { name: "Contributor" }, baseRevision: { capabilityMode: "STRUCTURED", capabilityUnitCount: 1 }, changeSet: { changes: [{ id: "change", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Card", name: "Card", newName: "Project Card", kind: "component", reviewStatus: "APPROVED", appliedRevisionId: null }] } }]);
     mocks.count.mockResolvedValue(1);
     const response = await GET(new Request("http://localhost/api/projects/target/proposals?status=open&limit=1"), { params: Promise.resolve({ slug: "target" }) });
     expect(response.status).toBe(200);

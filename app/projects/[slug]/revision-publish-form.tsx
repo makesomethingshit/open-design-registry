@@ -1,12 +1,30 @@
 "use client";
 
-import { type ChangeEvent, type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import CapabilityBadge from "@/app/capability-badge";
+import { suggestFile, type AdapterSuggestion } from "@/src/lib/adapters";
 
 type ExistingFile = { id: string; name: string; kind?: string };
+type SuggestionState = { status: "detecting" | "unsupported" | "error" | "preserved" } | { status: "available"; suggestion: AdapterSuggestion };
 
 function kindLabel(kind?: string) {
   return kind ? `${kind.slice(0, 1).toUpperCase()}${kind.slice(1)}` : "Asset · legacy";
+}
+
+export function nextSuggestionRequest(requests: number[], counter: { current: number }, index: number) {
+  const request = counter.current + 1;
+  counter.current = request;
+  requests[index] = request;
+  return request;
+}
+
+export function isCurrentSuggestionRequest(requests: readonly number[], index: number, request: number) {
+  return requests[index] === request;
+}
+
+export function applySuggestedKind(kinds: string[], index: number, request: number, currentRequest: number | undefined) {
+  return request === currentRequest ? kinds.map((value, currentIndex) => currentIndex === index && !value ? "auto" : value) : kinds;
 }
 
 export default function RevisionPublishForm({ slug, existingFiles }: { slug: string; existingFiles: ExistingFile[] }) {
@@ -14,21 +32,56 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFileIds, setSourceFileIds] = useState<string[]>([]);
   const [sourceKinds, setSourceKinds] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionState[]>([]);
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const suggestionRequests = useRef<number[]>([]);
+  const suggestionRequestCounter = useRef(0);
+  const sourceFileIdsRef = useRef<string[]>([]);
+
+  function updateSuggestion(index: number, suggestion: SuggestionState) {
+    setSuggestions((current) => current.map((value, currentIndex) => currentIndex === index ? suggestion : value));
+  }
+
+  function detectSuggestion(file: File, index: number) {
+    const request = nextSuggestionRequest(suggestionRequests.current, suggestionRequestCounter, index);
+    updateSuggestion(index, { status: "detecting" });
+    void suggestFile(file).then((result) => {
+      if (!isCurrentSuggestionRequest(suggestionRequests.current, index, request)) return;
+      if (result.status !== "available" || result.suggestion.confidence === "not_assessed") {
+        updateSuggestion(index, { status: "unsupported" });
+        return;
+      }
+      updateSuggestion(index, { status: "available", suggestion: result.suggestion });
+      const mapped = existingFiles.find((candidate) => candidate.id === sourceFileIdsRef.current[index]);
+      if (!mapped?.kind) setSourceKinds((current) => applySuggestedKind(current, index, request, suggestionRequests.current[index]));
+    }).catch(() => {
+      if (isCurrentSuggestionRequest(suggestionRequests.current, index, request)) updateSuggestion(index, { status: "error" });
+    });
+  }
 
   function selectSources(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
+    sourceFileIdsRef.current = files.map(() => "");
     setSourceFiles(files);
-    setSourceFileIds(files.map(() => ""));
+    setSourceFileIds(sourceFileIdsRef.current);
     setSourceKinds(files.map(() => ""));
+    setSuggestions(files.map(() => ({ status: "detecting" })));
+    files.forEach((file, index) => detectSuggestion(file, index));
   }
 
   function selectExisting(index: number, id: string) {
     const existing = existingFiles.find((file) => file.id === id);
-    setSourceFileIds((current) => current.map((value, currentIndex) => currentIndex === index ? id : value));
-    setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? existing?.kind ?? "" : value));
+    sourceFileIdsRef.current = sourceFileIdsRef.current.map((value, currentIndex) => currentIndex === index ? id : value);
+    setSourceFileIds(sourceFileIdsRef.current);
+    setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? "" : value));
+    if (existing?.kind) {
+      nextSuggestionRequest(suggestionRequests.current, suggestionRequestCounter, index);
+      updateSuggestion(index, { status: "preserved" });
+    } else if (sourceFiles[index]) {
+      detectSuggestion(sourceFiles[index], index);
+    }
   }
 
   function selectPreviews(event: ChangeEvent<HTMLInputElement>) {
@@ -72,9 +125,36 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
     <label>Source SHA-256 checksum<input name="sourceChecksum" inputMode="text" pattern="[a-fA-F0-9]{64}" maxLength={64} placeholder="Optional for one uploaded file" /></label>
     <label>Previews (PNG/JPG/HTML, up to 10)<input name="previews" type="file" accept="image/png,image/jpeg,text/html" multiple required onChange={selectPreviews} /></label>
     {previewFiles.map((file, index) => <label key={`${file.name}-${index}`}>Alt text for {file.name}<input name="altTexts" required maxLength={500} /></label>)}
+    {sourceFiles.length > 0 ? <CapabilityBadge mode="structured" unitCount={sourceFiles.length} label="Capability" provisional /> : <p className="meta">Add source files to enable file-level units.</p>}
     {sourceFiles.map((file, index) => {
       const existing = existingFiles.find((candidate) => candidate.id === sourceFileIds[index]);
-      return <section className="file-input-list" key={`${file.name}-${index}`}><h3>{file.name}</h3><label>Unit identity<select name="sourceFileIds" value={sourceFileIds[index] ?? ""} onChange={(event) => selectExisting(index, event.target.value)}><option value="">New unit</option>{existingFiles.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name} · {kindLabel(candidate.kind)}</option>)}</select></label>{existing?.kind ? <><input type="hidden" name="sourceKinds" value={existing.kind} /><p className="meta">Kind: {kindLabel(existing.kind)} · preserved for this existing unit.</p></> : <label>Kind<select name="sourceKinds" value={sourceKinds[index] ?? ""} onChange={(event) => setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} required><option value="">Choose kind</option><option value="artboard">Artboard</option><option value="component">Component</option><option value="asset">Asset</option><option value="token">Token</option></select></label>}<p className="meta">Choose what this file represents. ODR does not inspect layers or extract units automatically.</p>{previewFiles.length > 0 && <label>Preview for {file.name}<select name="sourcePreviewIndexes" defaultValue={Math.min(index, previewFiles.length - 1)} required>{previewFiles.map((preview, previewIndex) => <option value={previewIndex} key={`${preview.name}-${previewIndex}`}>{preview.name}</option>)}</select></label>}</section>;
+      const suggestion = suggestions[index];
+      const selection = sourceKinds[index] ?? "";
+      const actualKind = existing?.kind ?? (selection === "auto" && suggestion?.status === "available" ? suggestion.suggestion.kind : selection);
+      const selectionMode = existing?.kind ? "preserved" : selection === "auto" ? "auto" : "manual";
+      const hintId = `source-kind-${index}-hint`;
+      return <section className="file-input-list" key={`${file.name}-${index}`} aria-busy={suggestion?.status === "detecting"}>
+        <h3>{file.name}</h3>
+        <label>Unit identity<select value={sourceFileIds[index] ?? ""} onChange={(event) => selectExisting(index, event.target.value)}><option value="">New unit</option>{existingFiles.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name} · {kindLabel(candidate.kind)}</option>)}</select></label>
+        <input type="hidden" name="sourceFileIds" value={sourceFileIds[index] ?? ""} />
+        <input type="hidden" name="sourceKinds" value={actualKind} />
+        <input type="hidden" name="sourceKindModes" value={selectionMode} />
+        {existing?.kind ? <p className="meta">{kindLabel(existing.kind)} · Preserved from the current revision.</p> : <>
+          <label>Kind for {file.name}<select value={selection} onChange={(event) => setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} required aria-describedby={hintId}>
+            <option value="">Choose kind</option>
+            {suggestion?.status === "available" && <option value="auto">Auto ({suggestion.suggestion.kind})</option>}
+            <option value="artboard">Artboard</option><option value="component">Component</option><option value="asset">Asset</option><option value="token">Token</option>
+          </select></label>
+          <div className="meta" id={hintId} aria-live="polite">
+            {suggestion?.status === "detecting" && "Detecting suggestion…"}
+            {suggestion?.status === "available" && <>Suggested by {suggestion.suggestion.adapterId.toUpperCase()} adapter · {kindLabel(suggestion.suggestion.maturity)}. Suggestion confidence: {kindLabel(suggestion.suggestion.confidence)}.{suggestion.suggestion.confidence === "low" && " Check this suggestion before publishing."}{selection !== "auto" && <> <button type="button" className="link-button" onClick={() => setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? "auto" : value))}>Use suggestion: {kindLabel(suggestion.suggestion.kind)}</button></>}</>}
+            {suggestion?.status === "unsupported" && "No suggestion for this format. Choose a kind."}
+            {suggestion?.status === "error" && <>Suggestion unavailable. Choose a kind to continue. <button type="button" className="link-button" onClick={() => sourceFiles[index] && detectSuggestion(sourceFiles[index], index)}>Retry suggestion</button></>}
+          </div>
+        </>}
+        <p className="meta">Choose what this file represents. ODR does not inspect layers or extract units automatically.</p>
+        {previewFiles.length > 0 && <label>Preview for {file.name}<select name="sourcePreviewIndexes" defaultValue={Math.min(index, previewFiles.length - 1)} required>{previewFiles.map((preview, previewIndex) => <option value={previewIndex} key={`${preview.name}-${previewIndex}`}>{preview.name}</option>)}</select></label>}
+      </section>;
     })}
     {error && <p className="error" role="alert">{error}</p>}
     <button className="button" disabled={submitting}>{submitting ? "Publishing…" : "Publish revision"}</button>

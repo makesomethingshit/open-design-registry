@@ -46,6 +46,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           license, sourceKey: revision.sourceKey, sourceUrl: revision.sourceUrl,
           tool: revision.tool, toolVersion: revision.toolVersion, tags: revision.tags,
           sourceChecksum: revision.sourceChecksum, isPublished: false,
+          capabilityMode: revision.capabilityMode, capabilityUnitCount: revision.capabilityUnitCount,
+          adapterId: revision.adapterId, adapterVersion: revision.adapterVersion,
+          adapterConfidence: revision.adapterConfidence, adapterMaturity: revision.adapterMaturity,
           // Immutable objects can be shared. These independent references keep
           // asset access working when the upstream project becomes private.
           previews: { create: revision.previews.map(({ position, key, url, mimeType, size, altText }) => ({ position, key, url, mimeType, size, altText })) },

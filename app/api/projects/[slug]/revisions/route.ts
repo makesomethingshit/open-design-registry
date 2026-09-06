@@ -4,7 +4,8 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { toPublicRevision } from "@/src/lib/revisions";
 import { deleteObject, putObject } from "@/src/lib/storage";
-import { normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
+import { suggestFile } from "@/src/lib/adapters";
+import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import {
   maxRevisionPreviewBytes,
@@ -111,6 +112,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const sourceKinds = form.getAll("sourceKinds");
   if (sourceFiles.length && sourceKinds.length !== sourceFiles.length) return error("Select a kind for each source file");
   const requestedSourceKinds = sourceFiles.map((_, index) => typeof sourceKinds[index] === "string" ? normalizeUnitKind(sourceKinds[index] as string) : null);
+  const sourceKindModes = form.getAll("sourceKindModes");
+  if (sourceKindModes.length && sourceKindModes.length !== sourceFiles.length) return error("Provide one kind selection for each source file");
+  const requestedKindModes = sourceFiles.map((_, index) => sourceKindModes[index]);
+  if (requestedKindModes.some((mode) => mode != null && mode !== "auto" && mode !== "manual" && mode !== "preserved")) return error("Source kind selection is invalid");
+  const sourceSuggestions = await Promise.all(sourceFiles.map(async (file) => {
+    try {
+      const result = await suggestFile(file);
+      return result.status === "available" && result.suggestion.confidence !== "not_assessed" ? result.suggestion : null;
+    } catch {
+      return null;
+    }
+  }));
+  if (requestedKindModes.some((mode, index) => mode === "auto" && (!requestedSourceKinds[index] || sourceSuggestions[index]?.kind !== requestedSourceKinds[index]))) return error("The suggested kind is no longer available");
   const sourceNames = sourceFiles.map((file) => normalizeUnitName(file.name));
   if (sourceNames.some((name) => !name)) return error("Each source file name must be 200 characters or fewer");
   const sourcePreviewIndexes = form.getAll("sourcePreviewIndexes");
@@ -170,6 +184,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
       if ((latest && parentId !== latest.id) || (!latest && parentId)) throw new PublishError("parentId must be the latest revision", 409);
+      let capabilityMode: "STRUCTURED" | "WHOLE_DOCUMENT" = "WHOLE_DOCUMENT";
+      let capabilityUnitCount = 0;
       if (sourceAssets.length) {
         const preservedIds = mappedSourceFileIds.filter((id): id is string => Boolean(id));
         if (new Set(preservedIds).size !== preservedIds.length) throw new PublishError("Each existing file can be mapped only once", 400);
@@ -196,7 +212,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);
         uploadedKeys.push(publishedSourceKey);
         sourceChecksum = checksum;
+        const capability = capabilityForBundle(bundle);
+        capabilityMode = capability.mode === "structured" ? "STRUCTURED" : "WHOLE_DOCUMENT";
+        capabilityUnitCount = capability.unitCount;
       }
+      const adapter = sourceSuggestions.find((suggestion, index) => requestedKindModes[index] === "auto" && Boolean(suggestion));
+      const adapterConfidence = adapter ? ({ high: "HIGH", medium: "MEDIUM", low: "LOW", not_assessed: "NOT_ASSESSED" } as const)[adapter.confidence] : undefined;
       const stagedRevision = await tx.revision.create({
         data: {
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,
@@ -207,6 +228,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           toolVersion: toolVersionResult.data,
           tags: tagResult.tags,
           sourceChecksum,
+          capabilityMode,
+          capabilityUnitCount,
+          adapterId: adapter?.adapterId,
+          adapterVersion: adapter?.adapterVersion,
+          adapterConfidence,
+          adapterMaturity: adapter?.maturity,
           isPublished: false,
           previews: { create: uploadedPreviews },
         },

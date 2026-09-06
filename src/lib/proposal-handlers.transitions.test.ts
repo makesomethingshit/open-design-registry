@@ -14,7 +14,7 @@ function proposal(status = "APPROVED", reviewStatus = "APPROVED", reviewerId: st
     id: "proposal", proposalNumber: 1, projectId: "target", baseRevisionId: "base", sourceRevisionId: "source", authorId: "contributor", relatedIssueId: null, reviewerId, acceptedById: null, title: "Improve header", body: "Better hierarchy", status, createdAt: now, updatedAt: now,
     project: { id: "target", slug: "target", title: "Target", ownerId: "owner", isPublic: true },
     baseRevision: { id: "base", projectId: "target", number: 10, title: "Base", isPublished: true, sourceKey: "base", previews: [] },
-    sourceRevision: { id: "source", projectId: "source", number: 4, title: "Source", isPublished: true, sourceKey: "source.zip", sourceUrl: null, tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: "a".repeat(64), project: { id: "source", slug: "source", title: "Source", ownerId: "contributor", isPublic: true }, previews: [{ id: "preview", position: 0, key: "preview.png", url: "preview.png", mimeType: "image/png", size: 12, altText: "Header" }] },
+    sourceRevision: { id: "source", projectId: "source", number: 4, title: "Source", isPublished: true, sourceKey: "source.zip", sourceUrl: null, tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: "a".repeat(64), capabilityMode: null, capabilityUnitCount: null, adapterId: null, adapterVersion: null, adapterConfidence: null, adapterMaturity: null, project: { id: "source", slug: "source", title: "Source", ownerId: "contributor", isPublic: true }, previews: [{ id: "preview", position: 0, key: "preview.png", url: "preview.png", mimeType: "image/png", size: 12, altText: "Header" }] },
     author: { id: "contributor", name: "Contributor" }, relatedIssue: null, reviewer: reviewerId ? { id: reviewerId, name: "Reviewer" } : null, acceptedBy: null,
     changeSet: { id: "set", proposalId: "proposal", createdAt: now, changes: [{ id: "change", changeSetId: "set", type: "REPLACE_DOCUMENT", target: "whole_document", targetFileId: null, name: null, mimeType: null, size: null, assetKey: null, reviewStatus, reviewComment: null, reviewedById: reviewerId, reviewedAt: reviewerId ? now : null, appliedRevisionId: null, createdAt: now, reviewedBy: reviewerId ? { id: reviewerId, name: "Reviewer" } : null, appliedRevision: null, reviewHistory: [] }] }, comments: [], appliedRevisions: [],
   };
@@ -61,6 +61,11 @@ describe("proposal transition serialization", () => {
     expect(state.status).toBe("ACCEPTED");
     expect(mocks.createRevision).toHaveBeenCalledTimes(1);
     expect(events).toEqual(["lock:source", "lock:target", "proposal", "lock:target", "proposal"]);
+  });
+
+  it("keeps unrecorded capability unknown for a whole-document apply", async () => {
+    expect((await apply()).status).toBe(201);
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ capabilityMode: null, capabilityUnitCount: null }) }));
   });
 
   it("prevents apply when close wins first", async () => {
