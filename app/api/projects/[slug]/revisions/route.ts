@@ -163,12 +163,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const uploadedKeys: string[] = [];
   try {
     let publishedSourceKey: string | undefined;
-    const sourceAssets: Array<{ file: File; key: string }> = [];
+    const sourceAssets: Array<{ file: File; key: string; checksum: string }> = [];
     for (const [index, file] of sourceFiles.entries()) {
       const key = `revisions/${project.id}/${crypto.randomUUID()}/source-${index}-${safeName(file.name)}`;
       await putObject(file, key);
       uploadedKeys.push(key);
-      sourceAssets.push({ file, key });
+      sourceAssets.push({ file, key, checksum: createHash("sha256").update(new Uint8Array(await file.arrayBuffer())).digest("hex") });
     }
     const uploadedPreviews = [] as Array<{ key: string; url: string; mimeType: string; size: number; position: number; altText: string }>;
     for (const [index, file] of previews.entries()) {
@@ -193,7 +193,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         if (preservedIds.length && (!latestBundle || preservedIds.some((id) => !latestBundle.files.some((file) => file.id === id)))) throw new PublishError("An existing file mapping is no longer available", 409);
         const bundle: RevisionBundle = {
           version: 2,
-          files: sourceAssets.map(({ file, key }, index) => {
+          files: sourceAssets.map(({ file, key, checksum }, index) => {
             const previous = mappedSourceFileIds[index] ? latestBundle?.files.find((candidate) => candidate.id === mappedSourceFileIds[index]) : undefined;
             const kind = previous?.kind ?? requestedSourceKinds[index];
             if (!kind) throw new PublishError("Select a kind for each source file", 400);
@@ -205,6 +205,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
               size: file.size,
               assetKey: key,
               previewKeys: previewMappings[index].map((previewIndex) => uploadedPreviews[previewIndex].key),
+              checksum,
             };
           }),
         };

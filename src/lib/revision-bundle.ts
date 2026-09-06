@@ -10,6 +10,8 @@ export type RevisionBundleFile = {
   size: number;
   assetKey: string;
   previewKeys: string[];
+  /** SHA-256 of the immutable source bytes. Absent on legacy bundles. */
+  checksum?: string;
 };
 
 export type RevisionBundle = { version: 1 | 2; files: RevisionBundleFile[] };
@@ -42,7 +44,8 @@ function isBundleFile(value: unknown): value is RevisionBundleFile {
   return ["id", "name", "mimeType", "assetKey"].every((key) => typeof file[key] === "string" && file[key])
     && typeof file.size === "number" && Number.isInteger(file.size) && file.size >= 0
     && Array.isArray(file.previewKeys) && file.previewKeys.every((key) => typeof key === "string" && key)
-    && (file.kind === undefined || (typeof file.kind === "string" && Boolean(file.kind.trim())));
+    && (file.kind === undefined || (typeof file.kind === "string" && Boolean(file.kind.trim())))
+    && (file.checksum === undefined || (typeof file.checksum === "string" && /^[a-f0-9]{64}$/i.test(file.checksum)));
 }
 
 function normalize(bundle: RevisionBundle): RevisionBundle | null {

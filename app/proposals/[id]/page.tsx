@@ -5,6 +5,7 @@ import { findVisibleProposal } from "@/src/lib/proposal-handlers";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
+import { conflictForChange } from "@/src/lib/proposal-conflicts";
 import CapabilityBadge from "@/app/capability-badge";
 import ProposalReview from "./proposal-review";
 
@@ -27,31 +28,40 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
     const sourceFile = sourceBundle?.files.find((file) => file.assetKey === change.assetKey);
     const baseFile = baseBundle?.files.find((file) => file.id === change.targetFileId);
     const latestFile = latestBundle?.files.find((file) => file.id === change.targetFileId);
+    const conflict = action === "REPLACE_DOCUMENT"
+      ? null
+      : latest && latest.id !== proposal.baseRevisionId
+        ? conflictForChange(change, baseBundle, latestBundle)
+        : { status: "NO_CONFLICT" as const, reason: "No upstream conflict." };
     return {
       id: change.id, type: change.type, action: change.action ?? change.type, target: change.target, targetFileId: change.targetFileId, name: change.name, newName: change.newName, kind: change.kind, mimeType: change.mimeType, size: change.size,
-      reviewStatus: change.reviewStatus, reviewComment: change.reviewComment, reviewedBy: change.reviewedBy && { name: change.reviewedBy.name }, appliedRevision: change.appliedRevision ?? (change.type === "REPLACE_DOCUMENT" ? proposal.appliedRevisions[0] ?? null : null), reviewHistory: change.reviewHistory.map((review) => ({ id: review.id, status: review.status, comment: review.comment, createdAt: review.createdAt, author: { name: review.author.name } })),
+      reviewStatus: change.reviewStatus, reviewComment: change.reviewComment, reviewedBy: change.reviewedBy && { name: change.reviewedBy.name }, appliedRevision: change.appliedRevision ?? (change.type === "REPLACE_DOCUMENT" ? proposal.appliedRevisions[0] ?? null : null), reviewHistory: change.reviewHistory.map((review) => ({ id: review.id, status: review.status, eventType: review.eventType, comment: review.comment, reason: review.reason, createdAt: review.createdAt, author: review.author && { name: review.author.name }, checkedLatestRevisionId: review.checkedLatestRevisionId, causedByRevision: review.causedByRevision })),
       latestAvailable: action === "ADD_UNIT" || action === "REPLACE_DOCUMENT" || Boolean(latestFile),
       latestName: latestFile?.name ?? null,
+      conflictStatus: conflict?.status ?? null,
+      conflictReason: conflict?.reason ?? null,
+      checkedLatestRevisionId: latest?.id ?? proposal.baseRevisionId,
       sourcePreviews: action === "REMOVE_UNIT" ? [] : sourceFile ? previewsFor(proposal.sourceRevision, sourceFile.previewKeys) : sourceRevision.previews,
       basePreviews: action === "ADD_UNIT" ? [] : baseFile ? previewsFor(proposal.baseRevision, baseFile.previewKeys) : baseRevision.previews,
       latestPreviews: latestFile && latest ? previewsFor(latest, latestFile.previewKeys) : latestRevision?.previews ?? [],
     };
   }) ?? [];
   const stale = Boolean(latest && latest.id !== proposal.baseRevisionId);
-  const latestUnitCount = latestBundle?.files.length ?? null;
+  const latestUnitCount = latestBundle?.files.length ?? latest?.capabilityUnitCount ?? null;
+  const knownConflictCount = new Set(changes.filter((change) => !change.appliedRevision && change.conflictStatus === "CONFLICT" && change.targetFileId).map((change) => change.targetFileId)).size;
+  const unavailableConflictCount = new Set(changes.filter((change) => !change.appliedRevision && change.conflictStatus === "CHECK_UNAVAILABLE" && change.targetFileId).map((change) => change.targetFileId)).size;
   const isOwner = session?.user.id === proposal.project.ownerId;
   const canClose = Boolean(session && (isOwner || session.user.id === proposal.authorId));
   return <article className="detail proposal-page">
     <p className="meta"><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> · Proposal #{proposal.proposalNumber}</p>
     <div className="proposal-heading"><h1>{proposal.title}</h1><span className={`proposal-status ${proposal.status.toLowerCase()}`}>{proposal.status.replaceAll("_", " ")}</span></div>
     <p className="meta">{proposal.author.name} proposes {proposal.sourceRevision.project.title} Revision {proposal.sourceRevision.number} → {proposal.project.title} Revision {proposal.baseRevision.number}</p>
-    <CapabilityBadge mode={proposal.baseRevision.capabilityMode} unitCount={proposal.baseRevision.capabilityUnitCount} label={`Base Revision ${proposal.baseRevision.number}`} />
-    <CapabilityBadge mode={proposal.sourceRevision.capabilityMode} unitCount={proposal.sourceRevision.capabilityUnitCount} label={`Source Revision ${proposal.sourceRevision.number}`} />
-    {proposal.sourceRevision.adapterId && <p className="meta">Suggested by {proposal.sourceRevision.adapterId.toUpperCase()} adapter{proposal.sourceRevision.adapterVersion ? ` ${proposal.sourceRevision.adapterVersion}` : ""} · {proposal.sourceRevision.adapterMaturity ?? "beta"} · Suggestion confidence: {proposal.sourceRevision.adapterConfidence?.replaceAll("_", " ") ?? "not assessed"}</p>}
+    <CapabilityBadge mode={proposal.baseRevision.capabilityMode} unitCount={proposal.baseRevision.capabilityUnitCount} label={`Base Revision ${proposal.baseRevision.number}`} adapterId={proposal.baseRevision.adapterId} adapterVersion={proposal.baseRevision.adapterVersion} adapterConfidence={proposal.baseRevision.adapterConfidence} adapterMaturity={proposal.baseRevision.adapterMaturity} />
+    <CapabilityBadge mode={proposal.sourceRevision.capabilityMode} unitCount={proposal.sourceRevision.capabilityUnitCount} label={`Source Revision ${proposal.sourceRevision.number}`} adapterId={proposal.sourceRevision.adapterId} adapterVersion={proposal.sourceRevision.adapterVersion} adapterConfidence={proposal.sourceRevision.adapterConfidence} adapterMaturity={proposal.sourceRevision.adapterMaturity} />
     <p className="proposal-body">{proposal.body}</p>
     {proposal.relatedIssue && <p className="meta">Related issue: {proposal.relatedIssue.title}</p>}
     {proposal.appliedRevisions.length > 0 && <p className="success-note">Applied changes: {proposal.appliedRevisions.map((revision) => <Link key={revision.id} href={`/projects/${proposal.project.slug}/revisions/${revision.number}`}>Revision {revision.number}</Link>)}</p>}
     {!proposal.sourceRevision.project.isPublic && session?.user.id === proposal.authorId && <p className="stale-banner">Private workspace · visible to you. The project owner cannot review this proposal while its source is private.</p>}
-    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} latestUnitCount={latestUnitCount} stale={stale} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
+    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} latestUnitCount={latestUnitCount} stale={stale} knownConflictCount={knownConflictCount} unavailableConflictCount={unavailableConflictCount} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
   </article>;
 }

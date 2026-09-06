@@ -244,6 +244,17 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; accent
 .proposal-status.changes_requested { border-color: rgba(210, 153, 34, .6); color: #d29922; }
 .proposal-status.accepted { border-color: rgba(88, 166, 255, .6); color: var(--link); }
 .proposal-status.closed { opacity: .65; }
+.proposal-status.conflict-conflict { border-color: rgba(245, 181, 157, .7); color: #f5b59d; }
+.proposal-status.conflict-no_conflict { border-color: rgba(63, 185, 80, .5); color: var(--green); }
+.proposal-status.conflict-check_unavailable { border-color: rgba(210, 153, 34, .7); color: #d29922; }
+.capability-badge { display: grid; justify-items: start; gap: 4px; margin-block: 6px; }
+.capability-badge p { margin: 0; }
+.capability-details-toggle { font-size: .8rem; }
+.capability-details { display: grid; gap: 6px; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.capability-details dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin: 0; }
+.capability-details div { display: grid; gap: 1px; }
+.capability-details dt { color: var(--muted); font-size: .75rem; }
+.capability-details dd { margin: 0; font-size: .85rem; }
 .stale-banner { display: grid; gap: 9px; padding: 17px; margin-top: 24px; border: 1px solid rgba(210, 153, 34, .65); border-radius: var(--radius); background: rgba(210, 153, 34, .1); }
 .stale-banner p { margin: 0; color: var(--muted); }
 .stale-confirm { display: flex; align-items: start; gap: 8px; color: var(--fg); font-size: .9rem; }

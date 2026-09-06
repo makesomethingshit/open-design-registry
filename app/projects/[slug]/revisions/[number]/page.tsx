@@ -37,7 +37,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <h1>{revision.title}</h1>
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
     <p>{revision.changeDescription}</p>
-    <CapabilityBadge mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} label={`Revision ${revision.number}`} />
+    <CapabilityBadge mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} label={`Revision ${revision.number}`} adapterId={revision.adapterId} adapterVersion={revision.adapterVersion} adapterConfidence={revision.adapterConfidence} adapterMaturity={revision.adapterMaturity} />
     <p className="meta">Revision license: {revision.license ?? "Not recorded for this legacy revision"}</p>
     {!revision.license && <p className="meta">The original publication license is unknown. Forking uses the current project license ({project.license}); confirm your rights before continuing.</p>}
     {(revision.tool || revision.toolVersion || revision.tags.length > 0 || revision.sourceChecksum) && <p className="meta">{revision.tool ?? "Unknown tool"}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}{revision.tags.length > 0 ? ` · ${revision.tags.map((tag) => `#${tag}`).join(" ")}` : ""}{revision.sourceChecksum ? ` · SHA-256 ${revision.sourceChecksum}` : ""}</p>}

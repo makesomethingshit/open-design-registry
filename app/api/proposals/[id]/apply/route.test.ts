@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChanges: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChanges: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: mocks.deleteObject }));
@@ -9,12 +9,12 @@ vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBund
 const { POST } = await import("./route");
 
 const sourceBundle = { version: 1, files: [
-  { id: "source-a", name: "new-a.ai", mimeType: "application/postscript", size: 14, assetKey: "source-a-key", previewKeys: ["source-a-preview"] },
-  { id: "source-b", name: "new-b.ai", mimeType: "application/postscript", size: 15, assetKey: "source-b-key", previewKeys: ["source-b-preview"] },
+  { id: "source-a", name: "new-a.ai", mimeType: "application/postscript", size: 14, assetKey: "source-a-key", previewKeys: ["source-a-preview"], checksum: "a".repeat(64) },
+  { id: "source-b", name: "new-b.ai", mimeType: "application/postscript", size: 15, assetKey: "source-b-key", previewKeys: ["source-b-preview"], checksum: "b".repeat(64) },
 ] };
 const latestBundle = { version: 1, files: [
-  { id: "target-a", name: "old-a.ai", mimeType: "application/postscript", size: 10, assetKey: "target-a-key", previewKeys: ["target-a-preview"] },
-  { id: "target-b", name: "old-b.ai", mimeType: "application/postscript", size: 11, assetKey: "target-b-key", previewKeys: ["target-b-preview"] },
+  { id: "target-a", name: "old-a.ai", mimeType: "application/postscript", size: 10, assetKey: "target-a-key", previewKeys: ["target-a-preview"], checksum: "c".repeat(64) },
+  { id: "target-b", name: "old-b.ai", mimeType: "application/postscript", size: 11, assetKey: "target-b-key", previewKeys: ["target-b-preview"], checksum: "d".repeat(64) },
 ] };
 
 function changes(count = 2, appliedRevisionId: string | null = null) {
@@ -24,7 +24,7 @@ function changes(count = 2, appliedRevisionId: string | null = null) {
 function proposal(overrides: Record<string, unknown> = {}) {
   return {
     id: "proposal", proposalNumber: 22, projectId: "target", baseRevisionId: "base", title: "Improve header", body: "Better hierarchy", status: "APPROVED",
-    baseRevision: { id: "base", projectId: "target", isPublished: true },
+    baseRevision: { id: "base", projectId: "target", isPublished: true, sourceKey: "base-bundle" },
     sourceRevision: { id: "source", projectId: "source", isPublished: true, sourceKey: "source-bundle", sourceUrl: null, tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: "a".repeat(64), previews: [{ position: 0, key: "source-a-preview", url: "source-a-preview", mimeType: "image/png", size: 12, altText: "A" }, { position: 1, key: "source-b-preview", url: "source-b-preview", mimeType: "image/png", size: 12, altText: "B" }] },
     changeSet: { id: "set", changes: changes() }, appliedRevisions: [],
     ...overrides,
@@ -48,6 +48,8 @@ describe("selective proposal apply route", () => {
     mocks.findProposal.mockResolvedValue(proposal());
     mocks.findLatest.mockResolvedValue({ id: "base", number: 10 });
     mocks.findRevision.mockResolvedValue(latest());
+    mocks.findAffectedChanges.mockResolvedValue([]);
+    mocks.findChangeSets.mockResolvedValue([]);
     mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? sourceBundle : latestBundle));
     mocks.putBundle.mockResolvedValue({ checksum: "b".repeat(64) });
     mocks.createRevision.mockResolvedValue({ id: "staged" });
@@ -56,7 +58,9 @@ describe("selective proposal apply route", () => {
       $queryRaw: mocks.lockProject,
       proposal: { findUnique: mocks.findProposal, update: mocks.updateProposal },
       revision: { findFirst: mocks.findLatest, findUnique: mocks.findRevision, create: mocks.createRevision, update: mocks.publishRevision },
-      change: { updateMany: mocks.updateChanges },
+      change: { updateMany: mocks.updateChanges, findMany: mocks.findAffectedChanges },
+      changeReview: { createMany: mocks.createHistory },
+      changeSet: { findMany: mocks.findChangeSets },
     }));
   });
 
@@ -115,8 +119,37 @@ describe("selective proposal apply route", () => {
     mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? sourceBundle : { version: 1, files: [latestBundle.files[1]] }));
     const response = await POST(request({ changeIds: ["change-a"], reviewedLatestRevisionId: "r2", reviewedChangeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/target file/i) });
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/conflict review/i) });
     expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("blocks a stale selected unit whose checksum changed upstream", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r2", number: 12 });
+    mocks.findRevision.mockResolvedValue(latest("r2", 12));
+    const withChecksum = (value: string, entry: typeof latestBundle.files[0]) => ({ ...entry, checksum: value.repeat(64) });
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle"
+      ? { version: 2, files: [withChecksum("c", sourceBundle.files[0])] }
+      : key === "base-bundle"
+        ? { version: 2, files: [withChecksum("a", latestBundle.files[0])] }
+        : { version: 2, files: [withChecksum("b", latestBundle.files[0])] }));
+    const response = await POST(request({ changeIds: ["change-a"], reviewedLatestRevisionId: "r2", reviewedChangeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ conflictChangeIds: ["change-a"] });
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("records one system dismissal when this apply changes another approved unit", async () => {
+    const withChecksum = (value: string, entry: typeof latestBundle.files[0]) => ({ ...entry, checksum: value.repeat(64) });
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle"
+      ? { version: 2, files: [withChecksum("b", sourceBundle.files[0])] }
+      : { version: 2, files: [withChecksum("a", latestBundle.files[0])] }));
+    mocks.findAffectedChanges.mockResolvedValue([{ id: "other-change", changeSetId: "other-set" }]);
+    mocks.findChangeSets.mockResolvedValue([{ proposalId: "other-proposal", changes: [{ reviewStatus: "PENDING", appliedRevisionId: null }] }]);
+    const response = await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createHistory).toHaveBeenCalledWith({ data: [expect.objectContaining({ changeId: "other-change", authorId: null, eventType: "INVALIDATED_UPSTREAM", status: "PENDING", reason: "Changed upstream in Revision 11", causedByRevisionId: "revision-11" })], skipDuplicates: true });
+    expect(mocks.updateChanges).toHaveBeenCalledWith({ where: { id: { in: ["other-change"] } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
+    expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "other-proposal" }, data: { status: "OPEN" } });
   });
 
   it("applies rename, modify, remove, and add as one v2 unit revision", async () => {
