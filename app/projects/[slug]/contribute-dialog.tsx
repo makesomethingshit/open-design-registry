@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/src/components/ui/button";
+import styles from "./contribute-dialog.module.css";
 
 export default function ContributeDialog({ slug, revisionNumber, signedIn, initialIntent = "proposal" }: { slug: string; revisionNumber?: number; signedIn: boolean; initialIntent?: "proposal" | "fork" }) {
   const router = useRouter();
@@ -23,15 +25,15 @@ export default function ContributeDialog({ slug, revisionNumber, signedIn, initi
     if (!unavailable) setOpen(true);
   }
   return <>
-    <button type="button" className="button" onClick={start} disabled={unavailable} aria-describedby={unavailable ? "contribute-unavailable" : undefined}>{initialIntent === "fork" ? "Fork" : "Contribute"}</button>
+    <Button aria-describedby={unavailable ? "contribute-unavailable" : undefined} disabled={unavailable} onClick={start} size="lg" variant={initialIntent === "fork" ? "secondary" : "primary"}>{initialIntent === "fork" ? "Fork" : "Contribute"}</Button>
     {unavailable && <span id="contribute-unavailable" className="meta">Publish a revision before contributions can begin.</span>}
     <dialog ref={dialog} className="contribute-dialog" aria-labelledby="contribute-title" onClose={() => setOpen(false)} onCancel={() => setOpen(false)}>
       <form method="dialog" className="contribute-dialog-form" onSubmit={(event) => { event.preventDefault(); if (revisionNumber) router.push(`/projects/${slug}/revisions/${revisionNumber}?intent=${intent}`); setOpen(false); }}>
-        <div className="section-heading"><h2 id="contribute-title">How do you want to work?</h2><button type="button" className="button secondary" onClick={() => setOpen(false)} aria-label="Close contribute dialog">Close</button></div>
+        <div className="section-heading"><h2 id="contribute-title">How do you want to work?</h2><Button aria-label="Close contribute dialog" onClick={() => setOpen(false)} size="lg" variant="secondary">Close</Button></div>
         <label className="intent-option"><input type="radio" name="intent" value="proposal" checked={intent === "proposal"} onChange={() => setIntent("proposal")} autoFocus /><span><strong>Propose a change</strong><small>Work on this project and send your changes back.</small></span></label>
         <label className="intent-option"><input type="radio" name="intent" value="fork" checked={intent === "fork"} onChange={() => setIntent("fork")} /><span><strong>Fork project</strong><small>Create an independent project from this revision.</small></span></label>
         <p className="meta">Starting from Revision {revisionNumber}</p>
-        <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setOpen(false)}>Cancel</button><button className="button">{intent === "proposal" ? "Start a contribution" : "Fork project"}</button></div>
+        <div className={styles.actions}><Button onClick={() => setOpen(false)} size="lg" variant="secondary">Cancel</Button><Button size="lg" type="submit">{intent === "proposal" ? "Start a contribution" : "Fork project"}</Button></div>
       </form>
     </dialog>
   </>;

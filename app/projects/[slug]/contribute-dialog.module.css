@@ -1,0 +1,3 @@
+.actions { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--odr-space-2); }
+
+@media (max-width: 48rem) { .actions { flex-direction: column-reverse; } .actions button { width: 100%; } }

@@ -13,13 +13,14 @@ describe("home project sorting", () => {
     mocks.projectFindMany.mockResolvedValue([]);
   });
 
-  it("uses updatedAt for recent sorting while keeping filters", async () => {
-    await HomePage({ searchParams: Promise.resolve({ q: "kit", license: "MIT", sort: "recent" }) });
+  it("uses updatedAt for recent sorting while keeping every public filter", async () => {
+    await HomePage({ searchParams: Promise.resolve({ q: "kit", license: "MIT", sort: "recent", tool: "Penpot", tag: "UI" }) });
     expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         isPublic: true,
         OR: [{ title: { contains: "kit", mode: "insensitive" } }, { description: { contains: "kit", mode: "insensitive" } }],
         license: "MIT",
+        revisions: { some: { tool: { equals: "penpot" }, tags: { hasEvery: ["ui"] } } },
       },
       orderBy: { updatedAt: "desc" },
     }));

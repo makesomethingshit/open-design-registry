@@ -1,5 +1,9 @@
+import Link from "next/link";
+import { ProjectCard } from "@/src/components/design/project-card";
+import { Button, TextLink } from "@/src/components/ui/button";
 import { prisma } from "@/src/lib/prisma";
 import { publicAssetUrl } from "@/src/lib/storage";
+import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -25,43 +29,36 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     take: 24,
     include: { owner: { select: { name: true } }, revisions: { where: { isPublished: true }, orderBy: { createdAt: "desc" }, take: 1, select: { tags: true } } },
   });
-  return <>
-    <section className="hero">
-      <p className="eyebrow">Open Design Registry</p>
-      <h1>Design, with a history.</h1>
-      <p className="lede">A public home for design projects that anyone can inspect, reuse, and carry forward across tools.</p>
-      <a className="button" href="/projects/new">Create a project</a>
-    </section>
-    <section className="repo-section" aria-labelledby="public-projects-heading">
-      <div className="section-heading"><div><p className="eyebrow">Explore</p><h2 id="public-projects-heading">Public projects</h2></div><span className="section-count">{projects.length}</span></div>
-      <form className="project-filters" method="get" action="/">
-        <label>Search<input name="q" type="search" defaultValue={query} placeholder="Search projects" /></label>
-        <label>Tool<input name="tool" defaultValue={tool} placeholder="Figma, Penpot" /></label>
-        <label>Tag<input name="tag" defaultValue={tag} placeholder="mobile, ui" /></label>
-        <label>License<select name="license" defaultValue={license}><option value="">All licenses</option>{licenseOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Sort<select name="sort" defaultValue={sort}><option value="">Newest first</option><option value="recent">Recently active</option></select></label>
-        <button className="button" type="submit">Search</button>
-        {(query || license || tool || tag || sort) && <a className="button secondary" href="/">Clear</a>}
-      </form>
-      {projects.length ? <div className="repo-list" aria-label="Public projects">{projects.map((project) => {
-        const tags = project.revisions[0]?.tags ?? [];
-        return <article className="repo-row" key={project.id}>
-          <div className="repo-icon"><img src={publicAssetUrl(project.coverUrl)} alt="" /></div>
-          <div className="repo-row-main">
-            <div className="repo-row-heading"><a className="repo-name" href={`/projects/${project.slug}`}>{project.title}</a><span className="repo-visibility public">Public</span></div>
-            <p className="repo-description">{project.description || "No description provided."}</p>
-            <div className="repo-meta"><span>{project.owner.name}</span><span>{project.license}</span>{tags.map((projectTag) => <span className="topic-tag" key={projectTag}>{projectTag}</span>)}<span>Updated <time dateTime={project.updatedAt.toISOString()}>{formatDate(project.updatedAt)}</time></span></div>
+  const hasActiveFilter = Boolean(license || tool || tag || sort);
+
+  return <div className={styles.explore}>
+    <header className={styles.hero}>
+      <div><p className={styles.eyebrow}>Explore</p><h1>Design work with a visible history.</h1></div>
+      <Link className={styles.createProject} href="/projects/new">Create a project</Link>
+    </header>
+    <section aria-labelledby="public-projects-heading" className={styles.projects}>
+      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Public registry</p><h2 id="public-projects-heading">Projects</h2></div><p className={styles.count}>{projects.length} {projects.length === 1 ? "project" : "projects"}</p></header>
+      <form action="/" className={styles.filters} method="get">
+        <div className={styles.searchRow}>
+          <label className={styles.searchLabel} htmlFor="project-search">Search projects<input defaultValue={query} id="project-search" name="q" placeholder="Search by project or description" type="search" /></label>
+          <Button className={styles.searchButton} type="submit">Search</Button>
+        </div>
+        <details className={styles.filterGroup} open={hasActiveFilter}>
+          <summary>Filters</summary>
+          <div className={styles.filterFields}>
+            <label>Tool<input defaultValue={tool} name="tool" placeholder="Figma, Penpot" /></label>
+            <label>Tag<input defaultValue={tag} name="tag" placeholder="mobile, ui" /></label>
+            <label>License<select defaultValue={license} name="license"><option value="">All licenses</option>{licenseOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+            <label>Sort<select defaultValue={sort} name="sort"><option value="">Newest first</option><option value="recent">Recently active</option></select></label>
           </div>
-        </article>;
-      })}</div> : <p className="empty-state">No public projects match those filters.</p>}
+          {hasActiveFilter && <TextLink href="/">Clear filters</TextLink>}
+        </details>
+      </form>
+      {projects.length ? <div aria-label="Public projects" className={styles.gallery}>{projects.map((project, index) => <ProjectCard coverUrl={publicAssetUrl(project.coverUrl)} description={project.description} href={`/projects/${project.slug}`} key={project.id} license={project.license} owner={project.owner.name} priority={index < 4} tags={project.revisions[0]?.tags ?? []} title={project.title} updatedAt={project.updatedAt} />)}</div> : <p className={styles.empty}>No public projects match those filters.</p>}
     </section>
-  </>;
+  </div>;
 }
 
 function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
-}
-
-function formatDate(value: Date) {
-  return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
