@@ -43,6 +43,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.goto(`/?q=${encodeURIComponent("Real storage integration flow")}`);
     await expect(page.getByRole("link", { name: projectTitle, exact: true })).toBeVisible();
     await page.goto(projectPath);
+    await page.getByText("Owner tools").click();
 
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Upload the first source and previews");
@@ -70,6 +71,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
     await page.goto(`/projects/${slug}`);
     await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
+    await page.getByText("Owner tools").click();
     await page.locator("form.revision-publish-form input[name=title]").fill("Second revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Make a second revision before restoring the first");
     await page.locator('input[name="sourceUrl"]').fill("https://example.com/second-source.zip");
