@@ -36,12 +36,12 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(slug).toBeTruthy();
 
     await page.goto(`/?q=${encodeURIComponent(projectTitle)}&license=${encodeURIComponent("CC BY 4.0")}`);
-    await expect(page.getByRole("link", { name: projectTitle })).toBeVisible();
+    await expect(page.getByRole("link", { name: projectTitle, exact: true })).toBeVisible();
     await expect(page.getByLabel("License")).toHaveValue("CC BY 4.0");
     await page.goto(`/?q=${encodeURIComponent(projectTitle)}&license=MIT`);
     await expect(page.getByText("No public projects match those filters.")).toBeVisible();
     await page.goto(`/?q=${encodeURIComponent("Real storage integration flow")}`);
-    await expect(page.getByRole("link", { name: projectTitle })).toBeVisible();
+    await expect(page.getByRole("link", { name: projectTitle, exact: true })).toBeVisible();
     await page.goto(projectPath);
 
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
