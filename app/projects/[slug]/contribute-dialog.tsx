@@ -25,7 +25,7 @@ export default function ContributeDialog({ slug, revisionNumber, signedIn, initi
     if (!unavailable) setOpen(true);
   }
   return <>
-    <Button aria-describedby={unavailable ? "contribute-unavailable" : undefined} disabled={unavailable} onClick={start} size="lg">{initialIntent === "fork" ? "Fork" : "Contribute"}</Button>
+    <Button aria-describedby={unavailable ? "contribute-unavailable" : undefined} disabled={unavailable} onClick={start} size="lg" variant={initialIntent === "fork" ? "secondary" : "primary"}>{initialIntent === "fork" ? "Fork" : "Contribute"}</Button>
     {unavailable && <span id="contribute-unavailable" className="meta">Publish a revision before contributions can begin.</span>}
     <dialog ref={dialog} className="contribute-dialog" aria-labelledby="contribute-title" onClose={() => setOpen(false)} onCancel={() => setOpen(false)}>
       <form method="dialog" className="contribute-dialog-form" onSubmit={(event) => { event.preventDefault(); if (revisionNumber) router.push(`/projects/${slug}/revisions/${revisionNumber}?intent=${intent}`); setOpen(false); }}>

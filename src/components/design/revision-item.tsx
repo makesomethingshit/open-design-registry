@@ -33,5 +33,5 @@ export function RevisionItem({ capability, changeDescription, createdAt, href, i
 }
 
 function formatDate(value: Date) {
-  return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }

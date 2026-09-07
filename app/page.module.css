@@ -11,7 +11,7 @@
 .filters { display: grid; gap: var(--odr-space-3); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-surface-panel); }
 .searchRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--odr-space-2); }
 .searchLabel, .filterFields label { display: grid; gap: var(--odr-space-2); color: var(--odr-text-primary); font-size: var(--odr-font-label); font-weight: var(--odr-weight-medium); line-height: var(--odr-line-label); }
-.searchLabel input, .filterFields input, .filterFields select { width: 100%; min-height: var(--odr-control-md); padding: var(--odr-space-2) var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-control); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); font: inherit; }
+.searchLabel input, .filterFields input, .filterFields select { width: 100%; min-height: var(--odr-control-md); padding: var(--odr-space-2) var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-control); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); font-family: inherit; font-size: var(--odr-font-body); font-weight: var(--odr-weight-regular); line-height: var(--odr-line-body); }
 .filterGroup { display: grid; gap: var(--odr-space-3); border-top: var(--odr-border-width) solid var(--odr-border-subtle); padding-top: var(--odr-space-3); }
 .filterGroup summary { width: max-content; color: var(--odr-text-secondary); cursor: pointer; font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); }
 .filterFields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--odr-space-3); }
@@ -19,4 +19,4 @@
 .empty { padding: var(--odr-space-7) 0; margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); }
 
 @media (min-width: 80rem) { .gallery { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 48rem) { .hero { align-items: start; flex-direction: column; padding-top: var(--odr-space-4); } .hero h1 { font-size: clamp(2rem, 11vw, var(--odr-font-display)); line-height: 1.1; } .createProject { min-height: var(--odr-control-lg); } .sectionHeader { align-items: start; flex-direction: column; } .searchRow, .filterFields { grid-template-columns: 1fr; } .searchButton { width: 100%; } }
+@media (max-width: 48rem) { .hero { align-items: start; flex-direction: column; padding-top: var(--odr-space-4); } .hero h1 { font-size: clamp(2rem, 11vw, var(--odr-font-display)); line-height: 1.1; } .createProject { min-height: var(--odr-control-lg); } .sectionHeader { align-items: start; flex-direction: column; } .searchRow, .filterFields { grid-template-columns: 1fr; } button.searchButton { width: 100%; min-height: var(--odr-control-lg); } }

@@ -140,7 +140,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 }
 
 function formatDate(value: Date) {
-  return value.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
