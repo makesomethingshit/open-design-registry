@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { detectUnitChanges, readRevisionBundle } from "@/src/lib/revision-bundle";
+import { detectUnitChanges, readRevisionBundleStrict } from "@/src/lib/revision-bundle";
 
 function error(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     if (!baseRevision) return error("Base revision not found", 400);
     if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
 
-    const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundle(baseRevision.sourceKey), readRevisionBundle(sourceRevision.sourceKey)]);
+    const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundleStrict(baseRevision.sourceKey), readRevisionBundleStrict(sourceRevision.sourceKey)]);
     return NextResponse.json({ changes: detectUnitChanges(baseBundle, sourceBundle) });
   } catch {
     return error("Could not load available changes.", 500);

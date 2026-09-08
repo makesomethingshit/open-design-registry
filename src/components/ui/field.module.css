@@ -11,4 +11,4 @@
 .checkboxInput { width: 1rem; height: 1rem; align-self: center; justify-self: center; margin: 0; accent-color: var(--odr-accent); }
 .checkboxLabel { color: var(--odr-text-primary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); }
 
-@media (max-width: 48rem) { .control { font-size: 1rem; } }
+@media (max-width: 48rem) { .control { min-height: var(--odr-touch-target); font-size: 1rem; } .checkbox { min-height: var(--odr-touch-target); } .checkboxInput { width: var(--odr-touch-target); height: var(--odr-touch-target); } }

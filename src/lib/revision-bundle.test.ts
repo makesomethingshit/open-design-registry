@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getObject: vi.fn(), putBytes: vi.fn() }));
 vi.mock("./storage", () => ({ getObject: mocks.getObject, putBytes: mocks.putBytes }));
 
-const { capabilityForBundle, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, revisionBundleChecksum } = await import("./revision-bundle");
+const { capabilityForBundle, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, readRevisionBundleStrict, revisionBundleChecksum } = await import("./revision-bundle");
 
 describe("revision bundle", () => {
   const bundle = { version: 1 as const, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 2400, assetKey: "private/source-a", previewKeys: ["preview-a"] }] };
@@ -28,6 +28,12 @@ describe("revision bundle", () => {
     expect(encodeRevisionBundle(v2).toString()).toContain('"version":2');
     expect((await readRevisionBundle("bundle-key"))?.files[0].kind).toBe("future-unit");
     expect(publicBundleFiles(v2)[0]).toMatchObject({ kind: "future-unit" });
+  });
+
+  it("keeps storage failures retryable for strict readers without changing legacy callers", async () => {
+    mocks.getObject.mockRejectedValue(new Error("storage unavailable"));
+    await expect(readRevisionBundleStrict("bundle-key")).rejects.toThrow("storage unavailable");
+    await expect(readRevisionBundle("bundle-key")).resolves.toBeNull();
   });
 
   it("normalizes display names without accepting an empty unit name", () => {

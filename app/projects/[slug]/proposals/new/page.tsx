@@ -40,7 +40,7 @@ export function parseInitialChanges(value?: string): ProposalDraftChange[] {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed) || parsed.length > 10) return [];
+    if (!Array.isArray(parsed)) return [];
     return parsed.flatMap((change): ProposalDraftChange[] => {
       if (!change || typeof change !== "object") return [];
       const value = change as Record<string, unknown>;

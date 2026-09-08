@@ -47,4 +47,5 @@
 @keyframes spin { to { transform: rotate(1turn); } }
 
 @media (pointer: coarse) { .iconButton { min-width: var(--odr-touch-target); min-height: var(--odr-touch-target); } }
+@media (max-width: 48rem) { .button { min-height: var(--odr-touch-target); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

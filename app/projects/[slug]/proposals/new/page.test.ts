@@ -22,4 +22,9 @@ describe("prepared proposal handoff", () => {
     ]);
     expect(parseInitialChanges("not-json")).toEqual([]);
   });
+
+  it.each([0, 1, 10, 11])("preserves the %i-change handoff boundary for the form", (count) => {
+    const changes = Array.from({ length: count }, (_, index) => ({ action: "ADD_UNIT", sourceFileId: `unit-${index}` }));
+    expect(parseInitialChanges(JSON.stringify(changes))).toHaveLength(count);
+  });
 });

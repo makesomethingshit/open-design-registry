@@ -9,6 +9,7 @@ type RelatedIssue = { id: string; title: string };
 type UnitAction = "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
 export type ProposalDraftChange = { action: UnitAction; targetFileId?: string; sourceFileId?: string; newName?: string };
 type DraftChange = ProposalDraftChange & { key: string };
+const maxProposalChanges = 10;
 
 function unitLabel(file: BundleFile) {
   const kind = file.kind ? `${file.kind.slice(0, 1).toUpperCase()}${file.kind.slice(1)}` : "Asset · legacy";
@@ -44,7 +45,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
   }
 
   function addChange() {
-    if (!canChooseUnits || changes.length >= 10) return;
+    if (!canChooseUnits || changes.length >= maxProposalChanges) return;
     setChanges((current) => [...current, { key: crypto.randomUUID(), action: canUseSourceUnits ? "MODIFY_UNIT" : "RENAME_UNIT", targetFileId: baseRevision.files[0]?.id, sourceFileId: canUseSourceUnits ? sourceRevision?.files[0]?.id : undefined, newName: canUseSourceUnits ? undefined : "" }]);
     resetRequest();
   }
@@ -64,6 +65,10 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     const formElement = event.currentTarget;
     if (canChooseUnits && !changes.length) {
       setError("Add at least one unit change to propose.");
+      return;
+    }
+    if (canChooseUnits && changes.length > maxProposalChanges) {
+      setError(`A proposal can include up to ${maxProposalChanges} changes.`);
       return;
     }
     const targetIds = changes.flatMap((change) => change.targetFileId ? [change.targetFileId] : []);
@@ -109,7 +114,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     <label>Why? <span aria-hidden="true">*</span><textarea name="why" required maxLength={4900} /></label>
     <label>Related issue <select name="relatedIssueId" defaultValue={defaultRelatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option value={issue.id} key={issue.id}>{issue.title}</option>)}</select></label>
     <section className="file-input-list" aria-labelledby="units-to-propose-heading">
-      <div className="section-heading"><h2 id="units-to-propose-heading">Units to propose</h2>{canChooseUnits && <button type="button" className="button secondary" onClick={addChange} disabled={changes.length >= 10}>Add change</button>}</div>
+      <div className="section-heading"><h2 id="units-to-propose-heading">Units to propose</h2>{canChooseUnits && <button type="button" className="button secondary" onClick={addChange} disabled={changes.length >= maxProposalChanges}>Add change</button>}</div>
       {!canChooseUnits ? <p className="empty-state">Whole-document only. This format does not expose independently changeable units.</p> : changes.map((change) => {
         const target = baseRevision.files.find((file) => file.id === change.targetFileId);
         const needsTarget = change.action !== "ADD_UNIT";
@@ -125,6 +130,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
       })}
       {canChooseUnits && !canUseSourceUnits && <p className="meta">This From revision has no file bundle, so rename and remove changes are available.</p>}
       {canChooseUnits && !changes.length && <p className="empty-state">Add a change to begin. A unit can appear only once in a proposal.</p>}
+      {changes.length > maxProposalChanges && <p className="error" role="alert">A proposal can include up to {maxProposalChanges} changes. Remove a change before creating the proposal.</p>}
       {changes.length > 0 && <p className="meta">Summary: {changes.map((change) => actionLabel(change.action).toLowerCase()).join(" · ")}</p>}
     </section>
     <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => router.back()}>Cancel</button><button className="button" disabled={submitting || (canChooseUnits && !changes.length)}>{submitting ? "Creating…" : "Create proposal"}</button></div>

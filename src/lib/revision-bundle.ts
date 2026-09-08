@@ -96,15 +96,29 @@ export function revisionBundleChecksum(bundle: RevisionBundle) {
   return createHash("sha256").update(encodeRevisionBundle(bundle)).digest("hex");
 }
 
-export async function readRevisionBundle(sourceKey?: string | null): Promise<RevisionBundle | null> {
+/**
+ * Reads a bundle while allowing storage failures to reach a caller that can
+ * offer a retry. Invalid or unsupported bundle data still means no structured
+ * units, matching the legacy reader's return value.
+ */
+export async function readRevisionBundleStrict(sourceKey?: string | null): Promise<RevisionBundle | null> {
   if (!sourceKey) return null;
+  const object = await getObject(sourceKey);
+  if (!object.Body || (object.ContentLength ?? 0) > 1024 * 1024) return null;
+  const body = object.Body as { transformToString?: (encoding?: string) => Promise<string> } | undefined;
+  if (typeof body?.transformToString !== "function") return null;
+  const text = await body.transformToString("utf8");
   try {
-    const object = await getObject(sourceKey);
-    if (!object.Body || (object.ContentLength ?? 0) > 1024 * 1024) return null;
-    const body = object.Body as { transformToString?: (encoding?: string) => Promise<string> } | undefined;
-    if (!body?.transformToString) return null;
-    const parsed = JSON.parse(await body.transformToString("utf8")) as RevisionBundle;
+    const parsed = JSON.parse(text) as RevisionBundle;
     return normalize(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export async function readRevisionBundle(sourceKey?: string | null): Promise<RevisionBundle | null> {
+  try {
+    return await readRevisionBundleStrict(sourceKey);
   } catch {
     return null;
   }
