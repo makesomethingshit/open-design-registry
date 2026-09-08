@@ -15,6 +15,15 @@ export type RevisionBundleFile = {
 };
 
 export type RevisionBundle = { version: 1 | 2; files: RevisionBundleFile[] };
+export type RevisionUnit = Pick<RevisionBundleFile, "id" | "name" | "kind" | "mimeType" | "size" | "checksum">;
+export type DetectedUnitChange = {
+  action: "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
+  targetFileId?: string;
+  sourceFileId?: string;
+  name: string;
+  kind?: string;
+  newName?: string;
+};
 
 export const unitKinds = ["artboard", "component", "asset", "token"] as const;
 export type UnitKind = (typeof unitKinds)[number];
@@ -22,6 +31,29 @@ export type CapabilityMode = "structured" | "whole_document";
 
 export function capabilityForBundle(bundle: RevisionBundle | null): { mode: CapabilityMode; unitCount: number } {
   return bundle ? { mode: "structured", unitCount: bundle.files.length } : { mode: "whole_document", unitCount: 0 };
+}
+
+export function detectUnitChanges(base: { files: readonly RevisionUnit[] } | null, source: { files: readonly RevisionUnit[] } | null): DetectedUnitChange[] {
+  if (!base || !source) return [];
+  const sourceById = new Map(source.files.map((file) => [file.id, file]));
+  const changes: DetectedUnitChange[] = [];
+
+  for (const target of base.files) {
+    const sourceFile = sourceById.get(target.id);
+    if (!sourceFile) {
+      changes.push({ action: "REMOVE_UNIT", targetFileId: target.id, name: target.name, kind: target.kind });
+    } else if (target.checksum && sourceFile.checksum && target.checksum !== sourceFile.checksum) {
+      changes.push({ action: "MODIFY_UNIT", targetFileId: target.id, sourceFileId: sourceFile.id, name: target.name, kind: target.kind });
+    } else if (target.name !== sourceFile.name) {
+      changes.push({ action: "RENAME_UNIT", targetFileId: target.id, name: target.name, kind: target.kind, newName: sourceFile.name });
+    }
+  }
+
+  const targetIds = new Set(base.files.map((file) => file.id));
+  for (const sourceFile of source.files) {
+    if (!targetIds.has(sourceFile.id) && sourceFile.kind) changes.push({ action: "ADD_UNIT", sourceFileId: sourceFile.id, name: sourceFile.name, kind: sourceFile.kind });
+  }
+  return changes;
 }
 
 export function sanitizeUnitName(value: string) {
@@ -64,15 +96,29 @@ export function revisionBundleChecksum(bundle: RevisionBundle) {
   return createHash("sha256").update(encodeRevisionBundle(bundle)).digest("hex");
 }
 
-export async function readRevisionBundle(sourceKey?: string | null): Promise<RevisionBundle | null> {
+/**
+ * Reads a bundle while allowing storage failures to reach a caller that can
+ * offer a retry. Invalid or unsupported bundle data still means no structured
+ * units, matching the legacy reader's return value.
+ */
+export async function readRevisionBundleStrict(sourceKey?: string | null): Promise<RevisionBundle | null> {
   if (!sourceKey) return null;
+  const object = await getObject(sourceKey);
+  if (!object.Body || (object.ContentLength ?? 0) > 1024 * 1024) return null;
+  const body = object.Body as { transformToString?: (encoding?: string) => Promise<string> } | undefined;
+  if (typeof body?.transformToString !== "function") return null;
+  const text = await body.transformToString("utf8");
   try {
-    const object = await getObject(sourceKey);
-    if (!object.Body || (object.ContentLength ?? 0) > 1024 * 1024) return null;
-    const body = object.Body as { transformToString?: (encoding?: string) => Promise<string> } | undefined;
-    if (!body?.transformToString) return null;
-    const parsed = JSON.parse(await body.transformToString("utf8")) as RevisionBundle;
+    const parsed = JSON.parse(text) as RevisionBundle;
     return normalize(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export async function readRevisionBundle(sourceKey?: string | null): Promise<RevisionBundle | null> {
+  try {
+    return await readRevisionBundleStrict(sourceKey);
   } catch {
     return null;
   }
