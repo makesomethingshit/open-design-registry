@@ -15,6 +15,15 @@ export type RevisionBundleFile = {
 };
 
 export type RevisionBundle = { version: 1 | 2; files: RevisionBundleFile[] };
+export type RevisionUnit = Pick<RevisionBundleFile, "id" | "name" | "kind" | "mimeType" | "size" | "checksum">;
+export type DetectedUnitChange = {
+  action: "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
+  targetFileId?: string;
+  sourceFileId?: string;
+  name: string;
+  kind?: string;
+  newName?: string;
+};
 
 export const unitKinds = ["artboard", "component", "asset", "token"] as const;
 export type UnitKind = (typeof unitKinds)[number];
@@ -22,6 +31,29 @@ export type CapabilityMode = "structured" | "whole_document";
 
 export function capabilityForBundle(bundle: RevisionBundle | null): { mode: CapabilityMode; unitCount: number } {
   return bundle ? { mode: "structured", unitCount: bundle.files.length } : { mode: "whole_document", unitCount: 0 };
+}
+
+export function detectUnitChanges(base: { files: readonly RevisionUnit[] } | null, source: { files: readonly RevisionUnit[] } | null): DetectedUnitChange[] {
+  if (!base || !source) return [];
+  const sourceById = new Map(source.files.map((file) => [file.id, file]));
+  const changes: DetectedUnitChange[] = [];
+
+  for (const target of base.files) {
+    const sourceFile = sourceById.get(target.id);
+    if (!sourceFile) {
+      changes.push({ action: "REMOVE_UNIT", targetFileId: target.id, name: target.name, kind: target.kind });
+    } else if (target.checksum && sourceFile.checksum && target.checksum !== sourceFile.checksum) {
+      changes.push({ action: "MODIFY_UNIT", targetFileId: target.id, sourceFileId: sourceFile.id, name: target.name, kind: target.kind });
+    } else if (target.name !== sourceFile.name) {
+      changes.push({ action: "RENAME_UNIT", targetFileId: target.id, name: target.name, kind: target.kind, newName: sourceFile.name });
+    }
+  }
+
+  const targetIds = new Set(base.files.map((file) => file.id));
+  for (const sourceFile of source.files) {
+    if (!targetIds.has(sourceFile.id) && sourceFile.kind) changes.push({ action: "ADD_UNIT", sourceFileId: sourceFile.id, name: sourceFile.name, kind: sourceFile.kind });
+  }
+  return changes;
 }
 
 export function sanitizeUnitName(value: string) {

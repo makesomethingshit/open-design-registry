@@ -19,7 +19,12 @@ export default function ContributeDialog({ slug, revisionNumber, signedIn, initi
   }, [open]);
   function start() {
     if (!signedIn) {
-      router.push(`/sign-in?next=${encodeURIComponent(`/projects/${slug}`)}`);
+      const next = initialIntent === "proposal" ? `/projects/${slug}/contribute` : `/projects/${slug}`;
+      router.push(`/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    if (initialIntent === "proposal") {
+      if (!unavailable) router.push(`/projects/${slug}/contribute`);
       return;
     }
     if (!unavailable) setOpen(true);

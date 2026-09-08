@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getObject: vi.fn(), putBytes: vi.fn() }));
 vi.mock("./storage", () => ({ getObject: mocks.getObject, putBytes: mocks.putBytes }));
 
-const { capabilityForBundle, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, revisionBundleChecksum } = await import("./revision-bundle");
+const { capabilityForBundle, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, revisionBundleChecksum } = await import("./revision-bundle");
 
 describe("revision bundle", () => {
   const bundle = { version: 1 as const, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 2400, assetKey: "private/source-a", previewKeys: ["preview-a"] }] };
@@ -33,5 +33,25 @@ describe("revision bundle", () => {
   it("normalizes display names without accepting an empty unit name", () => {
     expect(normalizeUnitName('  folder/"Card"\\name  ')).toBe("folder--Card--name");
     expect(normalizeUnitName(" \n ")).toBeNull();
+  });
+  it("derives proposal-compatible unit actions from stable manifest IDs", () => {
+    const checksum = (value: string) => value.repeat(64).slice(0, 64);
+    const base = { version: 2 as const, files: [
+      { ...bundle.files[0], id: "modified", name: "Poster", kind: "artboard", checksum: checksum("a") },
+      { ...bundle.files[0], id: "renamed", name: "Wordmark", kind: "component", checksum: checksum("b") },
+      { ...bundle.files[0], id: "removed", name: "Spread", kind: "artboard", checksum: checksum("c") },
+    ] };
+    const source = { version: 2 as const, files: [
+      { ...bundle.files[0], id: "modified", name: "Poster", kind: "artboard", checksum: checksum("d") },
+      { ...bundle.files[0], id: "renamed", name: "Wordmark compact", kind: "component", checksum: checksum("b") },
+      { ...bundle.files[0], id: "added", name: "New spread", kind: "artboard", checksum: checksum("e") },
+    ] };
+
+    expect(detectUnitChanges(base, source)).toEqual([
+      expect.objectContaining({ action: "MODIFY_UNIT", targetFileId: "modified", sourceFileId: "modified" }),
+      expect.objectContaining({ action: "RENAME_UNIT", targetFileId: "renamed", newName: "Wordmark compact" }),
+      expect.objectContaining({ action: "REMOVE_UNIT", targetFileId: "removed" }),
+      expect.objectContaining({ action: "ADD_UNIT", sourceFileId: "added" }),
+    ]);
   });
 });
