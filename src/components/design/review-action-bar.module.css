@@ -11,9 +11,5 @@
 .notices { display: grid; gap: var(--odr-space-1); color: var(--odr-text-muted); }
 .notices p { margin: 0; font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .notices .error { color: var(--odr-danger-fg); }
-.deferredNotice { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
-.selectionPreview { display: grid; gap: var(--odr-space-2); }
-.selectionPreview ul { display: grid; gap: var(--odr-space-1); padding-left: var(--odr-space-5); margin: 0; }
-.selectionPreview li { overflow-wrap: anywhere; }
 
 @media (max-width: 48rem) { .bar { padding: var(--odr-space-4); } .controls, .actions { align-items: stretch; flex-direction: column; } .actions :global(button) { width: 100%; } }

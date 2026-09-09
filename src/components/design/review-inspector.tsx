@@ -6,7 +6,7 @@ import { StatusBadge } from "@/src/components/ui/badge";
 import { Button } from "@/src/components/ui/button";
 import { Dialog } from "@/src/components/ui/dialog";
 import { Field, Textarea } from "@/src/components/ui/field";
-import { changeActionPresentation, changeDisplayName, changeKindLabel, conflictStatusPresentation, applicationStatusPresentation } from "./change-item";
+import { changeActionPresentation, changeDisplayName, changeKindLabel, conflictStatusPresentation } from "./change-item";
 import type { ReviewChange } from "./review-types";
 import { changeReviewStatusPresentation } from "@/src/lib/ui/status-presentation";
 import styles from "./review-inspector.module.css";
@@ -32,6 +32,7 @@ export type FailedReviewRequest = {
 type ReviewInspectorProps = {
   change: ReviewChange | undefined;
   canReview: boolean;
+  applying: boolean;
   pending: boolean;
   error: string;
   failedRequest: FailedReviewRequest | null;
@@ -44,23 +45,24 @@ type ReviewInspectorProps = {
   onDraftChange: (draft: string) => void;
 };
 
-export function ReviewInspector({ canReview, change, draft, error, failedRequest, onDraftChange, onRequestingChangesChange, onRetry, onReview, pending, projectSlug, requestingChanges }: ReviewInspectorProps) {
+export function ReviewInspector({ applying, canReview, change, draft, error, failedRequest, onDraftChange, onRequestingChangesChange, onRetry, onReview, pending, projectSlug, requestingChanges }: ReviewInspectorProps) {
 
   if (!change) return <section aria-labelledby="review-inspector-heading" className={styles.inspector}><h2 id="review-inspector-heading">Review inspector</h2><p className={styles.empty}>Select a change to inspect its actual review data.</p></section>;
 
   const action = changeActionPresentation(change);
   const status = changeReviewStatusPresentation(change.reviewStatus);
   const conflict = conflictStatusPresentation(change.conflictStatus);
-  const reviewDisabled = pending || !canReview;
+  const reviewDisabled = applying || pending || !canReview;
   const requestFormId = `request-changes-${change.id}`;
 
   async function requestChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const submitted = await onReview("CHANGES_REQUESTED", draft);
-    // On failure the dialog closes so the Retry action (which re-sends the failed
-    // request unchanged) is reachable; the draft is preserved and reappears on reopen.
-    if (!submitted) onRequestingChangesChange(false);
+    // Keep the dialog open with the draft preserved when the review fails so the
+    // in-dialog error and resubmit stay reachable.
+    if (submitted) onRequestingChangesChange(false);
   }
+  const requestError = requestingChanges && failedRequest && failedRequest.status === "CHANGES_REQUESTED" ? error : "";
 
   function formatHistoryDate(value: ReviewChange["reviewHistory"][number]["createdAt"]) {
     const date = value instanceof Date ? value : new Date(value);
@@ -85,7 +87,7 @@ export function ReviewInspector({ canReview, change, draft, error, failedRequest
     {!change.latestAvailable && <Banner tone="warning" title="Not in the latest revision">This unit cannot be selected until the latest revision is reviewed.</Banner>}
     {change.reviewComment && <section className={styles.reviewComment}><h3>Latest review</h3><p>{change.reviewComment}</p></section>}
     {change.appliedRevision && <Banner tone="success" title="Applied">Applied as <a href={`/projects/${projectSlug}/revisions/${change.appliedRevision.number}`}>Revision {change.appliedRevision.number}</a>.</Banner>}
-    <section className={styles.history} aria-label="Unit review history"><h3>Unit review history</h3>{change.reviewHistory.length > 0 ? <ol>{change.reviewHistory.map((entry) => <li key={entry.id}><strong>{historyLabel(entry)}</strong>{entry.author?.name && <span>{entry.author.name}</span>}{entry.comment && <p>{entry.comment}</p>}{entry.reason && <p>{entry.reason}</p>}{entry.causedByRevision && <span>Revision {entry.causedByRevision.number}</span>}<span>{formatHistoryDate(entry.createdAt)}</span></li>)}</ol> : <p className={styles.emptyHistory}>No unit reviews yet.</p>}</section>
+    <section className={styles.history} aria-label="Unit review history" aria-live="polite"><h3>Unit review history</h3>{change.reviewHistory.length > 0 ? <ol>{change.reviewHistory.map((entry) => <li key={entry.id}><strong>{historyLabel(entry)}</strong>{entry.author?.name && <span>{entry.author.name}</span>}{entry.comment && <p>{entry.comment}</p>}{entry.reason && <p>{entry.reason}</p>}{entry.causedByRevision && <span>Revision {entry.causedByRevision.number}</span>}<span>{formatHistoryDate(entry.createdAt)}</span></li>)}</ol> : <p className={styles.emptyHistory}>No unit reviews yet.</p>}</section>
     {canReview && <div className={styles.actions}>
       <Button disabled={reviewDisabled || change.conflictStatus === "CONFLICT" || change.conflictStatus === "CHECK_UNAVAILABLE"} loading={pending && !requestingChanges} loadingLabel="Saving review" onClick={() => { void onReview("APPROVED"); }} variant="secondary">Approve change</Button>
       <Button disabled={reviewDisabled} onClick={() => onRequestingChangesChange(true)} variant="secondary">Request changes</Button>
@@ -93,8 +95,9 @@ export function ReviewInspector({ canReview, change, draft, error, failedRequest
     <Dialog actions={<><Button disabled={reviewDisabled} onClick={() => onRequestingChangesChange(false)} size="lg" variant="secondary">Cancel</Button><Button disabled={!draft.trim() || reviewDisabled} form={requestFormId} loading={pending} loadingLabel="Saving review" size="lg" type="submit">Submit review</Button></>} onClose={() => onRequestingChangesChange(false)} open={requestingChanges && canReview} title="Request changes">
       <form className={styles.requestForm} id={requestFormId} onSubmit={requestChanges}>
         <Field id={`review-comment-${change.id}`} label={`Feedback for ${changeDisplayName(change)}`} required><Textarea disabled={reviewDisabled} maxLength={10000} name="comment" onChange={(event) => onDraftChange(event.target.value)} value={draft} /></Field>
+        {requestError && <Banner tone="error" title="Could not update review.">{requestError}</Banner>}
       </form>
     </Dialog>
-    {error && <Banner action={<Button disabled={pending || !canReview || !failedRequest} onClick={() => { void onRetry(); }} size="sm" variant="secondary">Retry</Button>} tone="error" title="Could not update review.">{error}</Banner>}
+    {error && !requestingChanges && <Banner action={<Button disabled={pending || !canReview || !failedRequest} onClick={() => { void onRetry(); }} size="sm" variant="secondary">Retry</Button>} tone="error" title="Could not update review.">{error}</Banner>}
   </section>;
 }

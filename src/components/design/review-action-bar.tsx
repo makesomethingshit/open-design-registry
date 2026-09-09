@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Button } from "@/src/components/ui/button";
 import { Checkbox } from "@/src/components/ui/checkbox";
-import { changeDisplayName, removalWarning } from "./change-item";
-import type { ReviewChange } from "./review-types";
+import { uiCopy } from "@/src/lib/ui/copy";
 import styles from "./review-action-bar.module.css";
 
 type ReviewActionBarProps = {
@@ -12,23 +12,26 @@ type ReviewActionBarProps = {
   pendingCount: number;
   requestedCount: number;
   applicableCount: number;
-  canSelect: boolean;
   selectedCount: number;
   appliedCount: number;
+  canApply: boolean;
   allSelected: boolean;
+  selectionDisabled: boolean;
+  applying: boolean;
+  stale: boolean;
+  staleConfirmed: boolean;
+  unitResultUnknown: boolean;
   emptyResult: boolean;
   blockedApprovedCount: number;
-  removalCount: number;
-  wholeDocumentReplacement: boolean;
-  selectedChanges: ReviewChange[];
   selectionNotice: string;
-  stale: boolean;
-  unitResultUnknown: boolean;
   onSelectAll: (selected: boolean) => void;
+  onOpenApply: () => void;
   closeAction?: ReactNode;
 };
 
-export function ReviewActionBar({ allSelected, applicableCount, appliedCount, approvedCount, blockedApprovedCount, canSelect, closeAction, emptyResult, onSelectAll, pendingCount, removalCount, requestedCount, selectedChanges, selectedCount, selectionNotice, stale, totalCount, unitResultUnknown, wholeDocumentReplacement }: ReviewActionBarProps) {
+export function ReviewActionBar({ allSelected, applicableCount, appliedCount, applying, approvedCount, blockedApprovedCount, canApply, closeAction, emptyResult, onOpenApply, onSelectAll, pendingCount, requestedCount, selectedCount, selectionDisabled, selectionNotice, stale, staleConfirmed, totalCount, unitResultUnknown }: ReviewActionBarProps) {
+  const applyDisabled = !canApply || applying || !selectedCount || (stale && !staleConfirmed) || unitResultUnknown || emptyResult;
+
   return <section aria-labelledby="review-actions-heading" className={styles.bar}>
     <div className={styles.summary}>
       <h2 id="review-actions-heading">Application</h2>
@@ -44,27 +47,20 @@ export function ReviewActionBar({ allSelected, applicableCount, appliedCount, ap
       </dl>
     </div>
     <div className={styles.controls}>
-      {canSelect && applicableCount > 0 && <Checkbox checked={allSelected} id="select-all-eligible-changes" label="Select all eligible approved changes for application" onChange={(event) => onSelectAll(event.target.checked)} />}
+      {canApply && applicableCount > 0 && <Checkbox checked={allSelected} disabled={selectionDisabled} id="select-all-eligible-changes" label="Select all eligible approved changes for application" onChange={(event) => onSelectAll(event.target.checked)} />}
       <div className={styles.actions}>
-        <p className={styles.deferredNotice} role="note">Application runs in a later stage. Selection only marks candidates; nothing is applied here.</p>
+        <Button disabled={applyDisabled} loading={applying} loadingLabel={uiCopy.loading.applying} onClick={onOpenApply} size="lg">{applying ? uiCopy.loading.applying : `Apply ${selectedCount} selected`}</Button>
         {closeAction}
       </div>
     </div>
     <div aria-live="polite" className={styles.notices}>
-      {canSelect && applicableCount > 0 && !selectedCount && <p>Select approved changes for application. Selecting a change does not apply it and does not change its review state.</p>}
-      {!canSelect && <p>Only the project owner can select approved changes for application.</p>}
+      {canApply && applicableCount > 0 && !selectedCount && <p>Select approved changes for application. Selecting a change does not apply it and does not change its review state.</p>}
+      {!canApply && <p>Only the project owner can select approved changes for application.</p>}
       {blockedApprovedCount > 0 && <p>{blockedApprovedCount} approved {blockedApprovedCount === 1 ? "change is" : "changes are"} blocked pending review.</p>}
       {unitResultUnknown && <p>Checking latest units...</p>}
       {emptyResult && <p className={styles.error}>At least one unit must remain. Deselect a removal or select an approved addition.</p>}
-      {stale && <p>Review the latest revision. Selection is preserved; application is unavailable in this stage.</p>}
+      {stale && !staleConfirmed && <p>Review and confirm the latest revision before applying.</p>}
       {selectionNotice && <p>{selectionNotice}</p>}
-      {selectedCount > 0 && <div className={styles.selectionPreview}>
-        <p>{selectedCount} selected for a later application:</p>
-        <ul>{selectedChanges.map((change) => <li key={change.id}>{changeDisplayName(change)}</li>)}</ul>
-        {wholeDocumentReplacement && <p>This replaces the entire current document. Individual units from the current revision will not be preserved.</p>}
-        {!wholeDocumentReplacement && <p>Unselected units in the current revision will be kept.</p>}
-        {removalCount > 0 && <p>{removalWarning(removalCount)}</p>}
-      </div>}
     </div>
   </section>;
 }

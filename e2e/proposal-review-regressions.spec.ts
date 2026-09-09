@@ -21,62 +21,69 @@ test.describe("proposal review regression fixtures", () => {
     await expect(workspace.getByRole("radio", { name: "Overlay" })).toBeDisabled();
   });
 
-  test("defers application in E2: selection preview without Apply execution or /apply requests", async ({ page }) => {
+  test("warns for a whole-document replacement while preserving every unit application copy and payload", async ({ page }) => {
     const workspace = await openWorkspace(page);
-    let applyRequests = 0;
+    let payload: unknown;
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
-      applyRequests += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "E2 must not call apply" }) });
+      payload = route.request().postDataJSON();
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture apply failed" }) });
     });
 
-    // E2 renders no Apply CTA and no confirmation dialog.
-    await expect(workspace.getByRole("button", { name: /Apply \d+ selected/ })).toHaveCount(0);
-    await expect(workspace.getByText("Application runs in a later stage.")).toBeVisible();
-
     await workspace.getByLabel("Select Whole document for application").check();
-    await expect(workspace.getByText("1 selected for a later application:")).toBeVisible();
-    await expect(workspace.getByText("This replaces the entire current document.")).toBeVisible();
+    await workspace.getByRole("button", { name: "Apply 1 selected" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("This replaces the entire current document.");
+    await expect(dialog).not.toContainText("Unselected units in the current revision will be kept.");
+    await dialog.getByRole("button", { name: "Apply 1 selected" }).click();
+    await expect.poll(() => payload).toEqual({ changeIds: ["fixture-document"] });
+    await expect(dialog.getByRole("alert")).toContainText("Fixture apply failed");
+
+    await dialog.getByRole("button", { name: "Cancel" }).click();
     await workspace.getByLabel("Select Whole document for application").uncheck();
 
     for (const unit of [
-      { label: /Select Add A deliberately long added unit name for application copy verification for application/, id: "Add A deliberately long added unit name" },
-      { label: /Select Modify A deliberately long approved poster name for responsive review verification for application/, id: "Modify A deliberately long approved poster name" },
-      { label: /Select Remove A deliberately long removable unit name for application copy verification for application/, id: "Remove A deliberately long removable unit name" },
-      { label: /Select Rename A deliberately long renameable unit name for application copy verification to A renamed fixture unit for application/, id: "Rename A deliberately long renameable unit name" },
+      { label: /Select Add A deliberately long added unit name for application copy verification for application/, id: "fixture-add" },
+      { label: /Select Modify A deliberately long approved poster name for responsive review verification for application/, id: "fixture-poster" },
+      { label: /Select Remove A deliberately long removable unit name for application copy verification for application/, id: "fixture-remove" },
+      { label: /Select Rename A deliberately long renameable unit name for application copy verification to A renamed fixture unit for application/, id: "fixture-rename" },
     ]) {
+      payload = undefined;
       await workspace.getByLabel(unit.label).check();
-      await expect(workspace.getByText("1 selected for a later application:")).toBeVisible();
-      await expect(workspace.getByText("Unselected units in the current revision will be kept.")).toBeVisible();
+      await workspace.getByRole("button", { name: "Apply 1 selected" }).click();
+      await expect(page.getByRole("dialog")).toContainText("Unselected units in the current revision will be kept.");
+      await page.getByRole("dialog").getByRole("button", { name: "Apply 1 selected" }).click();
+      await expect.poll(() => payload).toEqual({ changeIds: [unit.id] });
+      await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
       await workspace.getByLabel(unit.label).uncheck();
     }
+  });
 
-    expect(applyRequests).toBe(0);
+  test("keeps Apply 409 feedback visible and restores review focus", async ({ page }) => {
+    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application"]);
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the latest revision before applying these selected changes", latestRevision: { id: "fixture-r14" } }) });
+    });
+
+    await page.getByRole("dialog").getByRole("button", { name: "Apply 1 selected" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(workspace.getByRole("alert")).toContainText("Review the latest revision before applying these selected changes");
+    await expect(workspace.getByLabel(/I reviewed Revision 13/)).toHaveCount(0);
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/)).toBeChecked();
+    await expect(workspace.getByRole("button", { name: "Review latest revision" })).toBeFocused();
   });
 
-  test("keeps stale review affordances without an apply path", async ({ page }) => {
-    const workspace = await openWorkspace(page);
-    await workspace.getByLabel("Show stale revision state").check();
-    await workspace.getByLabel("Select Modify A deliberately long approved poster name for responsive review verification for application").check();
-    await expect(workspace.getByText("Review the latest revision. Selection is preserved; application is unavailable in this stage.")).toBeVisible();
-    await workspace.getByRole("button", { name: "Review latest revision" }).click();
-    // The toggle renames the button; focus returns to the same control under its new label.
-    await expect(workspace.getByRole("button", { name: "Back to base comparison" })).toBeFocused();
-  });
-
-  test("keeps conflict recovery messaging on the review path", async ({ page }) => {
-    const workspace = await openStaleSelection(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application", "Select Whole document for application"]);
-    await page.route("**/api/proposals/fixture-proposal/changes/fixture-poster", async (route) => {
+  test("keeps safe selections after a conflicting Apply 409", async ({ page }) => {
+    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application", "Select Whole document for application"]);
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the conflicting change", latestRevision: { id: "fixture-r14" }, conflictChangeIds: ["fixture-poster"] }) });
     });
 
-    // Make the approved poster the active review target before approving it.
-    await workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ }).click();
-    await workspace.getByRole("button", { name: "Approve change" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Apply 2 selected" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(workspace.getByRole("alert")).toContainText("Review the conflicting change");
-    await expect(workspace.getByText("1 selected change needs conflict review.")).toBeVisible();
     await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/).first()).not.toBeChecked();
     await expect(workspace.getByLabel("Select Whole document for application")).toBeChecked();
+    await expect(workspace.getByText("1 selected change needs conflict review.")).toBeVisible();
   });
 
   test("preserves a change-specific request draft, pending state, and late failure", async ({ page }) => {
@@ -106,16 +113,21 @@ test.describe("proposal review regression fixtures", () => {
 
     await page.getByRole("dialog", { name: "Request changes" }).getByRole("button", { name: "Submit review" }).click();
     await requestStarted;
-    // The modal dialog blocks navigation while the review is pending; the failure closes the dialog
-    // so the preserved-failure Retry action is reachable, and the draft is kept for reopen.
+    // The failure is shown inside the dialog with the draft preserved; the in-dialog
+    // Submit review re-sends the failed request unchanged.
     releaseResponse?.();
-    await expect(page.getByRole("dialog", { name: "Request changes" })).toHaveCount(0);
+    const failureDialog = page.getByRole("dialog", { name: "Request changes" });
+    await expect(failureDialog).toBeVisible();
+    await expect(failureDialog.getByRole("alert")).toContainText("Fixture review failed");
+    await expect(failureDialog.getByText("Could not update review.")).toBeVisible();
+    await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
+    await failureDialog.getByRole("button", { name: "Submit review" }).click();
+    await expect(failureDialog.getByRole("alert")).toContainText("Fixture review failed");
+    await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
+    await failureDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
 
-    // Retry re-sends the failed request unchanged and shows the same failure.
-    await page.route("**/api/proposals/fixture-proposal/changes/fixture-pending", async (route) => {
-      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture review failed" }) });
-    });
+    // The outside Retry also re-sends the preserved failed request.
     await workspace.getByRole("button", { name: "Retry" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
 
@@ -237,11 +249,13 @@ async function openSection(page: Page, headingId: string) {
   return section;
 }
 
-async function openStaleSelection(page: Page, labels: string[]) {
+async function openStaleApply(page: Page, labels: string[]) {
   const workspace = await openWorkspace(page);
   await workspace.getByLabel("Show stale revision state").check();
   for (const label of labels) await workspace.getByLabel(label).check();
   await workspace.getByRole("button", { name: "Review latest revision" }).click();
   await workspace.getByLabel(/I reviewed Revision 13/).check();
+  await workspace.getByRole("button", { name: `Apply ${labels.length} selected` }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   return workspace;
 }

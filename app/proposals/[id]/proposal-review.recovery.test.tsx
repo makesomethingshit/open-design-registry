@@ -150,13 +150,15 @@ describe("proposal review recovery", () => {
     expect(inspector(render()).props.error).toBe("Approval needs conflict review");
   });
 
-  it("exposes E2 apply as deferred with zero /apply requests", async () => {
+  it("exposes the Apply entrypoint contract while review stays independent", async () => {
     const tree = selectBoth();
     expect(actionBar(tree).props.selectedCount).toBe(2);
 
-    // E2 renders no Apply CTA: nothing here can issue POST /apply.
-    const buttons = elements(tree).filter((element) => typeof element.type === "string" && element.type === "button");
-    expect(buttons.some((element) => text(element.props.children).startsWith("Apply"))).toBe(false);
+    // The Apply entrypoint contract reaches the action bar; review and selection stay
+    // independent. Rendering behavior is covered by the browser tests.
+    expect(actionBar(tree).props.canApply).toBe(true);
+    expect(typeof actionBar(tree).props.onOpenApply).toBe("function");
+    expect((inspector(tree).props.change as { reviewStatus: string }).reviewStatus).toBe("APPROVED");
 
     const applyCalls = mocks.fetch.mock.calls.filter((call) => String(call[0]).includes("/apply"));
     expect(applyCalls).toHaveLength(0);
@@ -212,8 +214,10 @@ describe("proposal review recovery", () => {
   });
 
   it("gates select-all on the same owner/status conditions as individual selection", () => {
-    // Owner + reviewable status: select-all is available.
-    expect(actionBar(render()).props.canSelect).toBe(true);
+    // Owner + reviewable status: select-all is available and gated on canApply.
+    const bar = actionBar(render());
+    expect(bar.props.canApply).toBe(true);
+    expect(bar.props.applicableCount).toBeGreaterThan(0);
 
     // The harness cannot reset useState between renders of the same tree, so use a
     // separate mount for each gated case via a fresh harness state set.
@@ -227,8 +231,8 @@ describe("proposal review recovery", () => {
       harness.states = [];
       harness.refs = [];
       const gated = ProposalReview({ ...props(), ...override });
-      const bar = actionBar(gated);
-      expect(bar.props.canSelect, label).toBe(false);
+      const gatedBar = actionBar(gated);
+      expect(gatedBar.props.canApply, label).toBe(false);
       const checkboxes = elements(gated).filter((element) => element.type === Checkbox);
       expect(checkboxes.some((element) => String((element.props as { id?: string }).id) === "select-all-eligible-changes"), label).toBe(false);
     }
