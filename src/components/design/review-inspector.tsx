@@ -57,7 +57,9 @@ export function ReviewInspector({ canReview, change, draft, error, failedRequest
   async function requestChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const submitted = await onReview("CHANGES_REQUESTED", draft);
-    if (!submitted) onRequestingChangesChange(true);
+    // On failure the dialog closes so the Retry action (which re-sends the failed
+    // request unchanged) is reachable; the draft is preserved and reappears on reopen.
+    if (!submitted) onRequestingChangesChange(false);
   }
 
   function formatHistoryDate(value: ReviewChange["reviewHistory"][number]["createdAt"]) {

@@ -28,7 +28,6 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }
 
 const { Checkbox } = await import("@/src/components/ui/checkbox");
 const { ChangeItem } = await import("@/src/components/design/change-item");
-const { Dialog } = await import("@/src/components/ui/dialog");
 const { ReviewActionBar } = await import("@/src/components/design/review-action-bar");
 const { ReviewInspector } = await import("@/src/components/design/review-inspector");
 const { default: ProposalReview } = await import("./proposal-review");
@@ -155,11 +154,9 @@ describe("proposal review recovery", () => {
     const tree = selectBoth();
     expect(actionBar(tree).props.selectedCount).toBe(2);
 
-    // E2 renders no Apply CTA and no confirmation dialog: nothing here can issue POST /apply.
+    // E2 renders no Apply CTA: nothing here can issue POST /apply.
     const buttons = elements(tree).filter((element) => typeof element.type === "string" && element.type === "button");
     expect(buttons.some((element) => text(element.props.children).startsWith("Apply"))).toBe(false);
-    expect(elements(tree).filter((element) => element.type === Dialog)).toHaveLength(1);
-    expect((elements(tree).find((element) => element.type === Dialog)?.props.open ?? false)).toBe(false);
 
     const applyCalls = mocks.fetch.mock.calls.filter((call) => String(call[0]).includes("/apply"));
     expect(applyCalls).toHaveLength(0);

@@ -60,7 +60,8 @@ test.describe("proposal review regression fixtures", () => {
     await workspace.getByLabel("Select Modify A deliberately long approved poster name for responsive review verification for application").check();
     await expect(workspace.getByText("Review the latest revision. Selection is preserved; application is unavailable in this stage.")).toBeVisible();
     await workspace.getByRole("button", { name: "Review latest revision" }).click();
-    await expect(workspace.getByRole("button", { name: "Review latest revision" })).toBeFocused();
+    // The toggle renames the button; focus returns to the same control under its new label.
+    await expect(workspace.getByRole("button", { name: "Back to base comparison" })).toBeFocused();
   });
 
   test("keeps conflict recovery messaging on the review path", async ({ page }) => {
@@ -69,17 +70,18 @@ test.describe("proposal review regression fixtures", () => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the conflicting change", latestRevision: { id: "fixture-r14" }, conflictChangeIds: ["fixture-poster"] }) });
     });
 
+    // Make the approved poster the active review target before approving it.
+    await workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ }).click();
     await workspace.getByRole("button", { name: "Approve change" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Review the conflicting change");
     await expect(workspace.getByText("1 selected change needs conflict review.")).toBeVisible();
-    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/)).not.toBeChecked();
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/).first()).not.toBeChecked();
     await expect(workspace.getByLabel("Select Whole document for application")).toBeChecked();
   });
 
   test("preserves a change-specific request draft, pending state, and late failure", async ({ page }) => {
     const workspace = await openWorkspace(page);
     const pendingChange = workspace.getByRole("button", { name: /^Modify A deliberately long pending poster/ });
-    const approvedChange = workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ });
     await pendingChange.click();
     await workspace.getByRole("button", { name: "Request changes" }).click();
     const dialog = page.getByRole("dialog", { name: "Request changes" });
@@ -104,14 +106,22 @@ test.describe("proposal review regression fixtures", () => {
 
     await page.getByRole("dialog", { name: "Request changes" }).getByRole("button", { name: "Submit review" }).click();
     await requestStarted;
-    await approvedChange.click();
+    // The modal dialog blocks navigation while the review is pending; the failure closes the dialog
+    // so the preserved-failure Retry action is reachable, and the draft is kept for reopen.
     releaseResponse?.();
-    await expect(workspace.getByRole("heading", { name: /^Modify A deliberately long approved poster/ })).toBeVisible();
-    await expect(workspace.getByRole("alert")).toHaveCount(0);
-    await pendingChange.click();
+    await expect(page.getByRole("dialog", { name: "Request changes" })).toHaveCount(0);
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
+
+    // Retry re-sends the failed request unchanged and shows the same failure.
+    await page.route("**/api/proposals/fixture-proposal/changes/fixture-pending", async (route) => {
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture review failed" }) });
+    });
     await workspace.getByRole("button", { name: "Retry" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
+
+    // Reopening the dialog shows the preserved draft for the same change.
+    await pendingChange.click();
+    await workspace.getByRole("button", { name: "Request changes" }).click();
     await expect(page.getByRole("dialog", { name: "Request changes" }).getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
   });
 
@@ -125,36 +135,48 @@ test.describe("proposal review regression fixtures", () => {
 
   test("keeps review and application selection independent in both directions", async ({ page }) => {
     const workspace = await openWorkspace(page);
-    // Approving the pending fixture change must not select anything for application.
+    let reviewPayload: unknown;
+    await page.route("**/api/proposals/fixture-proposal/changes/fixture-pending", async (route) => {
+      reviewPayload = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: "fixture-pending", reviewStatus: "APPROVED" }) });
+    });
+    // Approving the pending fixture change sends only the review PATCH — no application selection.
     await workspace.getByRole("button", { name: /^Modify A deliberately long pending poster/ }).click();
     await workspace.getByRole("button", { name: "Approve change" }).click();
-    await expect(workspace.getByRole("status").first()).toContainText("Approved");
-    await workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ }).click();
-    const checkbox = workspace.getByLabel("Select Modify A deliberately long approved poster name for responsive review verification for application");
-    await expect(checkbox).not.toBeChecked();
+    await expect.poll(() => reviewPayload).toEqual({ status: "APPROVED", comment: "" });
+    const approvedCheckbox = workspace.getByLabel("Select Modify A deliberately long pending poster name for responsive review verification for application");
+    await expect(approvedCheckbox).toHaveCount(0);
 
     // Selecting for application does not change the review state.
+    const checkbox = workspace.getByLabel("Select Modify A deliberately long approved poster name for responsive review verification for application");
     await checkbox.check();
+    await expect(checkbox.first()).toBeChecked();
     await expect(workspace.getByRole("button", { name: /Unit review history|Approve change/ }).first()).toBeVisible();
-    await expect(workspace.getByLabel("Select Modify A deliberately long approved poster name for responsive review verification for application")).toBeChecked();
     await expect(workspace.getByText(/8 total changes/)).toContainText("1 selected");
   });
 
   test("names every visible application checkbox for application at mobile width", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const workspace = await openWorkspace(page);
-    const approvedChange = workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ });
-    await approvedChange.click();
-    const mobileCheckbox = workspace.getByLabel(/for application/);
+    // The change list is hidden at mobile width; select the approved poster via the picker.
+    const picker = workspace.getByRole("combobox", { name: /^Change/ });
+    await picker.selectOption({ label: "Modify A deliberately long approved poster name for responsive review verification" });
+    const mobileCheckbox = workspace.getByRole("checkbox", { name: /for application/ });
     await expect(mobileCheckbox.first()).toBeVisible();
     for (const label of await mobileCheckbox.all()) {
-      await expect(label).toBeVisible();
-      expect(await label.getAttribute("aria-label") ?? await label.textContent()).toMatch(/for application/);
+      // Hidden rows also match by accessible name; only visible ones must be operable.
+      if (await label.isVisible()) {
+        const name = await label.evaluate((element: Element) => {
+          const input = element as HTMLInputElement;
+          return input.getAttribute("aria-label") ?? document.querySelector(`label[for="${input.id}"]`)?.textContent ?? input.textContent ?? "";
+        });
+        expect(name).toMatch(/for application/);
+      }
     }
     await mobileCheckbox.first().check();
     await expect(workspace.getByText(/8 total changes/)).toContainText("1 selected");
     await workspace.getByLabel("Select all eligible approved changes for application").check();
-    await expect(workspace.getByText(/8 total changes/)).not.toContainText("0 selected");
+    await expect(workspace.getByText(/8 total changes/)).toContainText("5 selected");
   });
 
   test("keeps selection tracks and the tablet inspector placement at each breakpoint", async ({ page }, testInfo) => {
