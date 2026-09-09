@@ -29,7 +29,7 @@ test.describe("proposal review regression fixtures", () => {
       await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture apply failed" }) });
     });
 
-    await workspace.getByLabel("Select Whole document").check();
+    await workspace.getByLabel("Select Whole document for application").check();
     await workspace.getByRole("button", { name: "Apply 1 selected" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("This replaces the entire current document.");
@@ -39,13 +39,13 @@ test.describe("proposal review regression fixtures", () => {
     await expect(dialog.getByRole("alert")).toContainText("Fixture apply failed");
 
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    await workspace.getByLabel("Select Whole document").uncheck();
+    await workspace.getByLabel("Select Whole document for application").uncheck();
 
     for (const unit of [
-      { label: /Select Add A deliberately long added unit/, id: "fixture-add" },
-      { label: /Select Modify A deliberately long approved poster/, id: "fixture-poster" },
-      { label: /Select Remove A deliberately long removable unit/, id: "fixture-remove" },
-      { label: /Select Rename A deliberately long renameable unit/, id: "fixture-rename" },
+      { label: /Select Add A deliberately long added unit for application/, id: "fixture-add" },
+      { label: /Select Modify A deliberately long approved poster for application/, id: "fixture-poster" },
+      { label: /Select Remove A deliberately long removable unit for application/, id: "fixture-remove" },
+      { label: /Select Rename A deliberately long renameable unit for application/, id: "fixture-rename" },
     ]) {
       payload = undefined;
       await workspace.getByLabel(unit.label).check();
@@ -59,7 +59,7 @@ test.describe("proposal review regression fixtures", () => {
   });
 
   test("keeps Apply 409 feedback visible and restores review focus", async ({ page }) => {
-    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster"]);
+    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster for application"]);
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the latest revision before applying these selected changes", latestRevision: { id: "fixture-r14" } }) });
     });
@@ -68,20 +68,20 @@ test.describe("proposal review regression fixtures", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(workspace.getByRole("alert")).toContainText("Review the latest revision before applying these selected changes");
     await expect(workspace.getByLabel(/I reviewed Revision 13/)).toHaveCount(0);
-    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster/)).toBeChecked();
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster for application/)).toBeChecked();
     await expect(workspace.getByRole("button", { name: "Review latest revision" })).toBeFocused();
   });
 
   test("keeps safe selections after a conflicting Apply 409", async ({ page }) => {
-    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster", "Select Whole document"]);
+    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster for application", "Select Whole document for application"]);
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the conflicting change", latestRevision: { id: "fixture-r14" }, conflictChangeIds: ["fixture-poster"] }) });
     });
 
     await page.getByRole("dialog").getByRole("button", { name: "Apply 2 selected" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Review the conflicting change");
-    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster/)).not.toBeChecked();
-    await expect(workspace.getByLabel("Select Whole document")).toBeChecked();
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster for application/)).not.toBeChecked();
+    await expect(workspace.getByLabel("Select Whole document for application")).toBeChecked();
     await expect(workspace.getByText("1 selected change needs conflict review.")).toBeVisible();
   });
 
@@ -116,6 +116,21 @@ test.describe("proposal review regression fixtures", () => {
     await pendingChange.click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
     await expect(draft).toHaveValue("Keep this request with the pending change.");
+  });
+
+  test("keeps review and application selection independent in both directions", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const checkbox = workspace.getByLabel("Select Modify A deliberately long approved poster for application");
+
+    // Approving a change does not select it for application.
+    await workspace.getByRole("button", { name: "Approve change" }).click();
+    await expect(checkbox).not.toBeChecked();
+
+    // Selecting for application does not change the review state.
+    await checkbox.check();
+    await expect(workspace.getByRole("button", { name: /Review history|Approve change/ }).first()).toBeVisible();
+    await expect(workspace.getByLabel("Select Modify A deliberately long approved poster for application")).toBeChecked();
+    await expect(workspace.getByText(/2 total changes/)).toContainText("1 selected");
   });
 
   test("keeps selection tracks and the tablet inspector placement at each breakpoint", async ({ page }, testInfo) => {

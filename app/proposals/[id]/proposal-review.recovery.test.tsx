@@ -141,4 +141,43 @@ describe("proposal review 409 recovery", () => {
 
     expect(actionBar(render()).props.selectedCount).toBe(1);
   });
+
+  it("keeps application selection unchanged after an Approve (approve never selects)", async () => {
+    let tree = selectBoth();
+    mocks.fetch.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+
+    const inspector = find(render(), (element) => element.type === ReviewInspector);
+    await (inspector.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
+
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(actionBar(render()).props.selectedCount).toBe(2);
+  });
+
+  it("does not change review state from the application checkbox", () => {
+    const tree = render();
+    const items = elements(tree).filter((element) => element.type === ChangeItem);
+    const target = items.find((element) => ((element.props as { change: { id: string } }).change.id === "still-eligible"));
+    const before = (find(render(), (element) => element.type === ReviewInspector).props.change as { reviewStatus: string }).reviewStatus;
+
+    // Toggling the application checkbox routes through onSelect only.
+    if (target) (target.props as unknown as { onSelect: (id: string, selected: boolean) => void }).onSelect("still-eligible", true);
+
+    expect(target).toBeTruthy();
+    expect((find(render(), (element) => element.type === ReviewInspector).props.change as { reviewStatus: string }).reviewStatus).toBe(before);
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(actionBar(render()).props.selectedCount).toBe(1);
+  });
+
+  it("preserves application selection when a review API call fails", async () => {
+    selectBoth();
+    mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Could not update review." }), { status: 500 }));
+
+    const inspector = find(render(), (element) => element.type === ReviewInspector);
+    const result = await (inspector.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
+
+    expect(result).toBe(false);
+    expect(actionBar(render()).props.selectedCount).toBe(2);
+    expect(find(render(), (element) => element.type === ReviewInspector).props.error).toContain("Could not update review");
+  });
 });

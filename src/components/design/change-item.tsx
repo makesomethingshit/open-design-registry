@@ -52,6 +52,14 @@ export function conflictStatusPresentation(status: ReviewChange["conflictStatus"
   return status ? conflictPresentations[status] : null;
 }
 
+export function applicationStatusPresentation(change: Pick<ReviewChange, "appliedRevision">) {
+  return change.appliedRevision ? { label: `Applied · r${change.appliedRevision.number}`, tone: "accent" as const, icon: "check" as const } : null;
+}
+
+export function applicationSelectionLabel(displayName: string) {
+  return `Select ${displayName} for application`;
+}
+
 type ChangeItemProps = {
   change: ReviewChange;
   viewed: boolean;
@@ -65,15 +73,16 @@ type ChangeItemProps = {
 
 export function ChangeItem({ applying, change, onSelect, onView, selectable, selected, showSelection, viewed }: ChangeItemProps) {
   const action = changeActionPresentation(change);
-  const status = changeReviewStatusPresentation(change.reviewStatus, change.appliedRevision?.number);
+  const status = changeReviewStatusPresentation(change.reviewStatus);
+  const application = applicationStatusPresentation(change);
   const conflict = conflictStatusPresentation(change.conflictStatus);
   const conflictId = `conflict-${change.id}`;
   const displayName = changeDisplayName(change);
+  const selectionLabel = applicationSelectionLabel(displayName);
 
   return <li className={styles.item} data-viewed={viewed || undefined}>
     <span className={styles.selectionSlot}>{showSelection && <label className={styles.selection}>
-      <input aria-describedby={!selectable && change.conflictReason ? conflictId : undefined} aria-label={`Select ${displayName}`} checked={selected} disabled={!selectable || applying} onChange={(event) => onSelect(change.id, event.target.checked)} type="checkbox" />
-      <span className="sr-only">Select {displayName}</span>
+      <input aria-describedby={!selectable && change.conflictReason ? conflictId : undefined} aria-label={selectionLabel} checked={selected} disabled={!selectable || applying} onChange={(event) => onSelect(change.id, event.target.checked)} title="Select for application" type="checkbox" />
     </label>}</span>
     <button aria-current={viewed ? "true" : undefined} className={styles.summary} onClick={() => onView(change.id)} type="button">
       <span className={styles.icon}><Icon name={action.icon} size={16} /></span>
@@ -81,6 +90,7 @@ export function ChangeItem({ applying, change, onSelect, onView, selectable, sel
     </button>
     <div className={styles.badges}>
       <StatusBadge icon={status.icon} tone={status.tone}>{status.label}</StatusBadge>
+      {application && <StatusBadge icon={application.icon} tone={application.tone}>{application.label}</StatusBadge>}
       {conflict && <StatusBadge icon={conflict.icon} tone={conflict.tone}>{conflict.label}</StatusBadge>}
     </div>
     {change.conflictReason && <p className={styles.reason} id={conflictId}>{change.conflictReason}{!selectable && change.conflictStatus && change.conflictStatus !== "NO_CONFLICT" ? " Cannot select." : ""}</p>}

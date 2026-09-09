@@ -38,6 +38,24 @@ export function includesWholeDocumentReplacement(changes: Array<Pick<ReviewChang
   return changes.some((change) => selectedChangeIds.includes(change.id) && (change.action === "REPLACE_DOCUMENT" || change.type === "REPLACE_DOCUMENT"));
 }
 
+/**
+ * Applies application-selection eligibility and state-preservation rules to the
+ * current selection. Review API failures never touch this: only a server
+ * response that marks a change Applied (or otherwise ineligible) drops it.
+ */
+export function selectionAfterServerChanges(
+  selectedChangeIds: string[],
+  changes: Array<Pick<ReviewChange, "id" | "reviewStatus" | "appliedRevision">>,
+  eligibility: (change: Pick<ReviewChange, "id" | "reviewStatus" | "appliedRevision">) => boolean,
+) {
+  const byId = new Map(changes.map((change) => [change.id, change]));
+  const dropped = selectedChangeIds.filter((id) => {
+    const change = byId.get(id);
+    return !change || !eligibility(change);
+  });
+  return { selected: selectedChangeIds.filter((id) => !dropped.includes(id)), dropped };
+}
+
 type ProposalReviewProps = {
   proposalId: string;
   projectSlug: string;
@@ -165,7 +183,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       const response = await fetch(`/api/proposals/${proposalId}/changes/${changeId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: reviewStatus, comment }) });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        setReviewErrors((errors) => ({ ...errors, [changeId]: payload?.error ?? "Could not save review" }));
+        setReviewErrors((errors) => ({ ...errors, [changeId]: payload?.error ?? "Could not update review. Your existing review state is unchanged." }));
         if (response.status === 409) recoverFromConflict(payload);
         return false;
       }
@@ -174,7 +192,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       router.refresh();
       return true;
     } catch {
-      setReviewErrors((errors) => ({ ...errors, [changeId]: "Could not save review. Try again." }));
+      setReviewErrors((errors) => ({ ...errors, [changeId]: "Could not update review. Your existing review state is unchanged." }));
       return false;
     } finally {
       pendingChangeIdsRef.current.delete(changeId);
@@ -260,6 +278,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     </div>}
     <aside aria-labelledby="changes-heading" className={styles.rail}>
       <header className={styles.railHeader}><h2 id="changes-heading">Changes</h2><span className={styles.count}>{changes.length}</span></header>
+      <p className={styles.railHint}>Checkboxes select approved changes for application; they are not review decisions. Click a row to review it.</p>
       <label className={styles.mobilePicker}>Change<select onChange={(event) => viewChange(event.target.value)} value={selectedChange?.id ?? ""}>{changes.map((change) => <option key={change.id} value={change.id}>{changeDisplayName(change)}</option>)}</select></label>
       <ul className={styles.changeList}>{changes.map((change) => {
         const showSelection = canSelectChanges && change.reviewStatus === "APPROVED" && !change.appliedRevision;
@@ -273,7 +292,8 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     <aside className={styles.inspector}><ReviewInspector applying={applying} canReview={selectedCanReview} change={selectedChange} draft={selectedChange ? reviewDrafts[selectedChange.id] ?? "" : ""} error={selectedChange ? reviewErrors[selectedChange.id] ?? "" : ""} onDraftChange={(draft) => { if (selectedChange) setReviewDraft(selectedChange.id, draft); }} onRequestingChangesChange={(requesting) => { if (selectedChange) setRequestingChanges(selectedChange.id, requesting); }} onReview={(reviewStatus, comment) => selectedChange ? review(selectedChange.id, reviewStatus, comment) : Promise.resolve(false)} pending={Boolean(selectedChange && pendingChangeIds.includes(selectedChange.id))} projectSlug={projectSlug} requestingChanges={Boolean(selectedChange && requestingChangeIds[selectedChange.id])} /></aside>
     {selectedCanSelect && selectedChange && <div className={styles.mobileSelection}><Checkbox checked={selectedChangeIds.includes(selectedChange.id)} description={selectedSelectable ? "Included in the next revision." : "This approved change must be reviewed against the latest revision before it can be selected."} disabled={applying || !selectedSelectable} label={`Include ${changeDisplayName(selectedChange)} in this application`} onChange={(event) => toggleSelection(selectedChange.id, event.target.checked)} /></div>}
     <section aria-labelledby="conversation-heading" className={styles.conversation}>
-      <header className={styles.conversationHeader}><h2 id="conversation-heading">Conversation</h2></header>
+      <header className={styles.conversationHeader}><h2 id="conversation-heading">Proposal conversation</h2></header>
+      <p className={styles.conversationHint}>Discussion about the proposal as a whole. Per-change feedback lives in that change's review history.</p>
       {comments.length ? <div className={styles.comments}>{comments.map((item) => <article className={styles.comment} key={item.id}><p>{item.body}</p><span>{item.author.name} - {new Date(item.createdAt).toLocaleString()}</span></article>)}</div> : <p className={styles.empty}>Start the conversation.</p>}
       {signedIn && status !== "CLOSED" && <form className={styles.commentForm} onSubmit={comment}><input aria-label="Write a proposal comment" disabled={commenting} maxLength={10000} name="body" placeholder="Write a comment" required /><Button disabled={commenting} loading={commenting} loadingLabel="Saving comment" type="submit" variant="secondary">Comment</Button></form>}
       {commentError && <p className={styles.error} role="alert">{commentError}</p>}
