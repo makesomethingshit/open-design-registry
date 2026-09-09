@@ -26,7 +26,6 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 
-const { Button } = await import("@/src/components/ui/button");
 const { Checkbox } = await import("@/src/components/ui/checkbox");
 const { ChangeItem } = await import("@/src/components/design/change-item");
 const { Dialog } = await import("@/src/components/ui/dialog");
@@ -34,13 +33,14 @@ const { ReviewActionBar } = await import("@/src/components/design/review-action-
 const { ReviewInspector } = await import("@/src/components/design/review-inspector");
 const { default: ProposalReview } = await import("./proposal-review");
 
-const changes = [
+const eligibleChanges = [
   { id: "still-eligible", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "Home", targetFileId: "home", name: "Home", newName: null, kind: "artboard", mimeType: "image/png", size: 1, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "Home", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "r13", reviewHistory: [], sourcePreviews: [], basePreviews: [], latestPreviews: [] },
   { id: "needs-review", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "Logo", targetFileId: "logo", name: "Logo", newName: null, kind: "asset", mimeType: "image/png", size: 1, reviewStatus: "APPROVED", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "Logo", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "r13", reviewHistory: [], sourcePreviews: [], basePreviews: [], latestPreviews: [] },
+  { id: "pending-home", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "Banner", targetFileId: "banner", name: "Banner", newName: null, kind: "artboard", mimeType: "image/png", size: 1, reviewStatus: "PENDING", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "Banner", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "r13", reviewHistory: [], sourcePreviews: [], basePreviews: [], latestPreviews: [] },
 ] satisfies Props["changes"];
 
 function props(): Props {
-  return { proposalId: "proposal", projectSlug: "project", baseRevision: { id: "r10", number: 10, title: "Base", previews: [] }, sourceRevision: { id: "source", number: 11, title: "Source", previews: [] }, latestRevision: { id: "r13", number: 13, title: "Latest", previews: [] }, latestUnitCount: 2, stale: true, knownConflictCount: 0, unavailableConflictCount: 0, status: "APPROVED", changes: [...changes], comments: [], signedIn: true, isOwner: true, canClose: false };
+  return { proposalId: "proposal", projectSlug: "project", baseRevision: { id: "r10", number: 10, title: "Base", previews: [] }, sourceRevision: { id: "source", number: 11, title: "Source", previews: [] }, latestRevision: { id: "r13", number: 13, title: "Latest", previews: [] }, latestUnitCount: 2, stale: true, knownConflictCount: 0, unavailableConflictCount: 0, status: "APPROVED", changes: [...eligibleChanges], comments: [], signedIn: true, isOwner: true, canClose: false };
 }
 
 function text(value: unknown): string {
@@ -72,17 +72,22 @@ function actionBar(tree: unknown) {
   return find(tree, (element) => element.type === ReviewActionBar);
 }
 
+function inspector(tree: unknown) {
+  return find(tree, (element) => element.type === ReviewInspector);
+}
+
 function selectBoth() {
   let tree = render();
   for (const item of elements(tree).filter((element) => element.type === ChangeItem)) {
     const props = item.props as { change: { id: string }; onSelect: (id: string, selected: boolean) => void };
+    if (props.change.id === "pending-home") continue;
     props.onSelect(props.change.id, true);
     tree = render();
   }
   return tree;
 }
 
-describe("proposal review 409 recovery", () => {
+describe("proposal review recovery", () => {
   beforeEach(() => {
     harness.cursor = 0;
     harness.states = [];
@@ -92,78 +97,107 @@ describe("proposal review 409 recovery", () => {
     vi.stubGlobal("fetch", mocks.fetch);
   });
 
-  it("refreshes and keeps only eligible selected changes after an Apply 409", async () => {
-    let tree = selectBoth();
-    (actionBar(tree).props.onOpenApply as () => void)();
-    tree = render();
-    mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Review latest changes", latestRevision: { id: "r14" }, conflictChangeIds: ["needs-review"] }), { status: 409 }));
+  it("re-sends the failed review request unchanged on Retry", async () => {
+    render();
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Could not update review." }), { status: 500 }));
 
-    const dialog = find(tree, (element) => element.type === Dialog);
-    const applyButton = elements(dialog.props.actions).find((element) => element.type === Button && text(element.props.children).startsWith("Apply 2 selected"));
-    await (applyButton?.props.onClick as () => Promise<void>)();
+    const first = inspector(render());
+    await (first.props.onReview as (status: "CHANGES_REQUESTED", comment?: string) => Promise<boolean>)("CHANGES_REQUESTED", "Increase spacing around the mark.");
 
+    const calls = mocks.fetch.mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0][1].body as string)).toEqual({ status: "CHANGES_REQUESTED", comment: "Increase spacing around the mark." });
+
+    const failed = inspector(render());
+    expect(failed.props.error).toContain("Could not update review");
+    expect(failed.props.failedRequest).toEqual({ status: "CHANGES_REQUESTED", comment: "Increase spacing around the mark." });
+
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
+    await (failed.props.onRetry as () => Promise<boolean>)();
+
+    expect(mocks.fetch.mock.calls).toHaveLength(2);
+    expect(JSON.parse(mocks.fetch.mock.calls[1][1].body as string)).toEqual({ status: "CHANGES_REQUESTED", comment: "Increase spacing around the mark." });
     expect(mocks.refresh).toHaveBeenCalledOnce();
-    expect(actionBar(render()).props.selectedCount).toBe(1);
-    expect(actionBar(render()).props.selectionNotice).toContain("1 selected change needs conflict review");
+  });
+
+  it("keeps the failed request after navigating to another change and back", async () => {
+    render();
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Could not update review." }), { status: 500 }));
+    await (inspector(render()).props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
+
+    // Navigate to another change (viewChange only changes the viewed target).
+    const items = elements(render()).filter((element) => element.type === ChangeItem);
+    (items[1].props as unknown as { onView: (id: string) => void }).onView("needs-review");
+    render();
+    (elements(render()).filter((element) => element.type === ChangeItem)[0].props as unknown as { onView: (id: string) => void }).onView("still-eligible");
+    render();
+
+    const restored = inspector(render());
+    expect(restored.props.failedRequest).toEqual({ status: "APPROVED", comment: "" });
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
+    await (restored.props.onRetry as () => Promise<boolean>)();
+    expect(JSON.parse(mocks.fetch.mock.calls.at(-1)![1].body as string)).toEqual({ status: "APPROVED", comment: "" });
   });
 
   it("refreshes a review 409 without discarding unaffected selections", async () => {
     const tree = selectBoth();
     mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Approval needs conflict review", conflictChangeIds: ["needs-review"] }), { status: 409 }));
 
-    const inspector = find(tree, (element) => element.type === ReviewInspector);
-    await (inspector.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
+    const target = inspector(tree);
+    await (target.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
 
     expect(mocks.refresh).toHaveBeenCalledOnce();
     expect(actionBar(render()).props.selectedCount).toBe(1);
-    expect(find(render(), (element) => element.type === ReviewInspector).props.error).toBe("Approval needs conflict review");
+    expect(inspector(render()).props.error).toBe("Approval needs conflict review");
   });
 
-  it("restores apply busy state and keeps the selection after a network failure", async () => {
-    let tree = selectBoth();
-    (actionBar(tree).props.onOpenApply as () => void)();
-    tree = render();
-    mocks.fetch.mockRejectedValue(new Error("network unavailable"));
+  it("exposes E2 apply as deferred with zero /apply requests", async () => {
+    const tree = selectBoth();
+    expect(actionBar(tree).props.selectedCount).toBe(2);
 
-    const dialog = find(tree, (element) => element.type === Dialog);
-    const applyButton = elements(dialog.props.actions).find((element) => element.type === Button && text(element.props.children).startsWith("Apply 2 selected"));
-    await (applyButton?.props.onClick as () => Promise<void>)();
+    // E2 renders no Apply CTA and no confirmation dialog: nothing here can issue POST /apply.
+    const buttons = elements(tree).filter((element) => typeof element.type === "string" && element.type === "button");
+    expect(buttons.some((element) => text(element.props.children).startsWith("Apply"))).toBe(false);
+    expect(elements(tree).filter((element) => element.type === Dialog)).toHaveLength(1);
+    expect((elements(tree).find((element) => element.type === Dialog)?.props.open ?? false)).toBe(false);
 
-    expect(actionBar(render()).props.applying).toBe(false);
-    expect(actionBar(render()).props.selectedCount).toBe(2);
-    expect(find(render(), (element) => element.type === Dialog).props.open).toBe(true);
+    const applyCalls = mocks.fetch.mock.calls.filter((call) => String(call[0]).includes("/apply"));
+    expect(applyCalls).toHaveLength(0);
   });
 
-  it("keeps individual approved-change selection available in the mobile flow", () => {
-    const mobileSelection = find(render(), (element) => element.type === Checkbox && String(element.props.label).includes("Include Modify Home"));
+  it("keeps individual approved-change selection available in the mobile flow with a for-application label", () => {
+    const mobileSelection = find(render(), (element) => element.type === Checkbox && String(element.props.label).includes("for application"));
 
     (mobileSelection.props.onChange as (event: { target: { checked: boolean } }) => void)({ target: { checked: true } });
 
     expect(actionBar(render()).props.selectedCount).toBe(1);
   });
 
-  it("keeps application selection unchanged after an Approve (approve never selects)", async () => {
-    let tree = selectBoth();
+  it("keeps application selection unchanged after an Approve against refreshed props (approve never selects)", async () => {
+    selectBoth();
+    // Server confirms the approval; refreshed props keep both changes Approved/unapplied.
     mocks.fetch.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
 
-    const inspector = find(render(), (element) => element.type === ReviewInspector);
-    await (inspector.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
+    const target = inspector(render());
+    await (target.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
 
     expect(mocks.refresh).toHaveBeenCalledOnce();
+    // Selection is local state only; refreshed props must not add or drop it.
     expect(actionBar(render()).props.selectedCount).toBe(2);
+    expect((inspector(render()).props.change as { reviewStatus: string }).reviewStatus).toBe("APPROVED");
   });
 
   it("does not change review state from the application checkbox", () => {
     const tree = render();
     const items = elements(tree).filter((element) => element.type === ChangeItem);
     const target = items.find((element) => ((element.props as { change: { id: string } }).change.id === "still-eligible"));
-    const before = (find(render(), (element) => element.type === ReviewInspector).props.change as { reviewStatus: string }).reviewStatus;
+    const before = (inspector(render()).props.change as { reviewStatus: string }).reviewStatus;
 
     // Toggling the application checkbox routes through onSelect only.
     if (target) (target.props as unknown as { onSelect: (id: string, selected: boolean) => void }).onSelect("still-eligible", true);
 
     expect(target).toBeTruthy();
-    expect((find(render(), (element) => element.type === ReviewInspector).props.change as { reviewStatus: string }).reviewStatus).toBe(before);
+    expect((inspector(render()).props.change as { reviewStatus: string }).reviewStatus).toBe(before);
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(actionBar(render()).props.selectedCount).toBe(1);
@@ -173,11 +207,10 @@ describe("proposal review 409 recovery", () => {
     selectBoth();
     mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Could not update review." }), { status: 500 }));
 
-    const inspector = find(render(), (element) => element.type === ReviewInspector);
-    const result = await (inspector.props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
+    const result = await (inspector(render()).props.onReview as (status: "APPROVED") => Promise<boolean>)("APPROVED");
 
     expect(result).toBe(false);
     expect(actionBar(render()).props.selectedCount).toBe(2);
-    expect(find(render(), (element) => element.type === ReviewInspector).props.error).toContain("Could not update review");
+    expect(inspector(render()).props.error).toContain("Could not update review");
   });
 });

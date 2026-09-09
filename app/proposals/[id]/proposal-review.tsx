@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
 import { Checkbox } from "@/src/components/ui/checkbox";
-import { Dialog } from "@/src/components/ui/dialog";
-import { ChangeItem, changeDisplayName } from "@/src/components/design/change-item";
+import { ChangeItem, applicationSelectionLabel, changeDisplayName, removalWarning } from "@/src/components/design/change-item";
 import { DesignPreview } from "@/src/components/design/design-preview";
 import { ReviewActionBar } from "@/src/components/design/review-action-bar";
 import { ReviewInspector } from "@/src/components/design/review-inspector";
+import type { FailedReviewRequest } from "@/src/components/design/review-inspector";
 import type { ReviewChange, ReviewComment, ReviewRevision } from "@/src/components/design/review-types";
 import styles from "./proposal-review.module.css";
 
@@ -21,9 +21,7 @@ export function selectedUnitResultCount(latestUnitCount: number | null, changes:
   }, 0);
 }
 
-export function removalWarning(removalCount: number) {
-  return removalCount === 1 ? "1 unit will be removed from the new revision. Earlier revisions remain available." : `${removalCount} units will be removed from the new revision. Earlier revisions remain available.`;
-}
+export { removalWarning } from "@/src/components/design/change-item";
 
 export function selectedIdsAfterConflict(selectedChangeIds: string[], payload: unknown) {
   const conflictChangeIds = payload && typeof payload === "object" && Array.isArray((payload as { conflictChangeIds?: unknown }).conflictChangeIds)
@@ -39,9 +37,11 @@ export function includesWholeDocumentReplacement(changes: Array<Pick<ReviewChang
 }
 
 /**
- * Applies application-selection eligibility and state-preservation rules to the
- * current selection. Review API failures never touch this: only a server
- * response that marks a change Applied (or otherwise ineligible) drops it.
+ * Applies application-selection eligibility after a server refresh.
+ * Actual selection cleanup runs in the effect above from refreshed props;
+ * this helper exposes the same rule for unit tests. Review API failures
+ * never touch this: only a server response that marks a change Applied
+ * (or otherwise ineligible) drops it.
  */
 export function selectionAfterServerChanges(
   selectedChangeIds: string[],
@@ -82,19 +82,16 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   const [selectedChangeIds, setSelectedChangeIds] = useState<string[]>([]);
   const [selectionNotice, setSelectionNotice] = useState("");
   const [pendingChangeIds, setPendingChangeIds] = useState<string[]>([]);
-  const [applying, setApplying] = useState(false);
   const [commenting, setCommenting] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [confirmApply, setConfirmApply] = useState(false);
   const [reviewErrors, setReviewErrors] = useState<Record<string, string>>({});
+  const [failedReviews, setFailedReviews] = useState<Record<string, FailedReviewRequest>>({});
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, string>>({});
   const [requestingChangeIds, setRequestingChangeIds] = useState<Record<string, boolean>>({});
-  const [applyError, setApplyError] = useState("");
   const [commentError, setCommentError] = useState("");
   const [closeError, setCloseError] = useState("");
   const [focusLatestReview, setFocusLatestReview] = useState(false);
   const pendingChangeIdsRef = useRef(new Set<string>());
-  const applyingRef = useRef(false);
   const commentingRef = useRef(false);
   const closingRef = useRef(false);
 
@@ -109,7 +106,6 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   const unitResultUnknown = hasUnitChanges && latestUnitCount == null;
   const emptyResult = selectedResultCount === 0;
   const canSelectChanges = isOwner && status !== "CLOSED" && status !== "ACCEPTED";
-  const canApply = canSelectChanges && approvedChanges.length > 0;
   const removalCount = changes.filter((change) => selectedChangeIds.includes(change.id) && change.action === "REMOVE_UNIT").length;
   const wholeDocumentReplacement = includesWholeDocumentReplacement(changes, selectedChangeIds);
   const reviewVersion = `${latestRevision?.id ?? baseRevision.id}:${changes.map((change) => `${change.id}:${change.checkedLatestRevisionId}:${change.conflictStatus}:${change.reviewStatus}`).join("|")}`;
@@ -136,6 +132,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
 
   useEffect(() => {
     setConfirmedLatest(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the stale-review acknowledgement whenever the review inputs change
   }, [reviewVersion, selectedChangeIds]);
 
   useEffect(() => {
@@ -169,14 +166,19 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     });
     setConfirmedLatest(false);
     setReviewingLatest(false);
-    setConfirmApply(false);
     if (stale) setFocusLatestReview(true);
     router.refresh();
   }
 
   async function review(changeId: string, reviewStatus: "APPROVED" | "CHANGES_REQUESTED", comment = "") {
-    if (applyingRef.current || pendingChangeIdsRef.current.has(changeId)) return false;
+    if (pendingChangeIdsRef.current.has(changeId)) return false;
     setReviewErrors((errors) => ({ ...errors, [changeId]: "" }));
+    setFailedReviews((failed) => {
+      if (!(changeId in failed)) return failed;
+      const next = { ...failed };
+      delete next[changeId];
+      return next;
+    });
     pendingChangeIdsRef.current.add(changeId);
     setPendingChangeIds((ids) => [...ids, changeId]);
     try {
@@ -184,6 +186,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         setReviewErrors((errors) => ({ ...errors, [changeId]: payload?.error ?? "Could not update review. Your existing review state is unchanged." }));
+        setFailedReviews((failed) => ({ ...failed, [changeId]: { status: reviewStatus, comment } }));
         if (response.status === 409) recoverFromConflict(payload);
         return false;
       }
@@ -193,11 +196,18 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       return true;
     } catch {
       setReviewErrors((errors) => ({ ...errors, [changeId]: "Could not update review. Your existing review state is unchanged." }));
+      setFailedReviews((failed) => ({ ...failed, [changeId]: { status: reviewStatus, comment } }));
       return false;
     } finally {
       pendingChangeIdsRef.current.delete(changeId);
       setPendingChangeIds((ids) => ids.filter((id) => id !== changeId));
     }
+  }
+
+  async function retryReview(changeId: string) {
+    const failed = failedReviews[changeId];
+    if (!failed) return false;
+    return review(changeId, failed.status, failed.comment);
   }
 
   async function comment(event: FormEvent<HTMLFormElement>) {
@@ -223,32 +233,8 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     }
   }
 
-  async function apply() {
-    if (applyingRef.current) return;
-    applyingRef.current = true;
-    setApplying(true);
-    setApplyError("");
-    try {
-      const response = await fetch(`/api/proposals/${proposalId}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changeIds: selectedChangeIds, ...(stale && confirmedLatest && latestRevision ? { reviewedLatestRevisionId: latestRevision.id, reviewedChangeIds: selectedChangeIds } : {}) }) });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        setApplyError(payload?.error ?? "Could not apply selected changes");
-        if (response.status === 409) recoverFromConflict(payload);
-        return;
-      }
-      setConfirmApply(false);
-      setSelectedChangeIds([]);
-      router.refresh();
-    } catch {
-      setApplyError("Could not apply selected changes. Try again.");
-    } finally {
-      applyingRef.current = false;
-      setApplying(false);
-    }
-  }
-
   async function close() {
-    if (closingRef.current || applyingRef.current) return;
+    if (closingRef.current) return;
     closingRef.current = true;
     setClosing(true);
     setCloseError("");
@@ -273,8 +259,8 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
 
   return <div className={styles.workspace} data-stale={stale || undefined}>
     {stale && <div className={styles.stale}>
-      <Banner action={<Button disabled={applying} id={`review-latest-${proposalId}`} onClick={() => { setReviewingLatest((current) => !current); setConfirmedLatest(false); }} size="lg" variant="secondary">{reviewingLatest ? "Back to base comparison" : "Review latest revision"}</Button>} title={`This proposal is based on Revision ${baseRevision.number}; the project is now at Revision ${latestRevision?.number}.`} tone="warning">{knownConflictCount ? `${knownConflictCount} ${knownConflictCount === 1 ? "unit changed" : "units changed"} upstream.` : "No proposed units changed upstream."}{unavailableConflictCount ? ` ${unavailableConflictCount} ${unavailableConflictCount === 1 ? "unit could" : "units could"} not be checked.` : ""}</Banner>
-      {reviewingLatest && <Checkbox checked={confirmedLatest} disabled={applying} id="confirm-latest-review" label={`I reviewed Revision ${latestRevision?.number} against the selected changes and understand the selected additions, modifications, removals, and renames will be applied in a new revision.`} onChange={(event) => setConfirmedLatest(event.target.checked)} />}
+      <Banner action={<Button id={`review-latest-${proposalId}`} onClick={() => { setReviewingLatest((current) => !current); setConfirmedLatest(false); }} size="lg" variant="secondary">{reviewingLatest ? "Back to base comparison" : "Review latest revision"}</Button>} title={`This proposal is based on Revision ${baseRevision.number}; the project is now at Revision ${latestRevision?.number}.`} tone="warning">{knownConflictCount ? `${knownConflictCount} ${knownConflictCount === 1 ? "unit changed" : "units changed"} upstream.` : "No proposed units changed upstream."}{unavailableConflictCount ? ` ${unavailableConflictCount} ${unavailableConflictCount === 1 ? "unit could" : "units could"} not be checked.` : ""}</Banner>
+      {reviewingLatest && <Checkbox checked={confirmedLatest} id="confirm-latest-review" label={`I reviewed Revision ${latestRevision?.number} against the selected changes and understand the selected additions, modifications, removals, and renames will be applied in a new revision.`} onChange={(event) => setConfirmedLatest(event.target.checked)} />}
     </div>}
     <aside aria-labelledby="changes-heading" className={styles.rail}>
       <header className={styles.railHeader}><h2 id="changes-heading">Changes</h2><span className={styles.count}>{changes.length}</span></header>
@@ -283,14 +269,14 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       <ul className={styles.changeList}>{changes.map((change) => {
         const showSelection = canSelectChanges && change.reviewStatus === "APPROVED" && !change.appliedRevision;
         const selectable = showSelection && (!stale || change.latestAvailable) && (change.conflictStatus == null || change.conflictStatus === "NO_CONFLICT");
-        return <ChangeItem applying={applying} change={change} key={change.id} onSelect={toggleSelection} onView={viewChange} selectable={selectable} selected={selectedChangeIds.includes(change.id)} showSelection={showSelection} viewed={selectedChange?.id === change.id} />;
+        return <ChangeItem applying={false} change={change} key={change.id} onSelect={toggleSelection} onView={viewChange} selectable={selectable} selected={selectedChangeIds.includes(change.id)} showSelection={showSelection} viewed={selectedChange?.id === change.id} />;
       })}</ul>
     </aside>
     <section aria-label="Visual review" className={styles.comparison} id="visual-review">
       <DesignPreview current={selectedComparisonCurrent} currentLabel="Proposal" currentNumber={sourceRevision.number} missingCurrentLabel="Removed in this proposal" missingPreviousLabel="Not present in the original revision" previous={selectedComparisonPrevious} previousLabel={previousLabel} previousNumber={previousNumber} rename={rename} />
     </section>
-    <aside className={styles.inspector}><ReviewInspector applying={applying} canReview={selectedCanReview} change={selectedChange} draft={selectedChange ? reviewDrafts[selectedChange.id] ?? "" : ""} error={selectedChange ? reviewErrors[selectedChange.id] ?? "" : ""} onDraftChange={(draft) => { if (selectedChange) setReviewDraft(selectedChange.id, draft); }} onRequestingChangesChange={(requesting) => { if (selectedChange) setRequestingChanges(selectedChange.id, requesting); }} onReview={(reviewStatus, comment) => selectedChange ? review(selectedChange.id, reviewStatus, comment) : Promise.resolve(false)} pending={Boolean(selectedChange && pendingChangeIds.includes(selectedChange.id))} projectSlug={projectSlug} requestingChanges={Boolean(selectedChange && requestingChangeIds[selectedChange.id])} /></aside>
-    {selectedCanSelect && selectedChange && <div className={styles.mobileSelection}><Checkbox checked={selectedChangeIds.includes(selectedChange.id)} description={selectedSelectable ? "Included in the next revision." : "This approved change must be reviewed against the latest revision before it can be selected."} disabled={applying || !selectedSelectable} label={`Include ${changeDisplayName(selectedChange)} in this application`} onChange={(event) => toggleSelection(selectedChange.id, event.target.checked)} /></div>}
+    <aside className={styles.inspector}><ReviewInspector canReview={selectedCanReview} change={selectedChange} draft={selectedChange ? reviewDrafts[selectedChange.id] ?? "" : ""} error={selectedChange ? reviewErrors[selectedChange.id] ?? "" : ""} failedRequest={selectedChange ? failedReviews[selectedChange.id] ?? null : null} onDraftChange={(draft) => { if (selectedChange) setReviewDraft(selectedChange.id, draft); }} onRequestingChangesChange={(requesting) => { if (selectedChange) setRequestingChanges(selectedChange.id, requesting); }} onRetry={() => selectedChange ? retryReview(selectedChange.id) : Promise.resolve(false)} onReview={(reviewStatus, comment) => selectedChange ? review(selectedChange.id, reviewStatus, comment) : Promise.resolve(false)} pending={Boolean(selectedChange && pendingChangeIds.includes(selectedChange.id))} projectSlug={projectSlug} requestingChanges={Boolean(selectedChange && requestingChangeIds[selectedChange.id])} /></aside>
+    {selectedCanSelect && selectedChange && <div className={styles.mobileSelection}><Checkbox checked={selectedChangeIds.includes(selectedChange.id)} description={selectedSelectable ? "Included in the next revision." : "This approved change must be reviewed against the latest revision before it can be selected."} disabled={!selectedSelectable} label={applicationSelectionLabel(changeDisplayName(selectedChange))} onChange={(event) => toggleSelection(selectedChange.id, event.target.checked)} /></div>}
     <section aria-labelledby="conversation-heading" className={styles.conversation}>
       <header className={styles.conversationHeader}><h2 id="conversation-heading">Proposal conversation</h2></header>
       <p className={styles.conversationHint}>Discussion about the proposal as a whole. Per-change feedback lives in that change's review history.</p>
@@ -299,18 +285,8 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       {commentError && <p className={styles.error} role="alert">{commentError}</p>}
     </section>
     <div className={styles.actionBar}>
-      <ReviewActionBar allSelected={allSelected} applicableCount={applicableApprovedChanges.length} appliedCount={applied} applying={applying} approvedCount={approvedChanges.length} blockedApprovedCount={approvedChanges.length - applicableApprovedChanges.length} canApply={canApply} closeAction={canClose && status !== "CLOSED" && status !== "ACCEPTED" ? <Button disabled={closing || applying} loading={closing} loadingLabel="Closing proposal" onClick={() => { void close(); }} size="lg" variant="secondary">Close proposal</Button> : undefined} emptyResult={emptyResult} onOpenApply={() => { setApplyError(""); setConfirmApply(true); }} onSelectAll={(selected) => setSelectedChangeIds(selected ? applicableApprovedChanges.map((change) => change.id) : [])} pendingCount={pending} requestedCount={requested} selectedCount={selectedChangeIds.length} selectionDisabled={applying} selectionNotice={selectionNotice} stale={stale} staleConfirmed={confirmedLatest} totalCount={changes.length} unitResultUnknown={unitResultUnknown} />
-      {!confirmApply && applyError && <Banner tone="error" title="Could not apply selected changes">{applyError}</Banner>}
+      <ReviewActionBar allSelected={allSelected} applicableCount={applicableApprovedChanges.length} appliedCount={applied} approvedCount={approvedChanges.length} blockedApprovedCount={approvedChanges.length - applicableApprovedChanges.length} closeAction={canClose && status !== "CLOSED" && status !== "ACCEPTED" ? <Button disabled={closing} loading={closing} loadingLabel="Closing proposal" onClick={() => { void close(); }} size="lg" variant="secondary">Close proposal</Button> : undefined} emptyResult={emptyResult} onSelectAll={(selected) => setSelectedChangeIds(selected ? applicableApprovedChanges.map((change) => change.id) : [])} pendingCount={pending} removalCount={removalCount} requestedCount={requested} selectedChanges={changes.filter((change) => selectedChangeIds.includes(change.id))} selectedCount={selectedChangeIds.length} selectionNotice={selectionNotice} stale={stale} totalCount={changes.length} unitResultUnknown={unitResultUnknown} wholeDocumentReplacement={wholeDocumentReplacement} />
       {closeError && <Banner tone="error" title="Could not close proposal">{closeError}</Banner>}
     </div>
-    <Dialog actions={<><Button disabled={applying} onClick={() => { if (!applying) setConfirmApply(false); }} size="lg" variant="secondary">Cancel</Button><Button loading={applying} loadingLabel="Applying selected changes" onClick={apply} size="lg">{applying ? "Applying..." : `Apply ${selectedChangeIds.length} selected`}</Button></>} onClose={() => { if (!applying) setConfirmApply(false); }} open={confirmApply} title={`Apply ${selectedChangeIds.length} approved changes?`}>
-      <div className={styles.applyDialogBody}>
-        {wholeDocumentReplacement ? <p>This replaces the entire current document. Individual units from the current revision will not be preserved.</p> : <p>Unselected units in the current revision will be kept.</p>}
-        <ul>{changes.filter((change) => selectedChangeIds.includes(change.id)).map((change) => <li key={change.id}>{changeDisplayName(change)}</li>)}</ul>
-        {removalCount > 0 && <p>{removalWarning(removalCount)}</p>}
-        <p>{wholeDocumentReplacement ? "This creates one new revision by replacing the complete document." : "This creates one new revision with the selected changes."}</p>
-        {applyError && <Banner tone="error" title="Could not apply selected changes">{applyError}</Banner>}
-      </div>
-    </Dialog>
   </div>;
 }

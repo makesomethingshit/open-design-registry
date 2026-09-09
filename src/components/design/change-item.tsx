@@ -60,6 +60,10 @@ export function applicationSelectionLabel(displayName: string) {
   return `Select ${displayName} for application`;
 }
 
+export function removalWarning(removalCount: number) {
+  return removalCount === 1 ? "1 unit will be removed from the new revision. Earlier revisions remain available." : `${removalCount} units will be removed from the new revision. Earlier revisions remain available.`;
+}
+
 type ChangeItemProps = {
   change: ReviewChange;
   viewed: boolean;

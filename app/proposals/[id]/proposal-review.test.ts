@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewChange } from "@/src/components/design/review-types";
-import { includesWholeDocumentReplacement, removalWarning, selectedUnitResultCount } from "./proposal-review";
+import { includesWholeDocumentReplacement, selectedUnitResultCount } from "./proposal-review";
+import { removalWarning } from "@/src/components/design/change-item";
 
 describe("proposal apply unit guard", () => {
   const changes = [
