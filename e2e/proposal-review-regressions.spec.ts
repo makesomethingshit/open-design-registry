@@ -179,6 +179,24 @@ test.describe("proposal review regression fixtures", () => {
     await expect(workspace.getByText(/8 total changes/)).toContainText("5 selected");
   });
 
+  test("gates every application selection control on owner and open status", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const selectAll = workspace.getByLabel("Select all eligible approved changes for application");
+
+    // Owner + OPEN: individual and select-all both available.
+    await expect(selectAll).toBeVisible();
+    await workspace.getByLabel("Show closed proposal state").check();
+    // CLOSED: select-all hidden, individual rows hidden, selection cleared.
+    await expect(selectAll).toHaveCount(0);
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/)).toHaveCount(0);
+    await expect(workspace.getByText(/8 total changes/)).toContainText("0 selected");
+    await workspace.getByLabel("Show closed proposal state").uncheck();
+    await workspace.getByLabel("Fixture owner").uncheck();
+    // Non-owner: select-all hidden again.
+    await expect(selectAll).toHaveCount(0);
+    await expect(workspace.getByText("Only the project owner can select approved changes for application.")).toBeVisible();
+  });
+
   test("keeps selection tracks and the tablet inspector placement at each breakpoint", async ({ page }, testInfo) => {
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }, { width: 1024, height: 768 }, { width: 768, height: 1024 }]) {
       await page.setViewportSize(viewport);

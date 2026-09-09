@@ -210,4 +210,27 @@ describe("proposal review recovery", () => {
     expect(actionBar(render()).props.selectedCount).toBe(2);
     expect(inspector(render()).props.error).toContain("Could not update review");
   });
+
+  it("gates select-all on the same owner/status conditions as individual selection", () => {
+    // Owner + reviewable status: select-all is available.
+    expect(actionBar(render()).props.canSelect).toBe(true);
+
+    // The harness cannot reset useState between renders of the same tree, so use a
+    // separate mount for each gated case via a fresh harness state set.
+    const gatedCases: Array<[Pick<Props, "isOwner" | "status">, string]> = [
+      [{ isOwner: false, status: "OPEN" }, "non-owner"],
+      [{ isOwner: true, status: "CLOSED" }, "closed"],
+      [{ isOwner: true, status: "ACCEPTED" }, "accepted"],
+    ];
+    for (const [override, label] of gatedCases) {
+      harness.cursor = 0;
+      harness.states = [];
+      harness.refs = [];
+      const gated = ProposalReview({ ...props(), ...override });
+      const bar = actionBar(gated);
+      expect(bar.props.canSelect, label).toBe(false);
+      const checkboxes = elements(gated).filter((element) => element.type === Checkbox);
+      expect(checkboxes.some((element) => String((element.props as { id?: string }).id) === "select-all-eligible-changes"), label).toBe(false);
+    }
+  });
 });

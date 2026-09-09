@@ -12,6 +12,7 @@ type ReviewActionBarProps = {
   pendingCount: number;
   requestedCount: number;
   applicableCount: number;
+  canSelect: boolean;
   selectedCount: number;
   appliedCount: number;
   allSelected: boolean;
@@ -27,7 +28,7 @@ type ReviewActionBarProps = {
   closeAction?: ReactNode;
 };
 
-export function ReviewActionBar({ allSelected, applicableCount, appliedCount, approvedCount, blockedApprovedCount, closeAction, emptyResult, onSelectAll, pendingCount, removalCount, requestedCount, selectedChanges, selectedCount, selectionNotice, stale, totalCount, unitResultUnknown, wholeDocumentReplacement }: ReviewActionBarProps) {
+export function ReviewActionBar({ allSelected, applicableCount, appliedCount, approvedCount, blockedApprovedCount, canSelect, closeAction, emptyResult, onSelectAll, pendingCount, removalCount, requestedCount, selectedChanges, selectedCount, selectionNotice, stale, totalCount, unitResultUnknown, wholeDocumentReplacement }: ReviewActionBarProps) {
   return <section aria-labelledby="review-actions-heading" className={styles.bar}>
     <div className={styles.summary}>
       <h2 id="review-actions-heading">Application</h2>
@@ -43,14 +44,15 @@ export function ReviewActionBar({ allSelected, applicableCount, appliedCount, ap
       </dl>
     </div>
     <div className={styles.controls}>
-      {applicableCount > 0 && <Checkbox checked={allSelected} id="select-all-eligible-changes" label="Select all eligible approved changes for application" onChange={(event) => onSelectAll(event.target.checked)} />}
+      {canSelect && applicableCount > 0 && <Checkbox checked={allSelected} id="select-all-eligible-changes" label="Select all eligible approved changes for application" onChange={(event) => onSelectAll(event.target.checked)} />}
       <div className={styles.actions}>
         <p className={styles.deferredNotice} role="note">Application runs in a later stage. Selection only marks candidates; nothing is applied here.</p>
         {closeAction}
       </div>
     </div>
     <div aria-live="polite" className={styles.notices}>
-      {applicableCount > 0 && !selectedCount && <p>Select approved changes for application. Selecting a change does not apply it and does not change its review state.</p>}
+      {canSelect && applicableCount > 0 && !selectedCount && <p>Select approved changes for application. Selecting a change does not apply it and does not change its review state.</p>}
+      {!canSelect && <p>Only the project owner can select approved changes for application.</p>}
       {blockedApprovedCount > 0 && <p>{blockedApprovedCount} approved {blockedApprovedCount === 1 ? "change is" : "changes are"} blocked pending review.</p>}
       {unitResultUnknown && <p>Checking latest units...</p>}
       {emptyResult && <p className={styles.error}>At least one unit must remain. Deselect a removal or select an approved addition.</p>}
