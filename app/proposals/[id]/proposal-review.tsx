@@ -51,7 +51,10 @@ function appliedResultFromProposal(payload: unknown, requestedIds: string[]) {
     if (!item || typeof item !== "object") continue;
     const change = item as { id?: unknown; appliedRevision?: unknown };
     if (typeof change.id !== "string" || !requested.has(change.id)) continue;
-    if (change.appliedRevision == null) continue;
+    // R2 FAIL fix: a missing appliedRevision field (undefined) is malformed, not
+    // proof of "definitely unapplied". Only explicit null counts as unapplied.
+    if (!("appliedRevision" in change)) return null;
+    if (change.appliedRevision === null) continue;
     // A present-but-unparseable appliedRevision is indeterminate: never treat it
     // as "definitely unapplied" (that would allow a duplicate POST).
     const revision = revisionFromUnknown(change.appliedRevision);
@@ -365,9 +368,22 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       const response = await fetch(`/api/proposals/${proposalId}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changeIds: requestedIds, ...(stale && confirmedLatest && latestRevision ? { reviewedLatestRevisionId: latestRevision.id, reviewedChangeIds: requestedIds } : {}) }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
+        // R2 FAIL fix: a 5xx POST result may be ambiguous (server could have applied
+        // before failing), so route it through reconciliation instead of immediate
+        // retry. Only non-5xx domain errors (e.g. 4xx validation) allow direct retry;
+        // 409 keeps the existing authoritative conflict recovery.
+        if (response.status === 409) {
+          setApplyError(payload?.error ?? "Could not apply selected changes.");
+          setApplyRetryAllowed(false);
+          recoverFromConflict(payload);
+          return;
+        }
+        if (response.status >= 500) {
+          await recoverUnknownApply(requestedIds);
+          return;
+        }
         setApplyError(payload?.error ?? "Could not apply selected changes.");
-        setApplyRetryAllowed(response.status !== 409);
-        if (response.status === 409) recoverFromConflict(payload);
+        setApplyRetryAllowed(true);
         return;
       }
       const revision = applyRevisionFromResponse(payload);

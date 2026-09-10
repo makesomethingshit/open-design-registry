@@ -154,10 +154,11 @@ test.describe("proposal review regression fixtures", () => {
     await expect.poll(() => applyRequests).toBe(2);
   });
 
-  test("preserves selection on a known apply failure and allows retry", async ({ page }) => {
+  test("routes an ambiguous POST 500 through reconciliation before any new POST", async ({ page }) => {
     const workspace = await openWorkspace(page);
     const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
     let applyRequests = 0;
+    let proposalReads = 0;
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       applyRequests += 1;
       if (applyRequests === 1) {
@@ -166,19 +167,73 @@ test.describe("proposal review regression fixtures", () => {
       }
       await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ revision: { id: "fixture-r14", number: 14, title: "Accepted fixture" } }) });
     });
+    await page.route("**/api/proposals/fixture-proposal", async (route) => {
+      proposalReads += 1;
+      if (proposalReads <= 2) {
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture status failed" }) });
+        return;
+      }
+      // Authoritative GET proves the requested change is definitely unapplied.
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changeSet: { changes: [{ id: "fixture-poster", appliedRevision: null }] } }) });
+    });
 
     await workspace.getByLabel(posterLabel).check();
     await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Apply 1 selected changes" }).click();
-    await expect(dialog.getByRole("alert")).toContainText("Fixture apply failed");
-    await expect(dialog.getByRole("alert")).toContainText("Your selection has been preserved.");
-    await expect(dialog.getByRole("button", { name: "Retry application" })).toBeVisible();
+    // A 500 POST is ambiguous: no direct Retry, persistent unresolved block first.
+    await expect(dialog).toContainText("Apply result is unresolved");
+    await expect(dialog.getByRole("button", { name: "Apply 1 selected changes" })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toHaveCount(0);
     await expect(workspace.getByLabel(posterLabel)).toBeChecked();
-
+    await expect.poll(() => applyRequests).toBe(1);
+    await expect.poll(() => proposalReads).toBe(1);
+    // Re-check still fails -> block holds, no new POST.
+    await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect.poll(() => proposalReads).toBe(2);
+    await expect.poll(() => applyRequests).toBe(1);
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toHaveCount(0);
+    // Authoritative GET confirms definitely-unapplied -> retry opens, then succeeds.
+    await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toBeVisible();
     await dialog.getByRole("button", { name: "Retry application" }).click();
     await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
     await expect.poll(() => applyRequests).toBe(2);
+  });
+
+  test("treats a GET payload missing appliedRevision as malformed and keeps the POST block", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    let applyRequests = 0;
+    let proposalReads = 0;
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      applyRequests += 1;
+      await route.abort("failed");
+    });
+    await page.route("**/api/proposals/fixture-proposal", async (route) => {
+      proposalReads += 1;
+      // Requested change present but appliedRevision field missing: malformed.
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changeSet: { changes: [{ id: "fixture-poster" }] } }) });
+    });
+
+    await workspace.getByLabel(posterLabel).check();
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(dialog).toContainText("Apply result is unresolved");
+    await expect.poll(() => applyRequests).toBe(1);
+    await expect.poll(() => proposalReads).toBe(1);
+    // Malformed GET must not open retry: re-click/reopen produce no new POST.
+    await expect(dialog.getByRole("button", { name: "Apply 1 selected changes" })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect.poll(() => proposalReads).toBe(2);
+    await expect.poll(() => applyRequests).toBe(1);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(workspace).toContainText("Apply result is unresolved");
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => applyRequests).toBe(1);
   });
 
   test("warns for a whole-document replacement while preserving every unit application copy and payload", async ({ page }) => {
@@ -196,10 +251,21 @@ test.describe("proposal review regression fixtures", () => {
     await expect(dialog).not.toContainText("Unselected units in the current revision will be kept.");
     await dialog.getByRole("button", { name: "Apply 1 selected" }).click();
     await expect.poll(() => payload).toEqual({ changeIds: ["fixture-document"] });
-    await expect(dialog.getByRole("alert")).toContainText("Fixture apply failed");
+    // A 500 POST is ambiguous: it routes through reconciliation (unresolved block)
+    // instead of the direct known-failure retry.
+    await expect(dialog).toContainText("Apply result is unresolved");
 
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    await workspace.getByLabel("Select Whole document for application").uncheck();
+    await expect(workspace).toContainText("Apply result is unresolved");
+    // Reset the unresolved block for the payload-copy loop below by reloading so
+    // each unit case starts from a clean state.
+    await page.unrouteAll({ behavior: "wait" });
+    await page.goto("/design-system");
+    await expect(workspace).toBeVisible();
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture apply failed" }) });
+    });
 
     for (const unit of [
       { label: /Select Add A deliberately long added unit name for application copy verification for application/, id: "fixture-add" },
@@ -213,8 +279,16 @@ test.describe("proposal review regression fixtures", () => {
       await expect(page.getByRole("dialog")).toContainText("Unselected units in the current revision will be kept.");
       await page.getByRole("dialog").getByRole("button", { name: "Apply 1 selected" }).click();
       await expect.poll(() => payload).toEqual({ changeIds: [unit.id] });
+      // 500 POST routes through reconciliation now; dismiss and reload for a clean
+      // state before the next unit case.
+      await expect(page.getByRole("dialog")).toContainText("Apply result is unresolved");
       await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-      await workspace.getByLabel(unit.label).uncheck();
+      await page.goto("/design-system");
+      await expect(workspace).toBeVisible();
+      await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+        payload = route.request().postDataJSON();
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture apply failed" }) });
+      });
     }
   });
 
