@@ -121,9 +121,23 @@ test.describe("proposal review regression fixtures", () => {
     await expect(failureDialog.getByRole("alert")).toContainText("Fixture review failed");
     await expect(failureDialog.getByText("Could not update review.")).toBeVisible();
     await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
+    // Edit the draft to B, then use the in-dialog Retry: it must re-send request A unchanged.
+    await failureDialog.getByRole("textbox", { name: /Feedback for/ }).fill("Edited draft B, must not change the retried request.");
+    const retriedPayloads: unknown[] = [];
+    await page.route("**/api/proposals/fixture-proposal/changes/fixture-pending", async (route) => {
+      retriedPayloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture review failed" }) });
+    });
+    await failureDialog.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(() => retriedPayloads).toEqual([{ status: "CHANGES_REQUESTED", comment: "Keep this request with the pending change." }]);
+    // The B draft is preserved untouched by the Retry of A.
+    await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Edited draft B, must not change the retried request.");
+    // Submitting now sends the edited B draft, distinct from the Retry path.
     await failureDialog.getByRole("button", { name: "Submit review" }).click();
-    await expect(failureDialog.getByRole("alert")).toContainText("Fixture review failed");
-    await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
+    await expect.poll(() => retriedPayloads).toEqual([
+      { status: "CHANGES_REQUESTED", comment: "Keep this request with the pending change." },
+      { status: "CHANGES_REQUESTED", comment: "Edited draft B, must not change the retried request." },
+    ]);
     await failureDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
 
@@ -131,10 +145,10 @@ test.describe("proposal review regression fixtures", () => {
     await workspace.getByRole("button", { name: "Retry" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
 
-    // Reopening the dialog shows the preserved draft for the same change.
+    // Reopening the dialog shows the preserved (edited) draft for the same change.
     await pendingChange.click();
     await workspace.getByRole("button", { name: "Request changes" }).click();
-    await expect(page.getByRole("dialog", { name: "Request changes" }).getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
+    await expect(page.getByRole("dialog", { name: "Request changes" }).getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Edited draft B, must not change the retried request.");
   });
 
   test("announces review status in a persistent live region with unit history metadata", async ({ page }) => {
