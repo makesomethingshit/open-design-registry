@@ -13,17 +13,18 @@ type DialogProps = {
   actions?: ReactNode;
   initialFocus?: "close" | "action";
   className?: string;
+  busy?: boolean;
 };
 
-export function Dialog({ actions, children, className, initialFocus = "close", onClose, open, title }: DialogProps) {
-  return <DialogSurface actions={actions} className={className} initialFocus={initialFocus} onClose={onClose} open={open} title={title}>{children}</DialogSurface>;
+export function Dialog({ actions, busy, children, className, initialFocus = "close", onClose, open, title }: DialogProps) {
+  return <DialogSurface actions={actions} busy={busy} className={className} initialFocus={initialFocus} onClose={onClose} open={open} title={title}>{children}</DialogSurface>;
 }
 
-export function Drawer({ actions, children, className, initialFocus = "close", onClose, open, title }: DialogProps) {
-  return <DialogSurface actions={actions} className={`${styles.drawer}${className ? ` ${className}` : ""}`} initialFocus={initialFocus} onClose={onClose} open={open} title={title}>{children}</DialogSurface>;
+export function Drawer({ actions, busy, children, className, initialFocus = "close", onClose, open, title }: DialogProps) {
+  return <DialogSurface actions={actions} busy={busy} className={`${styles.drawer}${className ? ` ${className}` : ""}`} initialFocus={initialFocus} onClose={onClose} open={open} title={title}>{children}</DialogSurface>;
 }
 
-function DialogSurface({ actions, children, className, initialFocus, onClose, open, title }: DialogProps) {
+function DialogSurface({ actions, busy = false, children, className, initialFocus, onClose, open, title }: DialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -47,10 +48,10 @@ function DialogSurface({ actions, children, className, initialFocus, onClose, op
     }
   }, [initialFocus, open]);
 
-  return <dialog aria-labelledby={titleId} className={`${styles.dialog}${className ? ` ${className}` : ""}`} onCancel={(event) => { event.preventDefault(); onClose(); }} ref={dialog}>
+  return <dialog aria-busy={busy || undefined} aria-labelledby={titleId} className={`${styles.dialog}${className ? ` ${className}` : ""}`} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} ref={dialog}>
     <header className={styles.header}>
       <h2 id={titleId}>{title}</h2>
-      <IconButton data-dialog-close label="Close dialog" onClick={onClose}><Icon name="close" /></IconButton>
+      <IconButton data-dialog-close disabled={busy} label="Close dialog" onClick={onClose}><Icon name="close" /></IconButton>
     </header>
     <div className={styles.body}>{children}</div>
     {actions && <footer className={styles.actions}>{actions}</footer>}
