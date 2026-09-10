@@ -40,14 +40,16 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
       },
       appliedChanges: {
         orderBy: { createdAt: "asc" },
-        select: { id: true, type: true, action: true, target: true, name: true, newName: true, kind: true },
+        select: { id: true, appliedRevisionId: true, type: true, action: true, target: true, name: true, newName: true, kind: true },
       },
     },
   });
   if (!revision?.isPublished) notFound();
   const previous = revision.parent;
   const appliedProposal = revision.appliedProposal && isVisible(revision.appliedProposal, session?.user.id) ? revision.appliedProposal : null;
-  const appliedChanges = revision.sourceProposalId && !appliedProposal ? [] : revision.appliedChanges ?? [];
+  const appliedChanges = revision.sourceProposalId && !appliedProposal
+    ? []
+    : (revision.appliedChanges ?? []).filter((change) => change.appliedRevisionId === revision.id);
   const currentPreviews = revision.previews.map((preview) => ({ ...preview, url: publicAssetUrl(preview.url) }));
   const previousPreviews = previous?.previews.map((preview) => ({ ...preview, url: publicAssetUrl(preview.url) }));
   const currentImagePreviews = currentPreviews.filter((preview) => preview.mimeType !== "text/html");

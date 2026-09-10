@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const mocks = vi.hoisted(() => ({ findProposal: vi.fn(), findLatest: vi.fn(), getSession: vi.fn(), readBundle: vi.fn(), review: vi.fn(() => null), proposalStatus: vi.fn(() => ({ label: "Status", tone: "neutral" as const, icon: "clock" as const })) }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
-vi.mock("next/link", () => ({ default: () => null }));
+vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { revision: { findFirst: mocks.findLatest } } }));
 vi.mock("@/src/lib/proposal-handlers", () => ({ findVisibleProposal: mocks.findProposal }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
@@ -76,5 +77,22 @@ describe("proposal review data", () => {
 
     expect(reviewProps?.changes[0].appliedRevision).toMatchObject({ id: "revision-3" });
     expect(mocks.proposalStatus).toHaveBeenLastCalledWith("ACCEPTED", 1, 1);
+  });
+
+  it("links a related issue to its concrete issue-board anchor", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.findProposal.mockResolvedValue({
+      id: "proposal", project: { id: "project", slug: "project", title: "Project", ownerId: "owner" }, baseRevisionId: "base", authorId: "author", relatedIssue: { id: "issue-14", title: "Fix navigation" }, appliedRevisions: [],
+      baseRevision: { id: "base", number: 1, title: "Base", sourceKey: null, previews: [] },
+      sourceRevision: { id: "source", number: 2, title: "Source", sourceKey: null, project: { slug: "source", title: "Source", isPublic: true }, previews: [] },
+      changeSet: { changes: [] }, comments: [], proposalNumber: 32, title: "Navigation proposal", body: "Connect it", status: "OPEN", author: { name: "Author" }, sourceRevisionId: "source",
+    });
+    mocks.findLatest.mockResolvedValue(null);
+    mocks.readBundle.mockResolvedValue(null);
+
+    const markup = renderToStaticMarkup(await ProposalPage({ params: Promise.resolve({ id: "proposal" }) }));
+
+    expect(markup).toContain('href="/projects/project#issue-issue-14"');
+    expect(markup).toContain("Fix navigation");
   });
 });
