@@ -31,6 +31,7 @@ type ReviewActionBarProps = {
 
 export function ReviewActionBar({ allSelected, applicableCount, appliedCount, applying, approvedCount, blockedApprovedCount, canApply, closeAction, emptyResult, onOpenApply, onSelectAll, pendingCount, requestedCount, selectedCount, selectionDisabled, selectionNotice, stale, staleConfirmed, totalCount, unitResultUnknown }: ReviewActionBarProps) {
   const applyDisabled = !canApply || applying || !selectedCount || (stale && !staleConfirmed) || unitResultUnknown || emptyResult;
+  const applyLabel = `Apply ${selectedCount} selected`;
 
   return <section aria-labelledby="review-actions-heading" className={styles.bar}>
     <div className={styles.summary}>
@@ -49,12 +50,12 @@ export function ReviewActionBar({ allSelected, applicableCount, appliedCount, ap
     <div className={styles.controls}>
       {canApply && applicableCount > 0 && <Checkbox checked={allSelected} disabled={selectionDisabled} id="select-all-eligible-changes" label="Select all eligible approved changes for application" onChange={(event) => onSelectAll(event.target.checked)} />}
       <div className={styles.actions}>
-        <Button disabled={applyDisabled} loading={applying} loadingLabel={uiCopy.loading.applying} onClick={onOpenApply} size="lg">{applying ? uiCopy.loading.applying : `Apply ${selectedCount} selected`}</Button>
+        <Button aria-label={applying ? undefined : `${applyLabel} changes`} disabled={applyDisabled} loading={applying} loadingLabel={uiCopy.loading.applying} onClick={onOpenApply} size="lg">{applying ? uiCopy.loading.applying : `${applyLabel} changes`}</Button>
         {closeAction}
       </div>
     </div>
     <div aria-live="polite" className={styles.notices}>
-      {canApply && applicableCount > 0 && !selectedCount && <p>Select approved changes for application. Selecting a change does not apply it and does not change its review state.</p>}
+      {canApply && applicableCount > 0 && !selectedCount && <p>Select approved changes to create a new revision. Selecting a change does not apply it and does not change its review state.</p>}
       {!canApply && <p>Only the project owner can select approved changes for application.</p>}
       {blockedApprovedCount > 0 && <p>{blockedApprovedCount} approved {blockedApprovedCount === 1 ? "change is" : "changes are"} blocked pending review.</p>}
       {unitResultUnknown && <p>Checking latest units...</p>}

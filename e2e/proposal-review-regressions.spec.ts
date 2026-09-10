@@ -21,6 +21,89 @@ test.describe("proposal review regression fixtures", () => {
     await expect(workspace.getByRole("radio", { name: "Overlay" })).toBeDisabled();
   });
 
+  test("confirms, applies selected changes, and clears only the applied selection", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    const addLabel = "Select Add A deliberately long added unit name for application copy verification for application";
+    let applyRequests = 0;
+    let releaseResponse: (() => void) | undefined;
+    const responseReady = new Promise<void>((resolve) => { releaseResponse = resolve; });
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      applyRequests += 1;
+      await responseReady;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ revision: { id: "fixture-r14", number: 14, title: "Accepted fixture" } }) });
+    });
+
+    await workspace.getByLabel(posterLabel).check();
+    await workspace.getByLabel(addLabel).check();
+    await workspace.getByRole("button", { name: "Apply 2 selected changes" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("These changes will create a new immutable revision.");
+    await expect(dialog).toContainText("Other proposal changes will remain unapplied.");
+    const submit = dialog.getByRole("button", { name: /Apply 2 selected changes|Applying/ });
+    await submit.click();
+    await submit.dispatchEvent("click");
+    await expect(dialog).toContainText("Applying…");
+    await expect.poll(() => applyRequests).toBe(1);
+    releaseResponse?.();
+
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 2 changes · r14" })).toBeVisible();
+    await expect(workspace.getByText("Applied · r14").first()).toBeVisible();
+    await expect(workspace.getByLabel(posterLabel)).toHaveCount(0);
+    await expect(workspace.getByLabel(addLabel)).toHaveCount(0);
+    await expect(workspace.getByText(/8 total changes/)).toContainText("0 selected");
+  });
+
+  test("reconciles an unknown result from server state without creating a duplicate revision", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    let applyRequests = 0;
+    let proposalReads = 0;
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      applyRequests += 1;
+      await route.abort("failed");
+    });
+    await page.route("**/api/proposals/fixture-proposal", async (route) => {
+      proposalReads += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changeSet: { changes: [{ id: "fixture-poster", appliedRevision: { id: "fixture-r14", number: 14, title: "Accepted fixture" } }] } }) });
+    });
+
+    await workspace.getByLabel(posterLabel).check();
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
+    await expect.poll(() => applyRequests).toBe(1);
+    await expect.poll(() => proposalReads).toBe(1);
+    await expect(workspace.getByLabel(posterLabel)).toHaveCount(0);
+  });
+
+  test("preserves selection on a known apply failure and allows retry", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    let applyRequests = 0;
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      applyRequests += 1;
+      if (applyRequests === 1) {
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture apply failed" }) });
+        return;
+      }
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ revision: { id: "fixture-r14", number: 14, title: "Accepted fixture" } }) });
+    });
+
+    await workspace.getByLabel(posterLabel).check();
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Fixture apply failed");
+    await expect(dialog.getByRole("alert")).toContainText("Your selection has been preserved.");
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toBeVisible();
+    await expect(workspace.getByLabel(posterLabel)).toBeChecked();
+
+    await dialog.getByRole("button", { name: "Retry application" }).click();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
+    await expect.poll(() => applyRequests).toBe(2);
+  });
+
   test("warns for a whole-document replacement while preserving every unit application copy and payload", async ({ page }) => {
     const workspace = await openWorkspace(page);
     let payload: unknown;
@@ -60,6 +143,7 @@ test.describe("proposal review regression fixtures", () => {
 
   test("keeps Apply 409 feedback visible and restores review focus", async ({ page }) => {
     const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application"]);
+    await expect(workspace).toContainText("Latest revision changed: r11 → r13.");
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the latest revision before applying these selected changes", latestRevision: { id: "fixture-r14" } }) });
     });
