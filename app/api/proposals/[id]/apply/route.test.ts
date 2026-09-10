@@ -18,7 +18,16 @@ const latestBundle = { version: 1, files: [
 ] };
 
 function changes(count = 2, appliedRevisionId: string | null = null) {
-  return ["a", "b"].slice(0, count).map((suffix) => ({ id: `change-${suffix}`, type: "REPLACE_ASSET", target: `old-${suffix}.ai`, targetFileId: `target-${suffix}`, name: `new-${suffix}.ai`, mimeType: "application/postscript", size: suffix === "a" ? 14 : 15, assetKey: `source-${suffix}-key`, reviewStatus: "APPROVED", appliedRevisionId }));
+  return ["a", "b"].slice(0, count).map((suffix) => ({ id: `change-${suffix}`, type: "REPLACE_ASSET", target: `old-${suffix}.ai`, targetFileId: `target-${suffix}`, name: `new-${suffix}.ai`, mimeType: "application/postscript", size: suffix === "a" ? 14 : 15, assetKey: `source-${suffix}-key`, reviewStatus: "APPROVED", reviewComment: `approved note ${suffix}`, reviewedById: `reviewer-${suffix}`, reviewedAt: new Date("2026-09-01T00:00:00Z"), appliedRevisionId }));
+}
+
+function partialApplyChanges() {
+  const now = new Date("2026-09-01T00:00:00Z");
+  return [
+    { id: "change-a", type: "REPLACE_ASSET", target: "old-a.ai", targetFileId: "target-a", name: "new-a.ai", mimeType: "application/postscript", size: 14, assetKey: "source-a-key", reviewStatus: "APPROVED", reviewComment: "approved note a", reviewedById: "reviewer-a", reviewedAt: now, appliedRevisionId: null },
+    { id: "change-b", type: "REPLACE_ASSET", target: "old-b.ai", targetFileId: "target-b", name: "new-b.ai", mimeType: "application/postscript", size: 15, assetKey: "source-b-key", reviewStatus: "APPROVED", reviewComment: "approved note b", reviewedById: "reviewer-b", reviewedAt: now, appliedRevisionId: null },
+    { id: "change-c", type: "REPLACE_ASSET", target: "old-c.ai", targetFileId: "target-c", name: "new-c.ai", mimeType: "application/postscript", size: 16, assetKey: "source-c-key", reviewStatus: "CHANGES_REQUESTED", reviewComment: "please revise c", reviewedById: "reviewer-c", reviewedAt: now, appliedRevisionId: null },
+  ];
 }
 
 function proposal(overrides: Record<string, unknown> = {}) {
@@ -73,13 +82,42 @@ describe("selective proposal apply route", () => {
     }));
   });
 
-  it("publishes one bundle revision for selected approved files and resets the rest", async () => {
+  it("publishes one bundle revision for selected approved files and preserves unapplied review state", async () => {
     const response = await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
     expect(response.status).toBe(201);
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: "target", number: 11, parentId: "base", sourceUrl: null, sourceProposalId: "proposal", sourceChecksum: "b".repeat(64), isPublished: false }) }));
     expect(mocks.putBundle).toHaveBeenCalledOnce();
     expect(mocks.updateChanges).toHaveBeenCalledWith({ where: { id: { in: ["change-a"] } }, data: { appliedRevisionId: "revision-11" } });
+    expect(mocks.updateChanges).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reviewStatus: "PENDING" }) }), expect.anything());
+    expect(mocks.createHistory).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ eventType: "PARTIAL_APPLICATION_RESET" })]) }), expect.anything());
     expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "proposal" }, data: { status: "PARTIALLY_ACCEPTED", acceptedById: "owner" } });
+  });
+
+  it("preserves APPROVED and CHANGES_REQUESTED review state and metadata for unapplied changes", async () => {
+    const reviewedAt = new Date("2026-09-01T00:00:00Z");
+    const rows = partialApplyChanges();
+    const store = new Map(rows.map((row) => [row.id, { ...row }]));
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: rows } }));
+    const defaultUpdateChanges = mocks.updateChanges.getMockImplementation();
+    mocks.updateChanges.mockImplementation(async ({ where, data }: { where: { id: { in: string[] } }; data: Record<string, unknown> }) => {
+      for (const id of where.id.in) Object.assign(store.get(id)!, data);
+      return { count: where.id.in.length };
+    });
+    try {
+    const response = await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(201);
+    // Applied change marked; B/C review state and metadata preserved by the backend.
+    expect(store.get("change-a")!.appliedRevisionId).toBe("revision-11");
+    expect(store.get("change-b")).toMatchObject({ reviewStatus: "APPROVED", reviewComment: "approved note b", reviewedById: "reviewer-b", reviewedAt, appliedRevisionId: null });
+    expect(store.get("change-c")).toMatchObject({ reviewStatus: "CHANGES_REQUESTED", reviewComment: "please revise c", reviewedById: "reviewer-c", reviewedAt, appliedRevisionId: null });
+    // GET/refresh path returns the same preserved state (publicProposal maps source rows).
+    const refreshed = store.get("change-b")!;
+    expect(refreshed.reviewStatus).toBe("APPROVED");
+    expect(refreshed.reviewComment).toBe("approved note b");
+    } finally {
+      mocks.updateChanges.mockImplementation(defaultUpdateChanges ?? (async () => ({ count: 0 })));
+      mocks.updateChanges.mockClear();
+    }
   });
 
   it("invalidates changed and removed units after a whole-document apply", async () => {

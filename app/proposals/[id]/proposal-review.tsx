@@ -30,18 +30,34 @@ function applyRevisionFromResponse(payload: unknown) {
   return revisionFromUnknown((payload as { revision?: unknown }).revision);
 }
 
+function proposalHasRequestedIds(payload: unknown, requestedIds: string[]) {
+  if (!payload || typeof payload !== "object") return false;
+  const value = payload as { changeSet?: { changes?: unknown } };
+  if (!value.changeSet || !Array.isArray(value.changeSet.changes)) return false;
+  const ids = new Set<string>();
+  for (const item of value.changeSet.changes) {
+    if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") ids.add((item as { id: string }).id);
+  }
+  return requestedIds.every((id) => ids.has(id));
+}
+
 function appliedResultFromProposal(payload: unknown, requestedIds: string[]) {
   if (!payload || typeof payload !== "object") return null;
   const value = payload as { changeSet?: { changes?: unknown } };
   if (!value.changeSet || !Array.isArray(value.changeSet.changes)) return null;
   const requested = new Set(requestedIds);
-  const applied = value.changeSet.changes.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
+  const applied: Array<{ id: string; revision: ApplyRevision }> = [];
+  for (const item of value.changeSet.changes) {
+    if (!item || typeof item !== "object") continue;
     const change = item as { id?: unknown; appliedRevision?: unknown };
-    if (typeof change.id !== "string" || !requested.has(change.id)) return [];
+    if (typeof change.id !== "string" || !requested.has(change.id)) continue;
+    if (change.appliedRevision == null) continue;
+    // A present-but-unparseable appliedRevision is indeterminate: never treat it
+    // as "definitely unapplied" (that would allow a duplicate POST).
     const revision = revisionFromUnknown(change.appliedRevision);
-    return revision ? [{ id: change.id, revision }] : [];
-  });
+    if (!revision) return null;
+    applied.push({ id: change.id, revision });
+  }
   if (!applied.length) return { appliedChangeIds: [] as string[], revision: null };
   return { appliedChangeIds: applied.map((item) => item.id), revision: applied[0].revision };
 }
@@ -123,6 +139,8 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   const [confirmApply, setConfirmApply] = useState(false);
   const [applyError, setApplyError] = useState("");
   const [applyRetryAllowed, setApplyRetryAllowed] = useState(false);
+  const [unresolvedApply, setUnresolvedApply] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [applySuccess, setApplySuccess] = useState<ApplySuccess | null>(null);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, string>>({});
   const [requestingChangeIds, setRequestingChangeIds] = useState<Record<string, boolean>>({});
@@ -282,34 +300,60 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   function finishApply(revision: ApplyRevision, appliedChangeIds: string[]) {
     setApplySuccess({ revision, appliedChangeIds });
     setApplyRetryAllowed(false);
+    setUnresolvedApply(false);
     setApplyError("");
     setConfirmApply(false);
     setSelectedChangeIds((ids) => ids.filter((id) => !appliedChangeIds.includes(id)));
     router.refresh();
   }
 
+  // E3 R2: reconciliation for an ambiguous apply result. Persistent unresolvedApply
+  // blocks every apply() entrypoint until an authoritative GET proves all requested
+  // IDs applied (success recovery) or definitely unapplied (retry allowed).
+  // GET failure / malformed payload / missing requested IDs keep the block and only
+  // allow reconciliation retry (no new POST).
   async function recoverUnknownApply(requestedIds: string[]) {
+    setUnresolvedApply(true);
+    setReconciling(true);
     try {
       const response = await fetch(`/api/proposals/${proposalId}`, { cache: "no-store", headers: { Accept: "application/json" } });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error("Proposal status could not be checked");
+      if (!proposalHasRequestedIds(payload, requestedIds)) throw new Error("Proposal status could not be checked");
       const result = appliedResultFromProposal(payload, requestedIds);
       if (!result) throw new Error("Proposal status could not be checked");
-      if (result.revision && result.appliedChangeIds.length) {
+      if (result.revision && result.appliedChangeIds.length === requestedIds.length) {
         finishApply(result.revision, result.appliedChangeIds);
+        return;
+      }
+      if (result.appliedChangeIds.length) {
+        // Server shows a partial/ambiguous state: keep blocked until a clean
+        // authoritative read confirms all requested IDs one way or the other.
+        setApplyError("Could not confirm whether selected changes were applied. Your selection has been preserved.");
+        setApplyRetryAllowed(false);
         return;
       }
       setApplyError("Could not confirm whether selected changes were applied. Your selection has been preserved.");
       setApplyRetryAllowed(true);
+      setUnresolvedApply(false);
       router.refresh();
     } catch {
-      setApplyError("Could not confirm whether selected changes were applied. Refresh the proposal before retrying.");
+      setApplyError("Could not confirm whether selected changes were applied. Check the proposal status before retrying. Your selection has been preserved.");
       setApplyRetryAllowed(false);
+    } finally {
+      setReconciling(false);
     }
   }
 
+  async function reconcileApply() {
+    if (reconciling) return;
+    const requestedIds = [...selectedChangeIds];
+    if (!requestedIds.length) return;
+    await recoverUnknownApply(requestedIds);
+  }
+
   async function apply() {
-    if (applyingRef.current) return;
+    if (applyingRef.current || unresolvedApply) return;
     const requestedIds = [...selectedChangeIds];
     if (!requestedIds.length) return;
     applyingRef.current = true;
@@ -390,11 +434,12 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     </section>
     <div className={styles.actionBar}>
       {applySuccess && <Banner action={<Link href={`/projects/${projectSlug}/revisions/${applySuccess.revision.number}`}>View revision r{applySuccess.revision.number}</Link>} title={`Applied ${applySuccess.appliedChangeIds.length} ${applySuccess.appliedChangeIds.length === 1 ? "change" : "changes"} · r${applySuccess.revision.number}`} tone="success">The selected changes created a new immutable revision. Other proposal changes remain unapplied.</Banner>}
-      <ReviewActionBar allSelected={allSelected} applicableCount={applicableApprovedChanges.length} appliedCount={applied} applying={applying} approvedCount={approvedChanges.length} blockedApprovedCount={approvedChanges.length - applicableApprovedChanges.length} canApply={canApply} closeAction={canClose && status !== "CLOSED" && status !== "ACCEPTED" ? <Button disabled={closing || applying} loading={closing} loadingLabel="Closing proposal" onClick={() => { void close(); }} size="lg" variant="secondary">Close proposal</Button> : undefined} emptyResult={emptyResult} onOpenApply={() => { setApplyError(""); setApplyRetryAllowed(false); setConfirmApply(true); }} onSelectAll={(selected) => setSelectedChangeIds(selected ? applicableApprovedChanges.map((change) => change.id) : [])} pendingCount={pending} requestedCount={requested} selectedCount={selectedChangeIds.length} selectionDisabled={applying} selectionNotice={selectionNotice} stale={stale} staleConfirmed={confirmedLatest} totalCount={effectiveChanges.length} unitResultUnknown={unitResultUnknown} />
+      <ReviewActionBar allSelected={allSelected} applicableCount={applicableApprovedChanges.length} appliedCount={applied} applying={applying || reconciling} approvedCount={approvedChanges.length} blockedApprovedCount={approvedChanges.length - applicableApprovedChanges.length} canApply={canApply} closeAction={canClose && status !== "CLOSED" && status !== "ACCEPTED" ? <Button disabled={closing || applying} loading={closing} loadingLabel="Closing proposal" onClick={() => { void close(); }} size="lg" variant="secondary">Close proposal</Button> : undefined} emptyResult={emptyResult} onOpenApply={() => { if (unresolvedApply) return; setApplyError(""); setApplyRetryAllowed(false); setConfirmApply(true); }} onSelectAll={(selected) => setSelectedChangeIds(selected ? applicableApprovedChanges.map((change) => change.id) : [])} pendingCount={pending} requestedCount={requested} selectedCount={selectedChangeIds.length} selectionDisabled={applying || unresolvedApply} selectionNotice={selectionNotice} stale={stale} staleConfirmed={confirmedLatest} totalCount={effectiveChanges.length} unitResultUnknown={unitResultUnknown} />
+      {unresolvedApply && <Banner action={<Button disabled={reconciling} loading={reconciling} loadingLabel="Checking proposal status" onClick={() => { void reconcileApply(); }} size="sm" variant="secondary">Check proposal status</Button>} tone="warning" title="Apply result is unresolved">No new apply is allowed until the proposal status confirms whether the selected changes were applied.</Banner>}
       {!confirmApply && applyError && <Banner tone="error" title="Could not apply selected changes">{applyError}</Banner>}
       {closeError && <Banner tone="error" title="Could not close proposal">{closeError}</Banner>}
     </div>
-    <Dialog actions={<><Button disabled={applying} onClick={() => { if (!applying) setConfirmApply(false); }} size="lg" variant="secondary">Cancel</Button><Button aria-label={applying ? undefined : `Apply ${selectedChangeIds.length} selected changes`} loading={applying} loadingLabel="Applying selected changes" onClick={apply} size="lg">{applying ? "Applying…" : `Apply ${selectedChangeIds.length} changes`}</Button></>} busy={applying} onClose={() => { if (!applying) setConfirmApply(false); }} open={confirmApply} title={`Apply ${selectedChangeIds.length} selected changes?`}>
+    <Dialog actions={<><Button disabled={applying} onClick={() => { if (!applying) setConfirmApply(false); }} size="lg" variant="secondary">Cancel</Button><Button aria-label={applying ? undefined : `Apply ${selectedChangeIds.length} selected changes`} disabled={unresolvedApply} loading={applying} loadingLabel="Applying selected changes" onClick={apply} size="lg">{applying ? "Applying…" : `Apply ${selectedChangeIds.length} changes`}</Button></>} busy={applying} onClose={() => { if (!applying) setConfirmApply(false); }} open={confirmApply} title={`Apply ${selectedChangeIds.length} selected changes?`}>
       <div className={styles.applyDialogBody}>
         <p>These changes will create a new immutable revision.</p>
         {wholeDocumentReplacement ? <p>This replaces the entire current document. Individual units from the current revision will not be preserved.</p> : <p>Unselected units in the current revision will be kept.</p>}
@@ -402,7 +447,8 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
         <ul>{effectiveChanges.filter((change) => selectedChangeIds.includes(change.id)).map((change) => <li key={change.id}>{changeDisplayName(change)}</li>)}</ul>
         {removalCount > 0 && <p>{removalWarning(removalCount)}</p>}
         <p>{wholeDocumentReplacement ? "This creates one new revision by replacing the complete document." : "This creates one new revision with the selected changes."}</p>
-        {applyError && <Banner action={applyRetryAllowed ? <Button disabled={applying} onClick={() => { void apply(); }} size="sm" variant="secondary">Retry application</Button> : undefined} tone="error" title="Could not apply selected changes">{applyError} Your selection has been preserved.</Banner>}
+        {unresolvedApply && <Banner action={<Button disabled={reconciling} loading={reconciling} loadingLabel="Checking proposal status" onClick={() => { void reconcileApply(); }} size="sm" variant="secondary">Check proposal status</Button>} tone="warning" title="Apply result is unresolved">No new apply is allowed until the proposal status confirms whether the selected changes were applied.</Banner>}
+        {applyError && <Banner action={!unresolvedApply && applyRetryAllowed ? <Button disabled={applying} onClick={() => { void apply(); }} size="sm" variant="secondary">Retry application</Button> : unresolvedApply ? <Button disabled={reconciling} loading={reconciling} loadingLabel="Checking proposal status" onClick={() => { void reconcileApply(); }} size="sm" variant="secondary">Check proposal status</Button> : undefined} tone="error" title="Could not apply selected changes">{applyError} Your selection has been preserved.</Banner>}
       </div>
     </Dialog>
   </div>;

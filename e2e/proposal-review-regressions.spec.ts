@@ -77,6 +77,83 @@ test.describe("proposal review regression fixtures", () => {
     await expect(workspace.getByLabel(posterLabel)).toHaveCount(0);
   });
 
+  test("blocks every new POST while the apply result is unresolved", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    let applyRequests = 0;
+    let proposalReads = 0;
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      applyRequests += 1;
+      await route.abort("failed");
+    });
+    await page.route("**/api/proposals/fixture-proposal", async (route) => {
+      proposalReads += 1;
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture status failed" }) });
+    });
+
+    await workspace.getByLabel(posterLabel).check();
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(dialog).toContainText("Apply result is unresolved");
+    await expect.poll(() => applyRequests).toBe(1);
+    await expect.poll(() => proposalReads).toBe(1);
+    // Every new POST entrypoint stays blocked: primary Apply, Retry path, and
+    // Cancel -> reopen -> Apply. Only reconciliation re-checks are allowed.
+    await expect(dialog.getByRole("button", { name: "Apply 1 selected changes" })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Check proposal status" }).first()).toBeVisible();
+    await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect.poll(() => proposalReads).toBe(2);
+    await expect.poll(() => applyRequests).toBe(1);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    // Cancel closes the dialog but the persistent unresolved block stays: reopening
+    // must not offer a new Apply POST (entrypoint guard), only status re-check.
+    await expect(workspace).toContainText("Apply result is unresolved");
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => applyRequests).toBe(1);
+    await workspace.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect.poll(() => proposalReads).toBe(3);
+    await expect.poll(() => applyRequests).toBe(1);
+  });
+
+  test("recovers from unresolved state only after an authoritative GET confirms the outcome", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    let applyRequests = 0;
+    let proposalReads = 0;
+    await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
+      applyRequests += 1;
+      if (applyRequests === 1) {
+        await route.abort("failed");
+        return;
+      }
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ revision: { id: "fixture-r14", number: 14, title: "Accepted fixture" } }) });
+    });
+    await page.route("**/api/proposals/fixture-proposal", async (route) => {
+      proposalReads += 1;
+      if (proposalReads === 1) {
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture status failed" }) });
+        return;
+      }
+      // Authoritative GET proves the requested change is definitely unapplied.
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changeSet: { changes: [{ id: "fixture-poster", appliedRevision: null }] } }) });
+    });
+
+    await workspace.getByLabel(posterLabel).check();
+    await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Apply 1 selected changes" }).click();
+    await expect(dialog).toContainText("Apply result is unresolved");
+    await expect.poll(() => applyRequests).toBe(1);
+    await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect(dialog.getByRole("button", { name: "Retry application" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Retry application" }).click();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
+    await expect.poll(() => applyRequests).toBe(2);
+  });
+
   test("preserves selection on a known apply failure and allows retry", async ({ page }) => {
     const workspace = await openWorkspace(page);
     const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";

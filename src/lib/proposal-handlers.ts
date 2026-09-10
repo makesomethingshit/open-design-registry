@@ -629,11 +629,9 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       });
       const revision = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, select: { id: true, number: true, title: true } });
       await tx.change.updateMany({ where: { id: { in: requestedIds } }, data: { appliedRevisionId: revision.id } });
-      const remainingChanges = proposal.changeSet.changes.filter((change) => !change.appliedRevisionId && !requestedIds.includes(change.id));
-      if (remainingChanges.length) {
-        await tx.change.updateMany({ where: { id: { in: remainingChanges.map((change) => change.id) } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
-        await tx.changeReview.createMany({ data: remainingChanges.map((change) => ({ changeId: change.id, authorId: null, status: "PENDING", eventType: "PARTIAL_APPLICATION_RESET", reason: "Re-review required after partial application", causedByRevisionId: revision.id })), skipDuplicates: true });
-      }
+      // E3 R1: unapplied changes keep their review state and review metadata.
+      // Only genuinely affected changes are invalidated through the existing
+      // domain invalidation below; the backend stays authoritative (no frontend overwrite).
       await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, latestBundle, bundle, selected.map((change) => change.targetFileId).filter((id): id is string => Boolean(id)), revision);
       const appliedCount = proposal.changeSet.changes.filter((change) => change.appliedRevisionId).length + selected.length;
       await tx.proposal.update({ where: { id: proposal.id }, data: { status: proposalStatusForChanges(proposal.changeSet.changes.map((change) => change.reviewStatus), appliedCount), acceptedById: session.user.id } });
