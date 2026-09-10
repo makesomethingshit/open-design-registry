@@ -80,6 +80,7 @@ test.describe("proposal review regression fixtures", () => {
   test("blocks every new POST while the apply result is unresolved", async ({ page }) => {
     const workspace = await openWorkspace(page);
     const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    const addLabel = "Select Add A deliberately long added unit name for application copy verification for application";
     let applyRequests = 0;
     let proposalReads = 0;
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
@@ -116,6 +117,15 @@ test.describe("proposal review regression fixtures", () => {
     await workspace.getByRole("button", { name: "Check proposal status" }).first().click();
     await expect.poll(() => proposalReads).toBe(3);
     await expect.poll(() => applyRequests).toBe(1);
+    // R2 residual: changing the selection (or emptying it via refresh/prune) must
+    // not rewrite the pinned ambiguous request. A GET missing the original ID A
+    // keeps the block; no new POST for the newly selected ID is allowed.
+    await workspace.getByLabel(posterLabel).uncheck();
+    await workspace.getByLabel(addLabel).check();
+    await workspace.getByRole("button", { name: "Check proposal status" }).first().click();
+    await expect.poll(() => proposalReads).toBe(4);
+    await expect.poll(() => applyRequests).toBe(1);
+    await expect(workspace).toContainText("Apply result is unresolved");
   });
 
   test("recovers from unresolved state only after an authoritative GET confirms the outcome", async ({ page }) => {

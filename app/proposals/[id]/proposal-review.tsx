@@ -152,6 +152,10 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   const [focusLatestReview, setFocusLatestReview] = useState(false);
   const pendingChangeIdsRef = useRef(new Set<string>());
   const applyingRef = useRef(false);
+  // R2 residual fix: snapshot of the original ambiguous POST request IDs.
+  // All reconciliation validates this snapshot only; dialog close/reopen,
+  // selection changes, refresh/prune never rewrite it. Cleared on confirmation.
+  const pendingApplyIdsRef = useRef<string[] | null>(null);
   const commentingRef = useRef(false);
   const closingRef = useRef(false);
 
@@ -218,6 +222,9 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     setRequestingChangeIds((ids) => ({ ...ids, [changeId]: requesting }));
   }
 
+  // R2 residual: selection stays editable while unresolved so the user can still
+  // review, but reconciliation always validates the pinned snapshot, never the
+  // current selection. Blocking checkboxes alone would not cover refresh/prune.
   function toggleSelection(changeId: string, selected: boolean) {
     setSelectedChangeIds((ids) => selected ? [...new Set([...ids, changeId])] : ids.filter((id) => id !== changeId));
   }
@@ -304,10 +311,16 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     setApplySuccess({ revision, appliedChangeIds });
     setApplyRetryAllowed(false);
     setUnresolvedApply(false);
+    pendingApplyIdsRef.current = null;
     setApplyError("");
     setConfirmApply(false);
     setSelectedChangeIds((ids) => ids.filter((id) => !appliedChangeIds.includes(id)));
     router.refresh();
+  }
+
+  function clearUnresolvedApply() {
+    setUnresolvedApply(false);
+    pendingApplyIdsRef.current = null;
   }
 
   // E3 R2: reconciliation for an ambiguous apply result. Persistent unresolvedApply
@@ -316,16 +329,20 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   // GET failure / malformed payload / missing requested IDs keep the block and only
   // allow reconciliation retry (no new POST).
   async function recoverUnknownApply(requestedIds: string[]) {
+    // Pin the snapshot on first entry; later re-checks reuse it even if the
+    // caller passes the (possibly changed) current selection.
+    if (!pendingApplyIdsRef.current) pendingApplyIdsRef.current = [...requestedIds];
+    const snapshotIds = [...(pendingApplyIdsRef.current ?? requestedIds)];
     setUnresolvedApply(true);
     setReconciling(true);
     try {
       const response = await fetch(`/api/proposals/${proposalId}`, { cache: "no-store", headers: { Accept: "application/json" } });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error("Proposal status could not be checked");
-      if (!proposalHasRequestedIds(payload, requestedIds)) throw new Error("Proposal status could not be checked");
-      const result = appliedResultFromProposal(payload, requestedIds);
+      if (!proposalHasRequestedIds(payload, snapshotIds)) throw new Error("Proposal status could not be checked");
+      const result = appliedResultFromProposal(payload, snapshotIds);
       if (!result) throw new Error("Proposal status could not be checked");
-      if (result.revision && result.appliedChangeIds.length === requestedIds.length) {
+      if (result.revision && result.appliedChangeIds.length === snapshotIds.length) {
         finishApply(result.revision, result.appliedChangeIds);
         return;
       }
@@ -338,7 +355,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       }
       setApplyError("Could not confirm whether selected changes were applied. Your selection has been preserved.");
       setApplyRetryAllowed(true);
-      setUnresolvedApply(false);
+      clearUnresolvedApply();
       router.refresh();
     } catch {
       setApplyError("Could not confirm whether selected changes were applied. Check the proposal status before retrying. Your selection has been preserved.");
@@ -350,9 +367,11 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
 
   async function reconcileApply() {
     if (reconciling) return;
-    const requestedIds = [...selectedChangeIds];
-    if (!requestedIds.length) return;
-    await recoverUnknownApply(requestedIds);
+    // Always reconcile the pinned snapshot; current selection may have changed
+    // (deselect/reselect/empty/prune) since the ambiguous POST.
+    const snapshotIds = [...(pendingApplyIdsRef.current ?? selectedChangeIds)];
+    if (!snapshotIds.length) return;
+    await recoverUnknownApply(snapshotIds);
   }
 
   async function apply() {

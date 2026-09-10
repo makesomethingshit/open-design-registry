@@ -88,8 +88,8 @@ describe("selective proposal apply route", () => {
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: "target", number: 11, parentId: "base", sourceUrl: null, sourceProposalId: "proposal", sourceChecksum: "b".repeat(64), isPublished: false }) }));
     expect(mocks.putBundle).toHaveBeenCalledOnce();
     expect(mocks.updateChanges).toHaveBeenCalledWith({ where: { id: { in: ["change-a"] } }, data: { appliedRevisionId: "revision-11" } });
-    expect(mocks.updateChanges).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reviewStatus: "PENDING" }) }), expect.anything());
-    expect(mocks.createHistory).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ eventType: "PARTIAL_APPLICATION_RESET" })]) }), expect.anything());
+    expect(mocks.updateChanges).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reviewStatus: "PENDING" }) }));
+    expect(mocks.createHistory).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ eventType: "PARTIAL_APPLICATION_RESET" })]) }));
     expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "proposal" }, data: { status: "PARTIALLY_ACCEPTED", acceptedById: "owner" } });
   });
 
@@ -110,10 +110,39 @@ describe("selective proposal apply route", () => {
     expect(store.get("change-a")!.appliedRevisionId).toBe("revision-11");
     expect(store.get("change-b")).toMatchObject({ reviewStatus: "APPROVED", reviewComment: "approved note b", reviewedById: "reviewer-b", reviewedAt, appliedRevisionId: null });
     expect(store.get("change-c")).toMatchObject({ reviewStatus: "CHANGES_REQUESTED", reviewComment: "please revise c", reviewedById: "reviewer-c", reviewedAt, appliedRevisionId: null });
-    // GET/refresh path returns the same preserved state (publicProposal maps source rows).
-    const refreshed = store.get("change-b")!;
-    expect(refreshed.reviewStatus).toBe("APPROVED");
-    expect(refreshed.reviewComment).toBe("approved note b");
+    // P2: read the preserved B/C rows through the real GET serializer path
+    // (publicProposal, also used by the GET handler) and assert the response
+    // fields a refresh would render.
+    const handlers = await import("@/src/lib/proposal-handlers");
+    const base = proposal({ changeSet: { id: "set", changes: [...store.values()] } });
+    const fullDetails = {
+      ...base,
+      project: { slug: "target", title: "Target" },
+      relatedIssue: null, reviewer: null, acceptedBy: null,
+      author: { id: "owner", name: "Owner" },
+      baseRevision: { ...base.baseRevision, number: 10, title: "Base", previews: [] },
+      sourceRevision: { ...base.sourceRevision, number: 11, title: "Source", project: { slug: "source", title: "Source" }, previews: [] },
+      comments: [],
+      appliedRevisions: [],
+      changeSet: {
+        id: "set",
+        changes: [...store.values()].map((row) => ({
+          ...row,
+          reviewedBy: row.reviewedById ? { id: row.reviewedById, name: `reviewer ${row.reviewedById}` } : null,
+          appliedRevision: row.appliedRevisionId ? { id: row.appliedRevisionId, number: 11, title: "Accepted" } : null,
+          reviewHistory: [],
+        })),
+      },
+    };
+    const serialized = handlers.publicProposal(fullDetails as unknown as Parameters<typeof handlers.publicProposal>[0]);
+    const byId = new Map(serialized.changeSet!.changes.map((change) => [change.id, change]));
+    expect(byId.get("change-b")).toMatchObject({ reviewStatus: "APPROVED", reviewComment: "approved note b", appliedRevision: null });
+    expect(byId.get("change-b")!.reviewedBy).toMatchObject({ id: "reviewer-b" });
+    expect(byId.get("change-b")!.reviewedAt).toEqual(reviewedAt);
+    expect(byId.get("change-c")).toMatchObject({ reviewStatus: "CHANGES_REQUESTED", reviewComment: "please revise c", appliedRevision: null });
+    expect(byId.get("change-c")!.reviewedBy).toMatchObject({ id: "reviewer-c" });
+    expect(byId.get("change-c")!.reviewedAt).toEqual(reviewedAt);
+    expect(byId.get("change-a")!.appliedRevision).toMatchObject({ id: "revision-11" });
     } finally {
       mocks.updateChanges.mockImplementation(defaultUpdateChanges ?? (async () => ({ count: 0 })));
       mocks.updateChanges.mockClear();
