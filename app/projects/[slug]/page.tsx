@@ -6,7 +6,7 @@ import { ProjectHeader } from "@/src/components/design/project-header";
 import { RevisionItem } from "@/src/components/design/revision-item";
 import { StatusBadge } from "@/src/components/ui/badge";
 import { SectionNav } from "@/src/components/ui/section-nav";
-import { countVisibleProposals, findVisibleProposal, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
+import { changeSummary, countVisibleProposals, findVisibleProposal, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
@@ -24,12 +24,13 @@ export const dynamic = "force-dynamic";
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string }> }) {
   const { slug } = await params;
   const query = await searchParams;
+  const session = await getSession();
   const project = await prisma.project.findUnique({
     where: { slug },
     include: {
       owner: { select: { name: true } },
       revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
-      issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } },
+      issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } },
       forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
       _count: { select: { forks: { where: { isPublic: true } } } },
       forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } },
@@ -38,7 +39,6 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   });
   if (!project) notFound();
 
-  const session = await getSession();
   if (!project.isPublic && session?.user.id !== project.ownerId) notFound();
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
@@ -141,14 +141,4 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
 function formatDate(value: Date) {
   return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
-}
-
-function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
-  const name = change.name ?? change.target;
-  const action = change.action ?? change.type;
-  if (action === "RENAME_UNIT") return `Rename ${name} to ${change.newName ?? "new name"}`;
-  if (action === "ADD_UNIT") return `Add ${name}`;
-  if (action === "REMOVE_UNIT") return `Remove ${name}`;
-  if (action === "MODIFY_UNIT") return `Modify ${name}`;
-  return action === "REPLACE_DOCUMENT" ? "Whole document" : `Replace ${name}`;
 }

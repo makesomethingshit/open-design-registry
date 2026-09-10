@@ -46,7 +46,13 @@ function canReadProject(project: { isPublic: boolean; ownerId: string }, userId?
   return project.isPublic || project.ownerId === userId;
 }
 
-function isVisible(proposal: ProposalDetails, userId?: string) {
+type ProposalVisibility = {
+  project: { id: string; ownerId: string; isPublic: boolean };
+  baseRevision: { projectId: string; isPublished: boolean };
+  sourceRevision: { isPublished: boolean; project: { ownerId: string; isPublic: boolean } };
+};
+
+export function isVisible(proposal: ProposalVisibility, userId?: string) {
   return proposal.baseRevision.projectId === proposal.project.id
     && proposal.baseRevision.isPublished
     && proposal.sourceRevision.isPublished
@@ -62,7 +68,7 @@ function visibleProposalWhere(projectId: string, userId?: string): Prisma.Propos
   };
 }
 
-function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
+export function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
   const action = change.action ?? change.type;
   const name = change.name ?? change.target;
   if (action === "RENAME_UNIT") return `Rename ${name} → ${change.newName ?? "new name"}`;
