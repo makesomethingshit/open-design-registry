@@ -6,7 +6,7 @@ import { ProjectHeader } from "@/src/components/design/project-header";
 import { RevisionItem } from "@/src/components/design/revision-item";
 import { StatusBadge } from "@/src/components/ui/badge";
 import { SectionNav } from "@/src/components/ui/section-nav";
-import { countVisibleProposals, findVisibleProposal, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
+import { changeSummary, countVisibleProposals, findVisibleProposal, isVisible, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
@@ -24,12 +24,13 @@ export const dynamic = "force-dynamic";
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string }> }) {
   const { slug } = await params;
   const query = await searchParams;
+  const session = await getSession();
   const project = await prisma.project.findUnique({
     where: { slug },
     include: {
       owner: { select: { name: true } },
       revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
-      issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } } },
+      issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } },
       forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
       _count: { select: { forks: { where: { isPublic: true } } } },
       forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } },
@@ -38,7 +39,6 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   });
   if (!project) notFound();
 
-  const session = await getSession();
   if (!project.isPublic && session?.user.id !== project.ownerId) notFound();
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
@@ -54,7 +54,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const proposalRows: ProposalListItem[] = proposalPage.items;
   const latestFiles = publicBundleFiles(await readRevisionBundle(latestRevision?.sourceKey));
   const latestPreview = latestRevision?.previews.find((preview) => preview.mimeType !== "text/html");
-  const openIssues = project.issues.filter((issue) => issue.status === "OPEN");
+  const visibleIssues = project.issues.map((issue) => ({
+    ...issue,
+    proposals: issue.proposals
+      .filter((proposal) => isVisible(proposal, session?.user.id))
+      .map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })),
+  }));
+  const openIssues = visibleIssues.filter((issue) => issue.status === "OPEN");
   const contributors = new Set([project.ownerId, ...contributorIds]).size;
   const navigationItems = [
     { href: "#overview", label: "Overview" },
@@ -126,7 +132,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       {project.revisions.length ? <ol className={styles.revisionList}>{project.revisions.map((revision) => <RevisionItem capability={<CapabilityBadge adapterConfidence={revision.adapterConfidence} adapterId={revision.adapterId} adapterMaturity={revision.adapterMaturity} adapterVersion={revision.adapterVersion} mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} />} changeDescription={revision.changeDescription} createdAt={revision.createdAt} href={`/projects/${project.slug}/revisions/${revision.number}`} id={revision.id} key={revision.id} number={revision.number} owner={project.owner.name} tags={revision.tags} title={revision.title} tool={revision.tool ? `${revision.tool}${revision.toolVersion ? ` ${revision.toolVersion}` : ""}` : null} />)}</ol> : <p className={styles.muted}>No revisions published yet.</p>}
     </section>
 
-    <IssueBoard canManage={project.isPublic && session?.user.id === project.ownerId} issues={project.issues} revisions={project.revisions} signedIn={project.isPublic && Boolean(session)} slug={project.slug} />
+    <IssueBoard canManage={project.isPublic && session?.user.id === project.ownerId} issues={visibleIssues} revisions={project.revisions} signedIn={project.isPublic && Boolean(session)} slug={project.slug} />
     <section aria-labelledby="proposals-heading" className={styles.section} id="proposals">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Collaboration</p><h2 id="proposals-heading">Proposals</h2></div>{session && latestRevision && <Link className={styles.secondaryLink} href={`/projects/${project.slug}/proposals/new`}>New proposal</Link>}</header>
       <ProposalList initialCursor={proposalPage.nextCursor} initialFilter={proposalFilter} initialItems={proposalRows} slug={project.slug} />
@@ -141,14 +147,4 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
 function formatDate(value: Date) {
   return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
-}
-
-function changeSummary(change: { type: string; action: string | null; target: string; name: string | null; newName: string | null }) {
-  const name = change.name ?? change.target;
-  const action = change.action ?? change.type;
-  if (action === "RENAME_UNIT") return `Rename ${name} to ${change.newName ?? "new name"}`;
-  if (action === "ADD_UNIT") return `Add ${name}`;
-  if (action === "REMOVE_UNIT") return `Remove ${name}`;
-  if (action === "MODIFY_UNIT") return `Modify ${name}`;
-  return action === "REPLACE_DOCUMENT" ? "Whole document" : `Replace ${name}`;
 }

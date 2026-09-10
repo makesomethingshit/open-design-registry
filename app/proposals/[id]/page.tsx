@@ -67,7 +67,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
         <CapabilityBadge mode={proposal.sourceRevision.capabilityMode} unitCount={proposal.sourceRevision.capabilityUnitCount} label={`Source Revision ${proposal.sourceRevision.number}`} adapterId={proposal.sourceRevision.adapterId} adapterVersion={proposal.sourceRevision.adapterVersion} adapterConfidence={proposal.sourceRevision.adapterConfidence} adapterMaturity={proposal.sourceRevision.adapterMaturity} />
       </div>
       <p className={styles.summary}>{proposal.body}</p>
-      {proposal.relatedIssue && <p className={styles.meta}>Related issue: {proposal.relatedIssue.title}</p>}
+      {proposal.relatedIssue && <p className={styles.meta}>Related issue: <Link href={`/projects/${proposal.project.slug}#issue-${proposal.relatedIssue.id}`}>{proposal.relatedIssue.title}</Link></p>}
       {proposal.appliedRevisions.length > 0 && <Banner tone="success" title="Applied changes">{proposal.appliedRevisions.map((revision) => <Link key={revision.id} href={`/projects/${proposal.project.slug}/revisions/${revision.number}`}>Revision {revision.number}</Link>)}</Banner>}
       {!proposal.sourceRevision.project.isPublic && session?.user.id === proposal.authorId && <Banner className={styles.privateNote} tone="warning" title="Private workspace">Visible to you. The project owner cannot review this proposal while its source is private.</Banner>}
     </header>

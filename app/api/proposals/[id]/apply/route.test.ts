@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), updateIssue: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: mocks.deleteObject }));
@@ -77,6 +77,7 @@ describe("selective proposal apply route", () => {
       proposal: { findUnique: mocks.findProposal, update: mocks.updateProposal },
       revision: { findFirst: mocks.findLatest, findUnique: mocks.findRevision, create: mocks.createRevision, update: mocks.publishRevision },
       change: { update: mocks.updateChange, updateMany: mocks.updateChanges, findMany: mocks.findAffectedChanges },
+      issue: { update: mocks.updateIssue },
       changeReview: { createMany: mocks.createHistory },
       changeSet: { findMany: mocks.findChangeSets },
     }));
@@ -91,6 +92,17 @@ describe("selective proposal apply route", () => {
     expect(mocks.updateChanges).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reviewStatus: "PENDING" }) }));
     expect(mocks.createHistory).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ eventType: "PARTIAL_APPLICATION_RESET" })]) }));
     expect(mocks.updateProposal).toHaveBeenCalledWith({ where: { id: "proposal" }, data: { status: "PARTIALLY_ACCEPTED", acceptedById: "owner" } });
+  });
+
+  it("keeps a related OPEN issue OPEN across apply", async () => {
+    const issue = { id: "issue-14", status: "OPEN" };
+    mocks.findProposal.mockResolvedValue(proposal({ relatedIssueId: issue.id, relatedIssue: issue }));
+
+    const response = await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(201);
+    expect(issue.status).toBe("OPEN");
+    expect(mocks.updateIssue).not.toHaveBeenCalled();
   });
 
   it("preserves APPROVED and CHANGES_REQUESTED review state and metadata for unapplied changes", async () => {
