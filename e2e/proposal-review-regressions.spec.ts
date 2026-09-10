@@ -29,7 +29,7 @@ test.describe("proposal review regression fixtures", () => {
       await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture apply failed" }) });
     });
 
-    await workspace.getByLabel("Select Whole document").check();
+    await workspace.getByLabel("Select Whole document for application").check();
     await workspace.getByRole("button", { name: "Apply 1 selected" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("This replaces the entire current document.");
@@ -39,13 +39,13 @@ test.describe("proposal review regression fixtures", () => {
     await expect(dialog.getByRole("alert")).toContainText("Fixture apply failed");
 
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    await workspace.getByLabel("Select Whole document").uncheck();
+    await workspace.getByLabel("Select Whole document for application").uncheck();
 
     for (const unit of [
-      { label: /Select Add A deliberately long added unit/, id: "fixture-add" },
-      { label: /Select Modify A deliberately long approved poster/, id: "fixture-poster" },
-      { label: /Select Remove A deliberately long removable unit/, id: "fixture-remove" },
-      { label: /Select Rename A deliberately long renameable unit/, id: "fixture-rename" },
+      { label: /Select Add A deliberately long added unit name for application copy verification for application/, id: "fixture-add" },
+      { label: /Select Modify A deliberately long approved poster name for responsive review verification for application/, id: "fixture-poster" },
+      { label: /Select Remove A deliberately long removable unit name for application copy verification for application/, id: "fixture-remove" },
+      { label: /Select Rename A deliberately long renameable unit name for application copy verification to A renamed fixture unit for application/, id: "fixture-rename" },
     ]) {
       payload = undefined;
       await workspace.getByLabel(unit.label).check();
@@ -59,7 +59,7 @@ test.describe("proposal review regression fixtures", () => {
   });
 
   test("keeps Apply 409 feedback visible and restores review focus", async ({ page }) => {
-    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster"]);
+    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application"]);
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the latest revision before applying these selected changes", latestRevision: { id: "fixture-r14" } }) });
     });
@@ -68,34 +68,38 @@ test.describe("proposal review regression fixtures", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(workspace.getByRole("alert")).toContainText("Review the latest revision before applying these selected changes");
     await expect(workspace.getByLabel(/I reviewed Revision 13/)).toHaveCount(0);
-    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster/)).toBeChecked();
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/)).toBeChecked();
     await expect(workspace.getByRole("button", { name: "Review latest revision" })).toBeFocused();
   });
 
   test("keeps safe selections after a conflicting Apply 409", async ({ page }) => {
-    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster", "Select Whole document"]);
+    const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application", "Select Whole document for application"]);
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the conflicting change", latestRevision: { id: "fixture-r14" }, conflictChangeIds: ["fixture-poster"] }) });
     });
 
     await page.getByRole("dialog").getByRole("button", { name: "Apply 2 selected" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(workspace.getByRole("alert")).toContainText("Review the conflicting change");
-    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster/)).not.toBeChecked();
-    await expect(workspace.getByLabel("Select Whole document")).toBeChecked();
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/).first()).not.toBeChecked();
+    await expect(workspace.getByLabel("Select Whole document for application")).toBeChecked();
     await expect(workspace.getByText("1 selected change needs conflict review.")).toBeVisible();
   });
 
   test("preserves a change-specific request draft, pending state, and late failure", async ({ page }) => {
     const workspace = await openWorkspace(page);
     const pendingChange = workspace.getByRole("button", { name: /^Modify A deliberately long pending poster/ });
-    const approvedChange = workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ });
     await pendingChange.click();
     await workspace.getByRole("button", { name: "Request changes" }).click();
-    const draft = workspace.getByRole("textbox", { name: "Review comment" });
+    const dialog = page.getByRole("dialog", { name: "Request changes" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/Feedback for Modify A deliberately long pending poster/)).toBeVisible();
+    const draft = dialog.getByRole("textbox", { name: /Feedback for/ });
     await draft.fill("Keep this request with the pending change.");
-    await approvedChange.click();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
     await pendingChange.click();
-    await expect(draft).toHaveValue("Keep this request with the pending change.");
+    await workspace.getByRole("button", { name: "Request changes" }).click();
+    await expect(page.getByRole("dialog", { name: "Request changes" }).getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
 
     let releaseResponse: (() => void) | undefined;
     let markRequest: (() => void) | undefined;
@@ -107,15 +111,116 @@ test.describe("proposal review regression fixtures", () => {
       await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture review failed" }) });
     });
 
-    await workspace.getByRole("button", { name: "Send request" }).click();
+    await page.getByRole("dialog", { name: "Request changes" }).getByRole("button", { name: "Submit review" }).click();
     await requestStarted;
-    await approvedChange.click();
+    // The failure is shown inside the dialog with the draft preserved; the in-dialog
+    // Submit review re-sends the failed request unchanged.
     releaseResponse?.();
-    await expect(workspace.getByRole("heading", { name: /^Modify A deliberately long approved poster/ })).toBeVisible();
-    await expect(workspace.getByRole("alert")).toHaveCount(0);
-    await pendingChange.click();
+    const failureDialog = page.getByRole("dialog", { name: "Request changes" });
+    await expect(failureDialog).toBeVisible();
+    await expect(failureDialog.getByRole("alert")).toContainText("Fixture review failed");
+    await expect(failureDialog.getByText("Could not update review.")).toBeVisible();
+    await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Keep this request with the pending change.");
+    // Edit the draft to B, then use the in-dialog Retry: it must re-send request A unchanged.
+    await failureDialog.getByRole("textbox", { name: /Feedback for/ }).fill("Edited draft B, must not change the retried request.");
+    const retriedPayloads: unknown[] = [];
+    await page.route("**/api/proposals/fixture-proposal/changes/fixture-pending", async (route) => {
+      retriedPayloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Fixture review failed" }) });
+    });
+    await failureDialog.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(() => retriedPayloads).toEqual([{ status: "CHANGES_REQUESTED", comment: "Keep this request with the pending change." }]);
+    // The B draft is preserved untouched by the Retry of A.
+    await expect(failureDialog.getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Edited draft B, must not change the retried request.");
+    // Submitting now sends the edited B draft, distinct from the Retry path.
+    await failureDialog.getByRole("button", { name: "Submit review" }).click();
+    await expect.poll(() => retriedPayloads).toEqual([
+      { status: "CHANGES_REQUESTED", comment: "Keep this request with the pending change." },
+      { status: "CHANGES_REQUESTED", comment: "Edited draft B, must not change the retried request." },
+    ]);
+    await failureDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
-    await expect(draft).toHaveValue("Keep this request with the pending change.");
+
+    // The outside Retry also re-sends the preserved failed request.
+    await workspace.getByRole("button", { name: "Retry" }).click();
+    await expect(workspace.getByRole("alert")).toContainText("Fixture review failed");
+
+    // Reopening the dialog shows the preserved (edited) draft for the same change.
+    await pendingChange.click();
+    await workspace.getByRole("button", { name: "Request changes" }).click();
+    await expect(page.getByRole("dialog", { name: "Request changes" }).getByRole("textbox", { name: /Feedback for/ })).toHaveValue("Edited draft B, must not change the retried request.");
+  });
+
+  test("announces review status in a persistent live region with unit history metadata", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    await expect(workspace.getByRole("status").first()).toBeVisible();
+    await expect(workspace.getByRole("heading", { name: "Unit review history" })).toBeVisible();
+    await workspace.getByRole("button", { name: /^Modify A deliberately long approved poster/ }).click();
+    await expect(workspace.getByRole("status").first()).toContainText("Approved");
+  });
+
+  test("keeps review and application selection independent in both directions", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    let reviewPayload: unknown;
+    await page.route("**/api/proposals/fixture-proposal/changes/fixture-pending", async (route) => {
+      reviewPayload = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: "fixture-pending", reviewStatus: "APPROVED" }) });
+    });
+    // Approving the pending fixture change sends only the review PATCH — no application selection.
+    await workspace.getByRole("button", { name: /^Modify A deliberately long pending poster/ }).click();
+    await workspace.getByRole("button", { name: "Approve change" }).click();
+    await expect.poll(() => reviewPayload).toEqual({ status: "APPROVED", comment: "" });
+    const approvedCheckbox = workspace.getByLabel("Select Modify A deliberately long pending poster name for responsive review verification for application");
+    await expect(approvedCheckbox).toHaveCount(0);
+
+    // Selecting for application does not change the review state.
+    const checkbox = workspace.getByLabel("Select Modify A deliberately long approved poster name for responsive review verification for application");
+    await checkbox.check();
+    await expect(checkbox.first()).toBeChecked();
+    await expect(workspace.getByRole("button", { name: /Unit review history|Approve change/ }).first()).toBeVisible();
+    await expect(workspace.getByText(/8 total changes/)).toContainText("1 selected");
+  });
+
+  test("names every visible application checkbox for application at mobile width", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const workspace = await openWorkspace(page);
+    // The change list is hidden at mobile width; select the approved poster via the picker.
+    const picker = workspace.getByRole("combobox", { name: /^Change/ });
+    await picker.selectOption({ label: "Modify A deliberately long approved poster name for responsive review verification" });
+    const mobileCheckbox = workspace.getByRole("checkbox", { name: /for application/ });
+    await expect(mobileCheckbox.first()).toBeVisible();
+    for (const label of await mobileCheckbox.all()) {
+      // Hidden rows also match by accessible name; only visible ones must be operable.
+      if (await label.isVisible()) {
+        const name = await label.evaluate((element: Element) => {
+          const input = element as HTMLInputElement;
+          return input.getAttribute("aria-label") ?? document.querySelector(`label[for="${input.id}"]`)?.textContent ?? input.textContent ?? "";
+        });
+        expect(name).toMatch(/for application/);
+      }
+    }
+    await mobileCheckbox.first().check();
+    await expect(workspace.getByText(/8 total changes/)).toContainText("1 selected");
+    await workspace.getByLabel("Select all eligible approved changes for application").check();
+    await expect(workspace.getByText(/8 total changes/)).toContainText("5 selected");
+  });
+
+  test("gates every application selection control on owner and open status", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const selectAll = workspace.getByLabel("Select all eligible approved changes for application");
+
+    // Owner + OPEN: individual and select-all both available.
+    await expect(selectAll).toBeVisible();
+    await workspace.getByLabel("Show closed proposal state").check();
+    // CLOSED: select-all hidden, individual rows hidden, selection cleared.
+    await expect(selectAll).toHaveCount(0);
+    await expect(workspace.getByLabel(/Select Modify A deliberately long approved poster name for responsive review verification for application/)).toHaveCount(0);
+    await expect(workspace.getByText(/8 total changes/)).toContainText("0 selected");
+    await workspace.getByLabel("Show closed proposal state").uncheck();
+    await workspace.getByLabel("Fixture owner").uncheck();
+    // Non-owner: select-all hidden again.
+    await expect(selectAll).toHaveCount(0);
+    await expect(workspace.getByText("Only the project owner can select approved changes for application.")).toBeVisible();
   });
 
   test("keeps selection tracks and the tablet inspector placement at each breakpoint", async ({ page }, testInfo) => {

@@ -34,7 +34,8 @@ export function ReviewActionBar({ allSelected, applicableCount, appliedCount, ap
 
   return <section aria-labelledby="review-actions-heading" className={styles.bar}>
     <div className={styles.summary}>
-      <h2 id="review-actions-heading">Apply review</h2>
+      <h2 id="review-actions-heading">Application</h2>
+      <p className={styles.summaryLine} aria-live="polite">{totalCount} total {totalCount === 1 ? "change" : "changes"}, {approvedCount} approved · unapplied, {selectedCount} selected</p>
       <dl className={styles.counts}>
         <div><dt>Total</dt><dd>{totalCount}</dd></div>
         <div><dt>Pending</dt><dd>{pendingCount}</dd></div>
@@ -46,15 +47,15 @@ export function ReviewActionBar({ allSelected, applicableCount, appliedCount, ap
       </dl>
     </div>
     <div className={styles.controls}>
-      {canApply && applicableCount > 0 && <Checkbox checked={allSelected} disabled={selectionDisabled} id="select-all-eligible-changes" label="Select all eligible approved changes" onChange={(event) => onSelectAll(event.target.checked)} />}
+      {canApply && applicableCount > 0 && <Checkbox checked={allSelected} disabled={selectionDisabled} id="select-all-eligible-changes" label="Select all eligible approved changes for application" onChange={(event) => onSelectAll(event.target.checked)} />}
       <div className={styles.actions}>
         <Button disabled={applyDisabled} loading={applying} loadingLabel={uiCopy.loading.applying} onClick={onOpenApply} size="lg">{applying ? uiCopy.loading.applying : `Apply ${selectedCount} selected`}</Button>
         {closeAction}
       </div>
     </div>
     <div aria-live="polite" className={styles.notices}>
-      {canApply && !selectedCount && <p>Select approved changes to apply.</p>}
-      {!canApply && <p>Only the project owner can apply approved changes.</p>}
+      {canApply && applicableCount > 0 && !selectedCount && <p>Select approved changes for application. Selecting a change does not apply it and does not change its review state.</p>}
+      {!canApply && <p>Only the project owner can select approved changes for application.</p>}
       {blockedApprovedCount > 0 && <p>{blockedApprovedCount} approved {blockedApprovedCount === 1 ? "change is" : "changes are"} blocked pending review.</p>}
       {unitResultUnknown && <p>Checking latest units...</p>}
       {emptyResult && <p className={styles.error}>At least one unit must remain. Deselect a removal or select an approved addition.</p>}

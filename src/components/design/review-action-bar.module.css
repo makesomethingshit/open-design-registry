@@ -1,6 +1,7 @@
 .bar { display: grid; gap: var(--odr-space-4); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
 .summary { display: grid; gap: var(--odr-space-3); }
 .summary h2 { margin: 0; font-size: var(--odr-font-section); line-height: var(--odr-line-section); }
+.summaryLine { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .counts { display: flex; flex-wrap: wrap; gap: var(--odr-space-3); margin: 0; }
 .counts div { min-width: 4.5rem; }
 .counts dt { color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }

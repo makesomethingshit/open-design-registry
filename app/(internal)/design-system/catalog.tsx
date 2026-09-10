@@ -56,6 +56,7 @@ export default function DesignSystemCatalog() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [fixtureOwner, setFixtureOwner] = useState(true);
   const [fixtureStale, setFixtureStale] = useState(false);
+  const [fixtureClosed, setFixtureClosed] = useState(false);
 
   return <Stack className={styles.catalog} gap={7}>
     <PageHeader eyebrow="Foundation / Catalog" title="ODR design system" description="Development fixtures only. Theme is controlled from the global header; production requests return 404." />
@@ -138,8 +139,8 @@ export default function DesignSystemCatalog() {
 
     <section aria-labelledby="review-workspace-heading">
       <SectionHeader id="review-workspace-heading" title="Proposal workspace fixture" description="Development-only presentation fixture. Production review receives the same component props from visible server data." />
-      <Inline gap={4}><Checkbox checked={fixtureOwner} id="fixture-owner" label="Fixture owner" onChange={(event) => setFixtureOwner(event.target.checked)} /><Checkbox checked={fixtureStale} id="fixture-stale" label="Show stale revision state" onChange={(event) => setFixtureStale(event.target.checked)} /></Inline>
-      <ProposalReview baseRevision={{ id: "fixture-r11", number: 11, title: "Original", previews: fixtureBasePreviews }} canClose={false} changes={fixtureChanges} comments={[]} isOwner={fixtureOwner} knownConflictCount={0} latestRevision={fixtureStale ? { id: "fixture-r13", number: 13, title: "Latest", previews: fixtureLatestPreviews } : null} latestUnitCount={4} projectSlug="fixture" proposalId="fixture-proposal" signedIn={false} sourceRevision={{ id: "fixture-r12", number: 12, title: "Proposal", previews: fixtureSourcePreviews }} stale={fixtureStale} status="OPEN" unavailableConflictCount={0} />
+      <Inline gap={4}><Checkbox checked={fixtureOwner} id="fixture-owner" label="Fixture owner" onChange={(event) => setFixtureOwner(event.target.checked)} /><Checkbox checked={fixtureStale} id="fixture-stale" label="Show stale revision state" onChange={(event) => setFixtureStale(event.target.checked)} /><Checkbox checked={fixtureClosed} id="fixture-closed" label="Show closed proposal state" onChange={(event) => setFixtureClosed(event.target.checked)} /></Inline>
+      <ProposalReview baseRevision={{ id: "fixture-r11", number: 11, title: "Original", previews: fixtureBasePreviews }} canClose={false} changes={fixtureChanges} comments={[]} isOwner={fixtureOwner} knownConflictCount={0} latestRevision={fixtureStale ? { id: "fixture-r13", number: 13, title: "Latest", previews: fixtureLatestPreviews } : null} latestUnitCount={4} projectSlug="fixture" proposalId="fixture-proposal" signedIn={false} sourceRevision={{ id: "fixture-r12", number: 12, title: "Proposal", previews: fixtureSourcePreviews }} stale={fixtureStale} status={fixtureClosed ? "CLOSED" : "OPEN"} unavailableConflictCount={0} />
     </section>
   </Stack>;
 }

@@ -16,6 +16,8 @@
 .history li { display: grid; gap: var(--odr-space-1); color: var(--odr-text-secondary); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .history li p { margin: 0; white-space: pre-wrap; }
 .history li span { color: var(--odr-text-muted); }
+.liveStatus { margin: 0; }
+.emptyHistory { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--odr-space-2); }
 .requestForm { display: grid; gap: var(--odr-space-3); }
 .inspector a { color: var(--odr-accent); text-decoration: underline; }

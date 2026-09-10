@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
 import { Checkbox } from "@/src/components/ui/checkbox";
-import { Dialog } from "@/src/components/ui/dialog";
-import { ChangeItem, changeDisplayName } from "@/src/components/design/change-item";
+import { ChangeItem, applicationSelectionLabel, changeDisplayName, removalWarning } from "@/src/components/design/change-item";
 import { DesignPreview } from "@/src/components/design/design-preview";
+import { Dialog } from "@/src/components/ui/dialog";
 import { ReviewActionBar } from "@/src/components/design/review-action-bar";
 import { ReviewInspector } from "@/src/components/design/review-inspector";
+import type { FailedReviewRequest } from "@/src/components/design/review-inspector";
 import type { ReviewChange, ReviewComment, ReviewRevision } from "@/src/components/design/review-types";
 import styles from "./proposal-review.module.css";
 
@@ -21,9 +22,7 @@ export function selectedUnitResultCount(latestUnitCount: number | null, changes:
   }, 0);
 }
 
-export function removalWarning(removalCount: number) {
-  return removalCount === 1 ? "1 unit will be removed from the new revision. Earlier revisions remain available." : `${removalCount} units will be removed from the new revision. Earlier revisions remain available.`;
-}
+export { removalWarning } from "@/src/components/design/change-item";
 
 export function selectedIdsAfterConflict(selectedChangeIds: string[], payload: unknown) {
   const conflictChangeIds = payload && typeof payload === "object" && Array.isArray((payload as { conflictChangeIds?: unknown }).conflictChangeIds)
@@ -36,6 +35,26 @@ export function selectedIdsAfterConflict(selectedChangeIds: string[], payload: u
 
 export function includesWholeDocumentReplacement(changes: Array<Pick<ReviewChange, "id" | "action" | "type">>, selectedChangeIds: string[]) {
   return changes.some((change) => selectedChangeIds.includes(change.id) && (change.action === "REPLACE_DOCUMENT" || change.type === "REPLACE_DOCUMENT"));
+}
+
+/**
+ * Applies application-selection eligibility after a server refresh.
+ * Actual selection cleanup runs in the effect above from refreshed props;
+ * this helper exposes the same rule for unit tests. Review API failures
+ * never touch this: only a server response that marks a change Applied
+ * (or otherwise ineligible) drops it.
+ */
+export function selectionAfterServerChanges(
+  selectedChangeIds: string[],
+  changes: Array<Pick<ReviewChange, "id" | "reviewStatus" | "appliedRevision">>,
+  eligibility: (change: Pick<ReviewChange, "id" | "reviewStatus" | "appliedRevision">) => boolean,
+) {
+  const byId = new Map(changes.map((change) => [change.id, change]));
+  const dropped = selectedChangeIds.filter((id) => {
+    const change = byId.get(id);
+    return !change || !eligibility(change);
+  });
+  return { selected: selectedChangeIds.filter((id) => !dropped.includes(id)), dropped };
 }
 
 type ProposalReviewProps = {
@@ -64,14 +83,15 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   const [selectedChangeIds, setSelectedChangeIds] = useState<string[]>([]);
   const [selectionNotice, setSelectionNotice] = useState("");
   const [pendingChangeIds, setPendingChangeIds] = useState<string[]>([]);
-  const [applying, setApplying] = useState(false);
   const [commenting, setCommenting] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [confirmApply, setConfirmApply] = useState(false);
   const [reviewErrors, setReviewErrors] = useState<Record<string, string>>({});
+  const [failedReviews, setFailedReviews] = useState<Record<string, FailedReviewRequest>>({});
+  const [applying, setApplying] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
+  const [applyError, setApplyError] = useState("");
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, string>>({});
   const [requestingChangeIds, setRequestingChangeIds] = useState<Record<string, boolean>>({});
-  const [applyError, setApplyError] = useState("");
   const [commentError, setCommentError] = useState("");
   const [closeError, setCloseError] = useState("");
   const [focusLatestReview, setFocusLatestReview] = useState(false);
@@ -159,13 +179,20 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
   async function review(changeId: string, reviewStatus: "APPROVED" | "CHANGES_REQUESTED", comment = "") {
     if (applyingRef.current || pendingChangeIdsRef.current.has(changeId)) return false;
     setReviewErrors((errors) => ({ ...errors, [changeId]: "" }));
+    setFailedReviews((failed) => {
+      if (!(changeId in failed)) return failed;
+      const next = { ...failed };
+      delete next[changeId];
+      return next;
+    });
     pendingChangeIdsRef.current.add(changeId);
     setPendingChangeIds((ids) => [...ids, changeId]);
     try {
       const response = await fetch(`/api/proposals/${proposalId}/changes/${changeId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: reviewStatus, comment }) });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        setReviewErrors((errors) => ({ ...errors, [changeId]: payload?.error ?? "Could not save review" }));
+        setReviewErrors((errors) => ({ ...errors, [changeId]: payload?.error ?? "Could not update review. Your existing review state is unchanged." }));
+        setFailedReviews((failed) => ({ ...failed, [changeId]: { status: reviewStatus, comment } }));
         if (response.status === 409) recoverFromConflict(payload);
         return false;
       }
@@ -174,12 +201,19 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
       router.refresh();
       return true;
     } catch {
-      setReviewErrors((errors) => ({ ...errors, [changeId]: "Could not save review. Try again." }));
+      setReviewErrors((errors) => ({ ...errors, [changeId]: "Could not update review. Your existing review state is unchanged." }));
+      setFailedReviews((failed) => ({ ...failed, [changeId]: { status: reviewStatus, comment } }));
       return false;
     } finally {
       pendingChangeIdsRef.current.delete(changeId);
       setPendingChangeIds((ids) => ids.filter((id) => id !== changeId));
     }
+  }
+
+  async function retryReview(changeId: string) {
+    const failed = failedReviews[changeId];
+    if (!failed) return false;
+    return review(changeId, failed.status, failed.comment);
   }
 
   async function comment(event: FormEvent<HTMLFormElement>) {
@@ -260,6 +294,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     </div>}
     <aside aria-labelledby="changes-heading" className={styles.rail}>
       <header className={styles.railHeader}><h2 id="changes-heading">Changes</h2><span className={styles.count}>{changes.length}</span></header>
+      <p className={styles.railHint}>Checkboxes select approved changes for application; they are not review decisions. Click a row to review it.</p>
       <label className={styles.mobilePicker}>Change<select onChange={(event) => viewChange(event.target.value)} value={selectedChange?.id ?? ""}>{changes.map((change) => <option key={change.id} value={change.id}>{changeDisplayName(change)}</option>)}</select></label>
       <ul className={styles.changeList}>{changes.map((change) => {
         const showSelection = canSelectChanges && change.reviewStatus === "APPROVED" && !change.appliedRevision;
@@ -270,10 +305,11 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     <section aria-label="Visual review" className={styles.comparison} id="visual-review">
       <DesignPreview current={selectedComparisonCurrent} currentLabel="Proposal" currentNumber={sourceRevision.number} missingCurrentLabel="Removed in this proposal" missingPreviousLabel="Not present in the original revision" previous={selectedComparisonPrevious} previousLabel={previousLabel} previousNumber={previousNumber} rename={rename} />
     </section>
-    <aside className={styles.inspector}><ReviewInspector applying={applying} canReview={selectedCanReview} change={selectedChange} draft={selectedChange ? reviewDrafts[selectedChange.id] ?? "" : ""} error={selectedChange ? reviewErrors[selectedChange.id] ?? "" : ""} onDraftChange={(draft) => { if (selectedChange) setReviewDraft(selectedChange.id, draft); }} onRequestingChangesChange={(requesting) => { if (selectedChange) setRequestingChanges(selectedChange.id, requesting); }} onReview={(reviewStatus, comment) => selectedChange ? review(selectedChange.id, reviewStatus, comment) : Promise.resolve(false)} pending={Boolean(selectedChange && pendingChangeIds.includes(selectedChange.id))} projectSlug={projectSlug} requestingChanges={Boolean(selectedChange && requestingChangeIds[selectedChange.id])} /></aside>
-    {selectedCanSelect && selectedChange && <div className={styles.mobileSelection}><Checkbox checked={selectedChangeIds.includes(selectedChange.id)} description={selectedSelectable ? "Included in the next revision." : "This approved change must be reviewed against the latest revision before it can be selected."} disabled={applying || !selectedSelectable} label={`Include ${changeDisplayName(selectedChange)} in this application`} onChange={(event) => toggleSelection(selectedChange.id, event.target.checked)} /></div>}
+    <aside className={styles.inspector}><ReviewInspector applying={applying} canReview={selectedCanReview} change={selectedChange} draft={selectedChange ? reviewDrafts[selectedChange.id] ?? "" : ""} error={selectedChange ? reviewErrors[selectedChange.id] ?? "" : ""} failedRequest={selectedChange ? failedReviews[selectedChange.id] ?? null : null} onDraftChange={(draft) => { if (selectedChange) setReviewDraft(selectedChange.id, draft); }} onRequestingChangesChange={(requesting) => { if (selectedChange) setRequestingChanges(selectedChange.id, requesting); }} onRetry={() => selectedChange ? retryReview(selectedChange.id) : Promise.resolve(false)} onReview={(reviewStatus, comment) => selectedChange ? review(selectedChange.id, reviewStatus, comment) : Promise.resolve(false)} pending={Boolean(selectedChange && pendingChangeIds.includes(selectedChange.id))} projectSlug={projectSlug} requestingChanges={Boolean(selectedChange && requestingChangeIds[selectedChange.id])} /></aside>
+    {selectedCanSelect && selectedChange && <div className={styles.mobileSelection}><Checkbox checked={selectedChangeIds.includes(selectedChange.id)} description={selectedSelectable ? "Included in the next revision." : "This approved change must be reviewed against the latest revision before it can be selected."} disabled={applying || !selectedSelectable} label={applicationSelectionLabel(changeDisplayName(selectedChange))} onChange={(event) => toggleSelection(selectedChange.id, event.target.checked)} /></div>}
     <section aria-labelledby="conversation-heading" className={styles.conversation}>
-      <header className={styles.conversationHeader}><h2 id="conversation-heading">Conversation</h2></header>
+      <header className={styles.conversationHeader}><h2 id="conversation-heading">Proposal conversation</h2></header>
+      <p className={styles.conversationHint}>Discussion about the proposal as a whole. Per-change feedback lives in that change's review history.</p>
       {comments.length ? <div className={styles.comments}>{comments.map((item) => <article className={styles.comment} key={item.id}><p>{item.body}</p><span>{item.author.name} - {new Date(item.createdAt).toLocaleString()}</span></article>)}</div> : <p className={styles.empty}>Start the conversation.</p>}
       {signedIn && status !== "CLOSED" && <form className={styles.commentForm} onSubmit={comment}><input aria-label="Write a proposal comment" disabled={commenting} maxLength={10000} name="body" placeholder="Write a comment" required /><Button disabled={commenting} loading={commenting} loadingLabel="Saving comment" type="submit" variant="secondary">Comment</Button></form>}
       {commentError && <p className={styles.error} role="alert">{commentError}</p>}
