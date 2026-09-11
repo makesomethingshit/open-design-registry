@@ -10,6 +10,7 @@ export default function ContributeDialog({ slug, revisionNumber, signedIn, initi
   const dialog = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  const unavailableId = useId();
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState(initialIntent);
   const unavailable = !revisionNumber;
@@ -46,8 +47,8 @@ export default function ContributeDialog({ slug, revisionNumber, signedIn, initi
     }
   }
   return <>
-    <Button aria-describedby={unavailable ? "contribute-unavailable" : undefined} disabled={unavailable} onClick={start} size="lg" variant={initialIntent === "fork" ? "secondary" : "primary"}>{initialIntent === "fork" ? "Fork" : "Contribute"}</Button>
-    {unavailable && <span id="contribute-unavailable" className="meta">Publish a revision before contributions can begin.</span>}
+    <Button aria-describedby={unavailable ? unavailableId : undefined} disabled={unavailable} onClick={start} size="lg" variant={initialIntent === "fork" ? "secondary" : "primary"}>{initialIntent === "fork" ? "Fork" : "Contribute"}</Button>
+    {unavailable && <span id={unavailableId} className="meta">Publish a revision before contributions can begin.</span>}
     <dialog ref={dialog} className="contribute-dialog" aria-labelledby={titleId} onClose={() => setOpen(false)} onCancel={(event) => { event.preventDefault(); setOpen(false); }}>
       <form method="dialog" className="contribute-dialog-form" onSubmit={(event) => { event.preventDefault(); if (revisionNumber) router.push(`/projects/${slug}/revisions/${revisionNumber}?intent=${intent}`); setOpen(false); }}>
         <div className="section-heading"><h2 id={titleId}>How do you want to work?</h2><Button aria-label="Close contribute dialog" onClick={() => setOpen(false)} size="lg" variant="secondary">Close</Button></div>
