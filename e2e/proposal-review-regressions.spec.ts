@@ -66,6 +66,42 @@ test.describe("proposal review regression fixtures", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("traps Apply dialog focus and returns it to the trigger after keyboard cancel", async ({ page }) => {
+    const workspace = await openWorkspace(page);
+    const posterLabel = "Select Modify A deliberately long approved poster name for responsive review verification for application";
+    const apply = workspace.getByRole("button", { name: "Apply 1 selected changes" });
+    await workspace.getByLabel(posterLabel).check();
+    await apply.focus();
+    await page.keyboard.press("Enter");
+
+    const dialog = page.getByRole("dialog", { name: "Apply 1 selected changes?" });
+    const close = dialog.getByRole("button", { name: "Close dialog" });
+    const cancel = dialog.getByRole("button", { name: "Cancel", exact: true });
+    const submit = dialog.getByRole("button", { name: "Apply 1 selected changes" });
+    await expect(dialog).toBeVisible();
+    await expect(close).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(submit).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(submit).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(close).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect(apply).toBeFocused();
+    await expect(workspace.getByLabel(posterLabel)).toBeChecked();
+  });
+
   test("keeps preview failure and dimensions scoped to the asset being viewed", async ({ page }) => {
     const cacheFixture = await openSection(page, "preview-cache-heading");
     await expect(cacheFixture.getByText("Preview could not be loaded.")).toBeVisible();
