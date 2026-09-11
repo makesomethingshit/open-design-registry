@@ -8,15 +8,23 @@ test.describe("proposal review regression fixtures", () => {
     const project = page.locator("section").filter({ has: page.locator("#project-components-heading") });
     await expect(project).toBeVisible();
 
-    const titles = await project.locator("dialog[aria-labelledby]").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.getAttribute("aria-labelledby")));
+    const dialogs = project.locator("dialog[aria-labelledby]");
+    await expect(dialogs).toHaveCount(2);
+    const titles = await dialogs.evaluateAll((dialogElements) => dialogElements.map((dialog) => dialog.getAttribute("aria-labelledby")));
     expect(titles).toHaveLength(2);
     expect(new Set(titles).size).toBe(titles.length);
     expect(titles.every(Boolean)).toBe(true);
+    const labelledNames = await dialogs.evaluateAll((dialogElements) => dialogElements.map((dialog) => {
+      const titleId = dialog.getAttribute("aria-labelledby");
+      return titleId ? document.getElementById(titleId)?.textContent?.trim() : "";
+    }));
+    expect(labelledNames).toEqual(["How do you want to work?", "How do you want to work?"]);
 
     const forkTrigger = project.getByRole("button", { name: "Fork" });
     await forkTrigger.click();
     const dialog = page.locator("dialog:visible");
     await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName("How do you want to work?");
 
     const proposal = dialog.getByRole("radio", { name: /Propose a change/ });
     const fork = dialog.getByRole("radio", { name: /Fork project/ });
@@ -31,8 +39,25 @@ test.describe("proposal review regression fixtures", () => {
     await expect(fork).toBeChecked();
     await expect(fork).toBeFocused();
 
+    const close = dialog.getByRole("button", { name: "Close contribute dialog" });
+    const submit = dialog.getByRole("button", { name: "Fork project", exact: true });
+    await submit.focus();
+    await expect(submit).toBeFocused();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(submit).toBeFocused();
+
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(forkTrigger).toBeFocused();
+
+    await forkTrigger.click();
+    await expect(fork).toBeChecked();
     await proposal.check();
-    await dialog.getByRole("button", { name: "Close contribute dialog" }).click();
+    await close.click();
     await expect(dialog).toBeHidden();
     await expect(forkTrigger).toBeFocused();
 
