@@ -3,6 +3,44 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe("proposal review regression fixtures", () => {
   test.setTimeout(90_000);
 
+  test("restores the Fork trigger and resets intent across dialog reopen", async ({ page }) => {
+    await page.goto("/design-system");
+    const project = page.locator("section").filter({ has: page.locator("#project-components-heading") });
+    await expect(project).toBeVisible();
+
+    const titles = await project.locator("dialog[aria-labelledby]").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.getAttribute("aria-labelledby")));
+    expect(titles).toHaveLength(2);
+    expect(new Set(titles).size).toBe(titles.length);
+    expect(titles.every(Boolean)).toBe(true);
+
+    const forkTrigger = project.getByRole("button", { name: "Fork" });
+    await forkTrigger.click();
+    const dialog = page.locator("dialog:visible");
+    await expect(dialog).toBeVisible();
+
+    const proposal = dialog.getByRole("radio", { name: /Propose a change/ });
+    const fork = dialog.getByRole("radio", { name: /Fork project/ });
+    await proposal.check();
+    await expect(proposal).toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(forkTrigger).toBeFocused();
+
+    await forkTrigger.click();
+    await expect(dialog).toBeVisible();
+    await expect(fork).toBeChecked();
+    await expect(fork).toBeFocused();
+
+    await proposal.check();
+    await dialog.getByRole("button", { name: "Close contribute dialog" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(forkTrigger).toBeFocused();
+
+    await forkTrigger.click();
+    await expect(fork).toBeChecked();
+    await page.keyboard.press("Escape");
+  });
+
   test("keeps preview failure and dimensions scoped to the asset being viewed", async ({ page }) => {
     const cacheFixture = await openSection(page, "preview-cache-heading");
     await expect(cacheFixture.getByText("Preview could not be loaded.")).toBeVisible();
