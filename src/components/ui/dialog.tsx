@@ -5,6 +5,24 @@ import { Icon } from "./icon";
 import { IconButton } from "./button";
 import styles from "./dialog.module.css";
 
+const focusableSelector = [
+  "a[href]",
+  "area[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type=hidden])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[contenteditable=true]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function focusableWithin(element: HTMLDialogElement) {
+  return Array.from(element.querySelectorAll<HTMLElement>(focusableSelector)).filter((candidate) => {
+    const style = window.getComputedStyle(candidate);
+    return style.display !== "none" && style.visibility !== "hidden" && candidate.getClientRects().length > 0;
+  });
+}
+
 type DialogProps = {
   open: boolean;
   onClose: () => void;
@@ -27,7 +45,37 @@ export function Drawer({ actions, busy, children, className, initialFocus = "clo
 function DialogSurface({ actions, busy = false, children, className, initialFocus, onClose, open, title }: DialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const lastFocused = useRef<HTMLElement | null>(null);
   const titleId = useId();
+
+  function focusInitial(element: HTMLDialogElement) {
+    const preferred = initialFocus === "action"
+      ? element.querySelector<HTMLElement>("[data-dialog-initial-focus]")
+      : element.querySelector<HTMLElement>("[data-dialog-close]");
+    (preferred ?? focusableWithin(element)[0] ?? element).focus();
+  }
+
+  function restoreFocus(element: HTMLDialogElement) {
+    const focusable = focusableWithin(element);
+    const previous = lastFocused.current;
+    const target = previous && focusable.includes(previous) ? previous : focusable[0];
+    (target ?? element).focus();
+  }
+
+  function trapFocus(event: React.KeyboardEvent<HTMLDialogElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = focusableWithin(event.currentTarget);
+    if (!focusable.length) {
+      event.preventDefault();
+      event.currentTarget.focus();
+      return;
+    }
+    const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    if (currentIndex === -1 || (!event.shiftKey && currentIndex === focusable.length - 1) || (event.shiftKey && currentIndex === 0)) {
+      event.preventDefault();
+      focusable[event.shiftKey ? focusable.length - 1 : 0].focus();
+    }
+  }
 
   useEffect(() => {
     const element = dialog.current;
@@ -36,19 +84,23 @@ function DialogSurface({ actions, busy = false, children, className, initialFocu
       returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       element.showModal();
       requestAnimationFrame(() => {
-        const target = initialFocus === "action"
-          ? element.querySelector<HTMLElement>("[data-dialog-initial-focus]")
-          : element.querySelector<HTMLElement>("[data-dialog-close]");
-        target?.focus();
+        if (element.open) focusInitial(element);
       });
     }
     if (!open && element.open) {
       element.close();
-      returnFocus.current?.focus();
+      const target = returnFocus.current;
+      returnFocus.current = null;
+      target?.focus();
     }
   }, [initialFocus, open]);
 
-  return <dialog aria-busy={busy || undefined} aria-labelledby={titleId} className={`${styles.dialog}${className ? ` ${className}` : ""}`} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} ref={dialog}>
+  useEffect(() => {
+    const element = dialog.current;
+    if (open && element?.open && !element.contains(document.activeElement)) restoreFocus(element);
+  });
+
+  return <dialog aria-busy={busy || undefined} aria-labelledby={titleId} className={`${styles.dialog}${className ? ` ${className}` : ""}`} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onFocusCapture={(event) => { if (event.target instanceof HTMLElement) lastFocused.current = event.target; }} onKeyDown={trapFocus} ref={dialog} tabIndex={-1}>
     <header className={styles.header}>
       <h2 id={titleId}>{title}</h2>
       <IconButton data-dialog-close disabled={busy} label="Close dialog" onClick={onClose}><Icon name="close" /></IconButton>
