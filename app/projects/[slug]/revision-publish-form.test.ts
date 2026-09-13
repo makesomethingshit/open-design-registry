@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySuggestedKind, isCurrentSuggestionRequest, nextSuggestionRequest } from "./revision-publish-form";
+import { applySuggestedKind, clearRightsSourceFileIds, createNewBundleFileId, isCurrentSuggestionRequest, nextSuggestionRequest, remapRightsSourceFileId } from "./revision-publish-form";
 
 describe("revision publish suggestions", () => {
   it("discards late results when file slots are reused", () => {
@@ -24,5 +24,18 @@ describe("revision publish suggestions", () => {
     const request = nextSuggestionRequest(requests, counter, 0);
 
     expect(applySuggestedKind(["asset"], 0, request, requests[0])).toEqual(["asset"]);
+  });
+
+  it("uses a fresh ID across New to Existing to New and keeps rights references aligned", () => {
+    const firstNew = createNewBundleFileId();
+    const existing = "existing-a";
+    const finalNew = createNewBundleFileId();
+    expect(finalNew).not.toBe(firstNew);
+
+    const linked = [{ name: "Asset", sourceFileId: firstNew, type: "IMAGE" as const, redistribution: "UNKNOWN" as const, derivativeUse: "UNKNOWN" as const }];
+    expect(remapRightsSourceFileId(linked, firstNew, existing)[0].sourceFileId).toBe(existing);
+    expect(remapRightsSourceFileId(remapRightsSourceFileId(linked, firstNew, existing), existing, finalNew)[0].sourceFileId).toBe(finalNew);
+    expect(clearRightsSourceFileIds(linked, [finalNew])[0].sourceFileId).toBe(firstNew);
+    expect(clearRightsSourceFileIds([{ ...linked[0], sourceFileId: finalNew }], [finalNew])[0].sourceFileId).toBeUndefined();
   });
 });

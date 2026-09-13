@@ -241,6 +241,23 @@ describe("revision publishing route", () => {
     expect(response.status).toBe(201);
   });
 
+  it("rejects a collision between a preserved ID and a final new unit ID", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r1", number: 1, sourceKey: "r1-bundle" });
+    mocks.readBundle.mockResolvedValue({ version: 2, files: [{ id: "file-a", name: "old", kind: "asset", mimeType: "application/zip", size: 1, assetKey: "old", previewKeys: [] }] });
+    const response = await POST(request({
+      sources: [new File(["a"], "a.zip", { type: "application/zip" }), new File(["b"], "b.zip", { type: "application/zip" })],
+      sourceFileIds: ["file-a", ""],
+      sourceBundleFileIds: ["bundle-preserved", "file-a"],
+      sourcePreviewIndexes: ["0", "1"],
+      previews: [new File(["a"], "a.png", { type: "image/png" }), new File(["b"], "b.png", { type: "image/png" })],
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/ID.*unique/i) });
+    expect(mocks.putBundle).not.toHaveBeenCalled();
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+    expect(mocks.deleteObject).toHaveBeenCalledTimes(4);
+  });
+
   it("cleans the staged bundle key when bundle persistence fails", async () => {
     mocks.putBundle.mockRejectedValueOnce(new Error("bundle storage down"));
     const response = await POST(request({

@@ -7,7 +7,21 @@ import { suggestFile, type AdapterSuggestion } from "@/src/lib/adapters";
 
 type ExistingFile = { id: string; name: string; kind?: string };
 type SuggestionState = { status: "detecting" | "unsupported" | "error" | "preserved" } | { status: "available"; suggestion: AdapterSuggestion };
-type RightsDraftItem = { type: "SOURCE_FILE" | "FONT" | "IMAGE" | "ILLUSTRATION" | "ICON" | "TEMPLATE" | "OTHER"; name: string; sourceFileId?: string; rightsHolder?: string; licenseName?: string; licenseUrl?: string; sourceUrl?: string; redistribution: "UNKNOWN" | "ALLOWED" | "RESTRICTED" | "NOT_ALLOWED"; derivativeUse: "UNKNOWN" | "ALLOWED" | "RESTRICTED" | "NOT_ALLOWED"; notes?: string };
+export type RightsDraftItem = { type: "SOURCE_FILE" | "FONT" | "IMAGE" | "ILLUSTRATION" | "ICON" | "TEMPLATE" | "OTHER"; name: string; sourceFileId?: string; rightsHolder?: string; licenseName?: string; licenseUrl?: string; sourceUrl?: string; redistribution: "UNKNOWN" | "ALLOWED" | "RESTRICTED" | "NOT_ALLOWED"; derivativeUse: "UNKNOWN" | "ALLOWED" | "RESTRICTED" | "NOT_ALLOWED"; notes?: string };
+
+export function createNewBundleFileId() {
+  return crypto.randomUUID();
+}
+
+export function remapRightsSourceFileId(items: RightsDraftItem[], previousId: string | undefined, nextId: string | undefined) {
+  if (!previousId || previousId === nextId) return items;
+  return items.map((item) => item.sourceFileId === previousId ? { ...item, sourceFileId: nextId || undefined } : item);
+}
+
+export function clearRightsSourceFileIds(items: RightsDraftItem[], ids: readonly string[]) {
+  const removed = new Set(ids.filter(Boolean));
+  return removed.size ? items.map((item) => removed.has(item.sourceFileId ?? "") ? { ...item, sourceFileId: undefined } : item) : items;
+}
 
 function kindLabel(kind?: string) {
   return kind ? `${kind.slice(0, 1).toUpperCase()}${kind.slice(1)}` : "Asset · legacy";
@@ -71,8 +85,10 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
 
   function selectSources(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
+    const previousBundleIds = [...sourceFileIdsRef.current, ...sourceBundleFileIdsRef.current];
+    setRightsItems((current) => clearRightsSourceFileIds(current, previousBundleIds));
     sourceFileIdsRef.current = files.map(() => "");
-    sourceBundleFileIdsRef.current = files.map(() => crypto.randomUUID());
+    sourceBundleFileIdsRef.current = files.map(() => createNewBundleFileId());
     setSourceFiles(files);
     setSourceFileIds(sourceFileIdsRef.current);
     setSourceBundleFileIds(sourceBundleFileIdsRef.current);
@@ -83,7 +99,9 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
 
   function selectExisting(index: number, id: string) {
     const existing = existingFiles.find((file) => file.id === id);
-    const bundleId = id || sourceBundleFileIdsRef.current[index] || crypto.randomUUID();
+    const previousBundleId = sourceBundleFileIdsRef.current[index];
+    const bundleId = id || createNewBundleFileId();
+    if (previousBundleId !== bundleId) setRightsItems((current) => remapRightsSourceFileId(current, previousBundleId, bundleId));
     sourceFileIdsRef.current = sourceFileIdsRef.current.map((value, currentIndex) => currentIndex === index ? id : value);
     sourceBundleFileIdsRef.current = sourceBundleFileIdsRef.current.map((value, currentIndex) => currentIndex === index ? bundleId : value);
     setSourceFileIds(sourceFileIdsRef.current);

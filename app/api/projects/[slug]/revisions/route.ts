@@ -231,6 +231,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             };
           }),
         };
+        if (new Set(bundle.files.map((file) => file.id)).size !== bundle.files.length) throw new PublishError("Each final bundle file ID must be unique", 400);
         if (rightsInput) {
           const rightsSourceError = validateRightsSourceFilesInBundle(bundle, rightsInput.items);
           if (rightsSourceError) throw new PublishError(rightsSourceError, 400);

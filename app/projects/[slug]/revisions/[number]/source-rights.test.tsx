@@ -22,6 +22,12 @@ const declaration = {
     redistribution: "RESTRICTED" as const,
     derivativeUse: "UNKNOWN" as const,
     notes: "Do not redistribute the original.",
+  }, {
+    type: "FONT" as const,
+    name: "Font A",
+    redistribution: "UNKNOWN" as const,
+    derivativeUse: "UNKNOWN" as const,
+    notes: "Font A requires a separate license review.",
   }],
 };
 
@@ -51,6 +57,10 @@ describe("revision source rights detail", () => {
     expect(markup).toContain("Verify the source package before reuse.");
     expect(markup).toContain("rights-item-restricted");
     expect(markup).toContain("View source reference");
+    const fontStart = markup.indexOf("Font A");
+    const fontEnd = markup.indexOf("</li>", fontStart);
+    expect(markup.slice(fontStart, fontEnd)).toContain("Notes: Font A requires a separate license review.");
+    expect(markup).not.toContain('aria-label="Rights evidence"');
   });
 
   it("keeps the owner editing affordance on the same detail", () => {
