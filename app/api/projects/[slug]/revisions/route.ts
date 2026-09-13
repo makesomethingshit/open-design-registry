@@ -7,7 +7,7 @@ import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
-import { validateRightsSourceFiles } from "@/src/lib/revision-rights";
+import { validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
 import { parseRightsDeclaration, type RightsDeclarationInput } from "@/src/lib/rights";
 import {
   maxRevisionPreviewBytes,
@@ -124,6 +124,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const value = sourceFileIds[index];
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
   });
+  const sourceBundleFileIds = form.getAll("sourceBundleFileIds");
+  if (sourceBundleFileIds.length && sourceBundleFileIds.length !== sourceFiles.length) return error("Provide one bundle file ID for each uploaded source file");
+  const requestedBundleFileIds = sourceFiles.map((_, index) => {
+    const value = sourceBundleFileIds[index];
+    return typeof value === "string" && value.trim() ? value.trim() : crypto.randomUUID();
+  });
+  if (new Set(requestedBundleFileIds).size !== requestedBundleFileIds.length) return error("Each source file must have a unique bundle file ID");
   const sourceKinds = form.getAll("sourceKinds");
   if (sourceFiles.length && sourceKinds.length !== sourceFiles.length) return error("Select a kind for each source file");
   const requestedSourceKinds = sourceFiles.map((_, index) => typeof sourceKinds[index] === "string" ? normalizeUnitKind(sourceKinds[index] as string) : null);
@@ -199,10 +206,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
       if ((latest && parentId !== latest.id) || (!latest && parentId)) throw new PublishError("parentId must be the latest revision", 409);
-      if (rightsInput) {
-        const rightsSourceError = await validateRightsSourceFiles(latest ?? {}, rightsInput.items);
-        if (rightsSourceError) throw new PublishError(rightsSourceError, 400);
-      }
       let capabilityMode: "STRUCTURED" | "WHOLE_DOCUMENT" = "WHOLE_DOCUMENT";
       let capabilityUnitCount = 0;
       if (sourceAssets.length) {
@@ -217,7 +220,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             const kind = previous?.kind ?? requestedSourceKinds[index];
             if (!kind) throw new PublishError("Select a kind for each source file", 400);
             return {
-              id: mappedSourceFileIds[index] ?? crypto.randomUUID(),
+              id: mappedSourceFileIds[index] ?? requestedBundleFileIds[index],
               name: sourceNames[index]!,
               kind,
               mimeType: file.type || "application/octet-stream",
@@ -228,13 +231,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             };
           }),
         };
+        if (rightsInput) {
+          const rightsSourceError = validateRightsSourceFilesInBundle(bundle, rightsInput.items);
+          if (rightsSourceError) throw new PublishError(rightsSourceError, 400);
+        }
         publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/bundle.json`;
-        const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);
         uploadedKeys.push(publishedSourceKey);
+        const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);
         sourceChecksum = checksum;
         const capability = capabilityForBundle(bundle);
         capabilityMode = capability.mode === "structured" ? "STRUCTURED" : "WHOLE_DOCUMENT";
         capabilityUnitCount = capability.unitCount;
+      } else if (rightsInput) {
+        const rightsSourceError = validateRightsSourceFilesInBundle(null, rightsInput.items);
+        if (rightsSourceError) throw new PublishError(rightsSourceError, 400);
       }
       const adapter = sourceSuggestions.find((suggestion, index) => requestedKindModes[index] === "auto" && Boolean(suggestion));
       const adapterConfidence = adapter ? ({ high: "HIGH", medium: "MEDIUM", low: "LOW", not_assessed: "NOT_ASSESSED" } as const)[adapter.confidence] : undefined;

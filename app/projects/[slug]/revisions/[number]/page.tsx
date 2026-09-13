@@ -6,6 +6,7 @@ import { revisionUrlSchema } from "@/src/lib/project-validation";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
+import { Tag } from "@/src/components/ui/badge";
 import CapabilityBadge from "@/app/capability-badge";
 import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
@@ -79,6 +80,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
     <p>{revision.changeDescription}</p>
     <CapabilityBadge mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} label={`Revision ${revision.number}`} adapterId={revision.adapterId} adapterVersion={revision.adapterVersion} adapterConfidence={revision.adapterConfidence} adapterMaturity={revision.adapterMaturity} />
+    {revision.tags.length > 0 && <div aria-label="Revision tags">{revision.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</div>}
     <p className="meta">Revision license: {revision.license ?? "Not recorded for this legacy revision"}</p>
     {!revision.license && <p className="meta">The original publication license is unknown. Forking uses the current project license ({project.license}); confirm your rights before continuing.</p>}
     <SourceRights slug={project.slug} number={revision.number} revisionLicense={revision.license} sourceHref={sourceHref} sourceFiles={sourceFiles} tool={revision.tool} toolVersion={revision.toolVersion} sourceChecksum={revision.sourceChecksum} declaration={declaration} isOwner={session?.user.id === project.ownerId} />

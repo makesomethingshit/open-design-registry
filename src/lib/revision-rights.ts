@@ -1,15 +1,20 @@
 import type { Prisma } from "@prisma/client";
-import { readRevisionBundle } from "./revision-bundle";
+import { readRevisionBundle, type RevisionBundle } from "./revision-bundle";
 import type { RightsDeclarationInput } from "./rights";
 
-export async function validateRightsSourceFiles(revision: { sourceKey?: string | null }, items: RightsDeclarationInput["items"]) {
+function validateRightsSourceFilesInBundle(bundle: RevisionBundle | null, items: RightsDeclarationInput["items"]) {
   const ids = items.map((item) => item.sourceFileId).filter((id): id is string => Boolean(id));
   if (!ids.length) return null;
   if (new Set(ids).size !== ids.length) return "Each source file can be referenced only once";
-  const bundle = await readRevisionBundle(revision.sourceKey);
   const available = new Set(bundle?.files.map((file) => file.id) ?? []);
   return ids.every((id) => available.has(id)) ? null : "A rights item references a source file that is not in this revision bundle";
 }
+
+export async function validateRightsSourceFiles(revision: { sourceKey?: string | null }, items: RightsDeclarationInput["items"]) {
+  return validateRightsSourceFilesInBundle(await readRevisionBundle(revision.sourceKey), items);
+}
+
+export { validateRightsSourceFilesInBundle };
 
 export async function createRightsDeclaration(
   tx: Prisma.TransactionClient,

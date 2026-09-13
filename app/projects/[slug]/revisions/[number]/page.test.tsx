@@ -108,6 +108,14 @@ describe("Revision provenance", () => {
     expect(markup).not.toContain("No proposal");
   });
 
+  it("shows revision tags in the detail metadata", async () => {
+    const markup = await renderRevision(null, { tags: ["ui", "mobile"] });
+
+    expect(markup).toContain('aria-label="Revision tags"');
+    expect(markup).toContain(">ui</span>");
+    expect(markup).toContain(">mobile</span>");
+  });
+
   it("hides private source proposal metadata and change names from a non-owner", async () => {
     const markup = await renderRevision({ user: { id: "viewer" } }, {
       appliedProposal: {

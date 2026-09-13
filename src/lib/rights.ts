@@ -8,9 +8,16 @@ const optionalText = (max: number) => z.preprocess(
   (value) => value == null || (typeof value === "string" && !value.trim()) ? undefined : value,
   z.string().trim().max(max).optional(),
 );
+const httpUrl = z.string().trim().url().max(2048).refine((value) => {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}, "URL must use HTTP(S)");
 const optionalUrl = z.preprocess(
   (value) => value == null || (typeof value === "string" && !value.trim()) ? undefined : value,
-  z.string().trim().url().max(2048).optional(),
+  httpUrl.optional(),
 );
 
 export const rightsItemSchema = z.object({

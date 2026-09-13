@@ -104,16 +104,18 @@ export default function SourceRights({
     </div>
     <div className="source-rights-declaration">
       <h3>Rights</h3>
+      {declaration?.notes && <p className="meta"><strong>Declaration notes:</strong> {declaration.notes}</p>}
       {declaration ? <>
         <p><strong>Revision license:</strong> {revisionLicense ?? "Not recorded for this legacy revision"}</p>
         <p><strong>Source package:</strong> {sourceModeLabel(declaration.sourceRightsMode, revisionLicense)}</p>
         {declaration.sourceRightsMode === "SEPARATE" && <p className="meta">{declaration.sourceLicenseName}{declaration.sourceRightsHolder ? ` · Rights holder: ${declaration.sourceRightsHolder}` : ""}{declaration.sourceLicenseUrl ? <> · <a href={declaration.sourceLicenseUrl} target="_blank" rel="noreferrer">View source reference</a></> : ""}</p>}
         <p className="meta">Rights declaration Version {declaration.version} · Updated <time dateTime={declaration.createdAt}>{new Date(declaration.createdAt).toLocaleDateString("en-US", { dateStyle: "medium" })}</time></p>
         {declaration.items.length > 0 ? <ul className="rights-items" aria-label="Declared dependencies">{declaration.items.map((item, index) => {
-          const restricted = item.redistribution === "NOT_ALLOWED" || item.derivativeUse === "RESTRICTED" || item.derivativeUse === "NOT_ALLOWED";
+          const restricted = item.redistribution === "RESTRICTED" || item.redistribution === "NOT_ALLOWED" || item.derivativeUse === "RESTRICTED" || item.derivativeUse === "NOT_ALLOWED";
           const sourceFile = item.sourceFileId ? sourceFiles.find((file) => file.id === item.sourceFileId) : null;
           return <li className={restricted ? "rights-item rights-item-restricted" : "rights-item"} key={`${item.name}-${index}`}><div><strong>{item.name}</strong><span className="meta">{rightsItemTypeLabel(item.type)}{item.licenseName ? ` · ${item.licenseName}` : ""}</span>{sourceFile && <span className="meta">Included source: {sourceFile.name}</span>}</div><div className="rights-item-status"><span>Redistribution: {permissionLabel(item.redistribution)}</span><span>Derivative use: {permissionLabel(item.derivativeUse)}</span>{item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noreferrer">View source reference</a>}</div>{restricted && <p className="meta">This asset may require separate access when working from this source.</p>}</li>;
         })}</ul> : <p className="meta">No dependencies declared.</p>}
+        {declaration.items.some((item) => item.rightsHolder || item.licenseUrl || item.notes) && <ul className="rights-items" aria-label="Rights evidence">{declaration.items.map((item, index) => <li className="meta" key={`evidence-${item.name}-${index}`}>{item.rightsHolder && <span>Rights holder: {item.rightsHolder}</span>}{item.licenseUrl && <a href={item.licenseUrl} target="_blank" rel="noreferrer">View license for {item.name}</a>}{item.notes && <span>Notes: {item.notes}</span>}</li>)}</ul>}
         {(sourceRightsUnknown || unknownCount > 0) && <p className="rights-warning" role="status">Some rights information is unknown. The revision can still be published, but contributors may need to verify these dependencies.</p>}
       </> : <p><strong>No rights manifest recorded.</strong> Rights for this source or one or more dependencies have not been declared.</p>}
       <p className="meta rights-notice">Rights information is contributor-supplied provenance and does not constitute legal advice.</p>

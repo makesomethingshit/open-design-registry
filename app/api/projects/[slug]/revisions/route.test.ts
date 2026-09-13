@@ -170,6 +170,90 @@ describe("revision publishing route", () => {
     expect(mocks.createRevision).not.toHaveBeenCalled();
   });
 
+  it("validates rights references against the newly published bundle", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r2", number: 2, sourceKey: "r2-bundle" });
+    mocks.readBundle.mockResolvedValue({ version: 2, files: [{ id: "file-removed", name: "old", mimeType: "application/zip", size: 1, assetKey: "old", previewKeys: [] }] });
+    const response = await POST(request({
+      source: new File(["next"], "next.zip", { type: "application/zip" }),
+      sourceBundleFileIds: "file-new",
+      rightsManifest: JSON.stringify({ sourceRightsMode: "UNKNOWN", items: [{ type: "SOURCE_FILE", name: "Removed", sourceFileId: "file-removed" }] }),
+      previews: new File(["preview"], "preview.png", { type: "image/png" }),
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+    expect(mocks.putBundle).not.toHaveBeenCalled();
+    expect(mocks.deleteObject).toHaveBeenCalledTimes(2);
+  });
+
+  it("connects a new uploaded file to the rights manifest", async () => {
+    const response = await POST(request({
+      source: new File(["next"], "next.zip", { type: "application/zip" }),
+      sourceBundleFileIds: "file-new",
+      rightsManifest: JSON.stringify({ sourceRightsMode: "UNKNOWN", items: [{ type: "SOURCE_FILE", name: "New file", sourceFileId: "file-new" }] }),
+      previews: new File(["preview"], "preview.png", { type: "image/png" }),
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1].files[0].id).toBe("file-new");
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ rightsDeclarations: { create: expect.objectContaining({ items: { create: [expect.objectContaining({ sourceFileId: "file-new" })] } }) } }) }));
+  });
+
+  it("allows a preserved file ID and rejects old IDs for sourceUrl-only revisions", async () => {
+    mocks.findLatest.mockResolvedValue({ id: "r1", number: 1, sourceKey: "r1-bundle" });
+    mocks.readBundle.mockResolvedValue({ version: 2, files: [{ id: "file-kept", name: "kept", kind: "asset", mimeType: "application/zip", size: 1, assetKey: "old", previewKeys: [] }] });
+    const preserved = await POST(request({
+      source: new File(["next"], "next.zip", { type: "application/zip" }),
+      sourceFileIds: "file-kept",
+      rightsManifest: JSON.stringify({ sourceRightsMode: "UNKNOWN", items: [{ type: "SOURCE_FILE", name: "Kept", sourceFileId: "file-kept" }] }),
+      previews: new File(["preview"], "preview.png", { type: "image/png" }),
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(preserved.status).toBe(201);
+
+    vi.clearAllMocks();
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner" });
+    mocks.findLatest.mockResolvedValue({ id: "r1", number: 1, sourceKey: "r1-bundle" });
+    mocks.createRevision.mockResolvedValue({ id: "revision", number: 2, previews: [] });
+    mocks.updateRevision.mockResolvedValue({ id: "revision", number: 2, previews: [] });
+    mocks.transaction.mockImplementation(async (callback) => callback({
+      $queryRaw: vi.fn().mockResolvedValue([{ license: "CC BY 4.0" }]),
+      revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
+    }));
+    mocks.putObject.mockImplementation(async (_file: File, key: string) => `https://cdn/${key}`);
+    const sourceUrlOnly = await POST(request({
+      sourceUrl: "https://example.com/source.zip",
+      rightsManifest: JSON.stringify({ sourceRightsMode: "UNKNOWN", items: [{ type: "SOURCE_FILE", name: "Old", sourceFileId: "file-kept" }] }),
+      previews: new File(["preview"], "preview.png", { type: "image/png" }),
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(sourceUrlOnly.status).toBe(400);
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+    expect(mocks.deleteObject).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows external dependencies without a bundle file ID", async () => {
+    const response = await POST(request({
+      sourceUrl: "https://example.com/source.zip",
+      rightsManifest: JSON.stringify({ sourceRightsMode: "UNKNOWN", items: [{ type: "FONT", name: "External font" }] }),
+      previews: new File(["preview"], "preview.png", { type: "image/png" }),
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+  });
+
+  it("cleans the staged bundle key when bundle persistence fails", async () => {
+    mocks.putBundle.mockRejectedValueOnce(new Error("bundle storage down"));
+    const response = await POST(request({
+      source: new File(["next"], "next.zip", { type: "application/zip" }),
+      previews: new File(["preview"], "preview.png", { type: "image/png" }),
+      sourcePreviewIndexes: "0",
+    }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(500);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+    expect(mocks.deleteObject).toHaveBeenCalledTimes(3);
+  });
+
   it("normalizes discovery metadata and computes an uploaded source checksum", async () => {
     const response = await POST(request({ tool: " Figma ", toolVersion: " 2025 ", tags: "UI, Mobile", source: new File(["source"], "source.zip", { type: "application/zip" }), previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
