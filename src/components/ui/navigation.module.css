@@ -1,0 +1,15 @@
+.nav, .tabList, .segmented { display: flex; align-items: stretch; gap: var(--odr-space-1); max-width: 100%; border-bottom: var(--odr-border-width) solid var(--odr-border-default); overflow-x: auto; overflow-y: hidden; }
+.link, .tab { position: relative; display: inline-flex; min-height: var(--odr-control-md); align-items: center; gap: var(--odr-space-1); padding: var(--odr-space-2) var(--odr-space-3); border: 0; background: transparent; color: var(--odr-text-secondary); font-size: var(--odr-font-body); font-weight: var(--odr-weight-medium); text-decoration: none; white-space: nowrap; }
+.link::after, .tab::after { position: absolute; right: var(--odr-space-3); bottom: calc(var(--odr-border-width) * -1); left: var(--odr-space-3); height: var(--odr-focus-width); background: var(--odr-accent); content: ""; opacity: 0; }
+.link:hover, .tab:hover { color: var(--odr-text-primary); }
+.link[data-current], .tab[aria-selected="true"] { color: var(--odr-text-primary); }
+.link[data-current]::after, .tab[aria-selected="true"]::after { opacity: 1; }
+.tab:disabled { color: var(--odr-text-disabled); }
+.tabPanel { padding-top: var(--odr-space-4); }
+.segmented { gap: 0; width: max-content; padding: 0; border: var(--odr-border-width) solid var(--odr-border-control); border-radius: var(--odr-radius-control); overflow: hidden; }
+.segment { position: relative; display: inline-flex; min-height: var(--odr-control-sm); align-items: center; padding: var(--odr-space-1) var(--odr-space-3); color: var(--odr-text-secondary); cursor: pointer; font-size: var(--odr-font-label); }
+.segment + .segment { border-left: var(--odr-border-width) solid var(--odr-border-control); }
+.segmentInput { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+.segment:has(.segmentInput:checked) { background: var(--odr-accent-soft); color: var(--odr-accent); font-weight: var(--odr-weight-semibold); }
+.segment:has(.segmentInput:disabled) { color: var(--odr-text-disabled); cursor: not-allowed; }
+.segment:has(.segmentInput:focus-visible) { outline: var(--odr-focus-width) solid var(--odr-accent); outline-offset: calc(var(--odr-focus-offset) * -1); }

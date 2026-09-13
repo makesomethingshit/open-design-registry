@@ -1,0 +1,51 @@
+.button {
+  display: inline-flex;
+  min-height: var(--odr-control-md);
+  align-items: center;
+  justify-content: center;
+  gap: var(--odr-space-2);
+  padding: var(--odr-space-2) var(--odr-space-3);
+  border: var(--odr-border-width) solid transparent;
+  border-radius: var(--odr-radius-control);
+  font-size: var(--odr-font-body);
+  font-weight: var(--odr-weight-semibold);
+  line-height: var(--odr-line-body);
+  text-decoration: none;
+  transition: background-color var(--odr-duration-fast) var(--odr-ease-standard), border-color var(--odr-duration-fast) var(--odr-ease-standard), color var(--odr-duration-fast) var(--odr-ease-standard), opacity var(--odr-duration-fast) var(--odr-ease-standard);
+}
+
+.button:disabled { border-color: var(--odr-disabled-border); background: var(--odr-disabled-bg); color: var(--odr-text-disabled); }
+.button:disabled .spinner { border-color: currentColor transparent currentColor currentColor; }
+.sm { min-height: var(--odr-control-sm); padding: var(--odr-space-1) var(--odr-space-2); }
+.md { min-height: var(--odr-control-md); }
+.lg { min-height: var(--odr-control-lg); padding-inline: var(--odr-space-4); }
+
+.primary { background: var(--odr-button-primary-bg); color: var(--odr-button-primary-fg); }
+.primary:hover:not(:disabled), .primary[data-preview-state="hover"] { background: var(--odr-action-primary-hover); color: var(--odr-button-primary-fg); }
+.primary:active:not(:disabled), .primary[data-preview-state="pressed"] { background: var(--odr-action-primary-pressed); }
+
+.secondary { border-color: var(--odr-control-border); background: var(--odr-surface-panel); color: var(--odr-text-primary); }
+.secondary:hover:not(:disabled), .secondary[data-preview-state="hover"] { background: var(--odr-surface-hover); }
+.secondary:active:not(:disabled), .secondary[data-preview-state="pressed"] { background: var(--odr-surface-pressed); }
+
+.ghost { background: transparent; color: var(--odr-text-primary); }
+.ghost:hover:not(:disabled), .ghost[data-preview-state="hover"] { background: var(--odr-surface-hover); }
+.ghost:active:not(:disabled), .ghost[data-preview-state="pressed"] { background: var(--odr-surface-pressed); }
+
+.danger { background: var(--odr-danger-solid); color: var(--odr-danger-on); }
+.danger:hover:not(:disabled), .danger[data-preview-state="hover"] { background: var(--odr-danger-hover); }
+.danger:active:not(:disabled), .danger[data-preview-state="pressed"] { background: var(--odr-danger-pressed); }
+
+.button[data-preview-state="focus"] { outline: var(--odr-focus-width) solid var(--odr-accent); outline-offset: var(--odr-focus-offset); }
+.iconButton { width: var(--odr-control-md); padding: 0; }
+.iconButton.sm { width: var(--odr-control-sm); }
+.iconButton.lg { width: var(--odr-control-lg); }
+.spinner { width: 1em; height: 1em; border: 0.125rem solid currentColor; border-right-color: transparent; border-radius: var(--odr-radius-pill); animation: spin var(--odr-duration-dialog) linear infinite; }
+.textLink { color: var(--odr-accent); text-decoration: underline; text-underline-offset: 0.15em; }
+.textLink:hover { color: var(--odr-accent-hover); }
+
+@keyframes spin { to { transform: rotate(1turn); } }
+
+@media (pointer: coarse) { .iconButton { min-width: var(--odr-touch-target); min-height: var(--odr-touch-target); } }
+@media (max-width: 48rem) { .button { min-height: var(--odr-touch-target); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

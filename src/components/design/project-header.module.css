@@ -1,0 +1,17 @@
+.header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--odr-space-5); padding-bottom: var(--odr-space-6); border-bottom: var(--odr-border-width) solid var(--odr-border-subtle); }
+.content { min-width: 0; }
+.path, .description, .lineage { margin: 0; }
+.path { color: var(--odr-text-muted); font-family: var(--odr-font-mono); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); overflow-wrap: anywhere; }
+.path a { color: inherit; text-decoration: underline; text-underline-offset: 0.15em; }
+.titleRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--odr-space-2); margin-top: var(--odr-space-2); }
+.titleRow h1 { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-title); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-title); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.description { max-width: var(--odr-layout-reading); margin-top: var(--odr-space-3); color: var(--odr-text-secondary); font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); overflow-wrap: anywhere; }
+.lineage { max-width: var(--odr-layout-reading); margin-top: var(--odr-space-3); color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
+.lineage a { color: var(--odr-accent); text-decoration: underline; text-underline-offset: 0.15em; }
+.meta { display: flex; flex-wrap: wrap; gap: var(--odr-space-4); padding: 0; margin: var(--odr-space-4) 0 0; }
+.meta div { display: grid; min-width: 0; gap: var(--odr-space-1); }
+.meta dt { color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }
+.meta dd { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-label); font-weight: var(--odr-weight-medium); line-height: var(--odr-line-label); overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--odr-space-2); }
+
+@media (max-width: 48rem) { .header { grid-template-columns: 1fr; align-items: start; } .actions { justify-content: start; } }

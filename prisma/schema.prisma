@@ -1,0 +1,420 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          String    @default("user")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  projects      Project[]
+  reports       Report[]
+  issues        Issue[]
+  issueComments IssueComment[]
+  proposalsAuthored Proposal[] @relation("ProposalAuthor")
+  proposalReviews Proposal[] @relation("ProposalReviewer")
+  proposalsAccepted Proposal[] @relation("ProposalAcceptor")
+  changeReviews Change[] @relation("ChangeReviewer")
+  changeReviewHistory ChangeReview[] @relation("ChangeReviewAuthor")
+  proposalComments ProposalComment[]
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsCreated Notification[] @relation("NotificationActor")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Account {
+  id                    String   @id
+  accountId             String
+  issuer                String
+  providerId            String
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  @@index([userId])
+  @@unique([issuer, accountId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([identifier])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  license     String
+  isPublic    Boolean  @default(true)
+  publicationConfirmedAt DateTime?
+  publicationConfirmedBy String?
+  coverUrl    String
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  revisions   Revision[]
+  reports     Report[]
+  issues      Issue[]
+  proposals   Proposal[]
+  notifications Notification[] @relation("NotificationProject")
+  forkNotifications Notification[] @relation("NotificationForkedProject")
+  forks       Project[] @relation("ProjectForks")
+  forkedFrom  Project? @relation("ProjectForks", fields: [forkedFromProjectId], references: [id], onDelete: SetNull)
+  forkedFromProjectId String?
+  forkedFromRevisionId String?
+  forkedFromLicense String?
+  forkedFromRevision Revision? @relation("RevisionForks", fields: [forkedFromRevisionId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([ownerId])
+  @@index([isPublic, createdAt])
+  @@index([forkedFromProjectId])
+  @@index([forkedFromRevisionId])
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id             String       @id @default(cuid())
+  projectId      String?
+  revisionId     String?
+  reporterId     String
+  reason         String
+  details        String       @default("")
+  status         ReportStatus @default(OPEN)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime     @default(now())
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revision       Revision?    @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  reporter       User         @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([projectId])
+  @@index([revisionId])
+}
+
+model Revision {
+  id         String    @id @default(cuid())
+  projectId  String
+  number     Int
+  parentId   String?
+  title      String
+  changeDescription String
+  license    String?
+  sourceKey  String?
+  sourceUrl  String?
+  tool       String?
+  toolVersion String?
+  tags       String[] @default([])
+  sourceChecksum String?
+  capabilityMode RevisionCapabilityMode?
+  capabilityUnitCount Int?
+  adapterId String?
+  adapterVersion String?
+  adapterConfidence AdapterConfidence?
+  adapterMaturity String?
+  isPublished Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent     Revision? @relation("RevisionParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children   Revision[] @relation("RevisionParent")
+  previews   Preview[]
+  reports    Report[]
+  issues     Issue[]
+  forks      Project[] @relation("RevisionForks")
+  baseProposals Proposal[] @relation("ProposalBaseRevision")
+  sourceProposals Proposal[] @relation("ProposalSourceRevision")
+  appliedProposal Proposal? @relation("ProposalAppliedRevisions", fields: [sourceProposalId], references: [id], onDelete: Restrict)
+  sourceProposalId String?
+  appliedChanges Change[] @relation("ChangeAppliedRevision")
+  reviewAnchors ChangeReview[] @relation("ChangeReviewCheckedLatestRevision")
+  reviewInvalidations ChangeReview[] @relation("ChangeReviewCausedByRevision")
+
+  @@unique([projectId, number])
+  @@index([projectId, createdAt])
+  @@index([parentId])
+  @@index([tool, createdAt])
+  @@index([tags], type: Gin)
+}
+
+enum IssueStatus {
+  OPEN
+  CLOSED
+}
+
+enum RevisionCapabilityMode {
+  STRUCTURED
+  WHOLE_DOCUMENT
+}
+
+enum AdapterConfidence {
+  HIGH
+  MEDIUM
+  LOW
+  NOT_ASSESSED
+}
+
+enum ProposalStatus {
+  DRAFT
+  OPEN
+  CHANGES_REQUESTED
+  APPROVED
+  PARTIALLY_ACCEPTED
+  ACCEPTED
+  CLOSED
+}
+
+enum ChangeType {
+  REPLACE_DOCUMENT
+  REPLACE_ASSET
+  ADD_UNIT
+  MODIFY_UNIT
+  REMOVE_UNIT
+  RENAME_UNIT
+}
+
+enum ChangeReviewStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+enum ChangeReviewEventType {
+  REVIEW
+  INVALIDATED_UPSTREAM
+  PARTIAL_APPLICATION_RESET
+}
+
+enum NotificationType {
+  ISSUE_CREATED
+  FORK_CREATED
+}
+
+model Issue {
+  id         String      @id @default(cuid())
+  projectId  String
+  authorId   String
+  revisionId String?
+  title      String
+  body       String       @default("")
+  status     IssueStatus  @default(OPEN)
+  closedAt   DateTime?
+  closedBy   String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author     User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  revision   Revision?    @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  comments   IssueComment[]
+  proposals  Proposal[]
+  notifications Notification[]
+
+  @@index([projectId, status, createdAt])
+  @@index([authorId])
+  @@index([revisionId])
+}
+
+model IssueComment {
+  id        String   @id @default(cuid())
+  issueId   String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+  @@index([authorId])
+}
+
+model Proposal {
+  id               String         @id @default(cuid())
+  projectId        String
+  proposalNumber   Int
+  baseRevisionId   String
+  sourceRevisionId String
+  authorId         String
+  relatedIssueId   String?
+  reviewerId       String?
+  acceptedById     String?
+  requestId        String?
+  title            String
+  body             String
+  status           ProposalStatus @default(OPEN)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  baseRevision     Revision       @relation("ProposalBaseRevision", fields: [baseRevisionId], references: [id], onDelete: Cascade)
+  sourceRevision   Revision       @relation("ProposalSourceRevision", fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+  author           User           @relation("ProposalAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  relatedIssue     Issue?         @relation(fields: [relatedIssueId], references: [id], onDelete: SetNull)
+  reviewer         User?          @relation("ProposalReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  acceptedBy       User?          @relation("ProposalAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+  changeSet        ChangeSet?
+  comments         ProposalComment[]
+  appliedRevisions Revision[]     @relation("ProposalAppliedRevisions")
+
+  @@unique([projectId, proposalNumber])
+  @@unique([projectId, authorId, requestId])
+  @@index([projectId, status, createdAt])
+  @@index([baseRevisionId])
+  @@index([sourceRevisionId])
+  @@index([authorId])
+  @@index([relatedIssueId])
+}
+
+model ChangeSet {
+  id         String   @id @default(cuid())
+  proposalId String   @unique
+  createdAt  DateTime @default(now())
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  changes    Change[]
+}
+
+model Change {
+  id            String             @id @default(cuid())
+  changeSetId   String
+  type          ChangeType
+  action        ChangeType?
+  target        String
+  targetFileId  String?
+  name          String?
+  newName       String?
+  kind          String?
+  mimeType      String?
+  size          Int?
+  assetKey      String?
+  reviewStatus  ChangeReviewStatus @default(PENDING)
+  reviewComment String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  appliedRevisionId String?
+  createdAt     DateTime           @default(now())
+  changeSet     ChangeSet          @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
+  reviewedBy    User?              @relation("ChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  appliedRevision Revision?        @relation("ChangeAppliedRevision", fields: [appliedRevisionId], references: [id], onDelete: Restrict)
+  reviewHistory ChangeReview[]
+
+  @@index([changeSetId])
+  @@unique([changeSetId, targetFileId])
+  @@index([reviewedById])
+  @@index([appliedRevisionId])
+}
+
+model ChangeReview {
+  id                      String                @id @default(cuid())
+  changeId                String
+  authorId                String?
+  status                  ChangeReviewStatus
+  eventType               ChangeReviewEventType @default(REVIEW)
+  comment                 String?
+  reason                  String?
+  checkedLatestRevisionId String?
+  causedByRevisionId      String?
+  createdAt               DateTime              @default(now())
+  change                  Change                @relation(fields: [changeId], references: [id], onDelete: Cascade)
+  author                  User?                 @relation("ChangeReviewAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  checkedLatestRevision   Revision?             @relation("ChangeReviewCheckedLatestRevision", fields: [checkedLatestRevisionId], references: [id], onDelete: SetNull)
+  causedByRevision        Revision?             @relation("ChangeReviewCausedByRevision", fields: [causedByRevisionId], references: [id], onDelete: SetNull)
+
+  @@index([changeId, createdAt])
+  @@index([authorId])
+  @@index([checkedLatestRevisionId])
+  @@index([causedByRevisionId])
+  @@unique([changeId, eventType, causedByRevisionId])
+}
+
+model ProposalComment {
+  id         String   @id @default(cuid())
+  proposalId String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId, createdAt])
+  @@index([authorId])
+}
+
+model Preview {
+  id         String   @id @default(cuid())
+  revisionId String
+  position   Int      @default(0)
+  key        String
+  url        String
+  mimeType   String
+  size       Int
+  altText    String
+  createdAt  DateTime @default(now())
+  revision   Revision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+
+  @@unique([revisionId, key])
+  @@index([revisionId])
+}
+
+model Notification {
+  id              String           @id @default(cuid())
+  recipientId     String
+  actorId         String
+  type            NotificationType
+  projectId       String
+  issueId         String?
+  forkedProjectId String?
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+  recipient       User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor           User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  project         Project          @relation("NotificationProject", fields: [projectId], references: [id], onDelete: Cascade)
+  issue           Issue?           @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  forkedProject   Project?         @relation("NotificationForkedProject", fields: [forkedProjectId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([actorId])
+  @@index([projectId])
+  @@index([issueId])
+  @@index([forkedProjectId])
+}

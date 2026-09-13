@@ -1,0 +1,11 @@
+.dialog { width: min(42rem, calc(100vw - var(--odr-space-6))); max-height: calc(100dvh - var(--odr-space-6)); padding: 0; border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-dialog); background: var(--odr-surface-overlay); color: var(--odr-text-primary); box-shadow: var(--odr-shadow-dialog); }
+.dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.dialog::backdrop { background: var(--odr-scrim); }
+.header, .actions { display: flex; align-items: center; justify-content: space-between; gap: var(--odr-space-3); padding: var(--odr-space-4) var(--odr-space-5); }
+.header { border-bottom: var(--odr-border-width) solid var(--odr-border-subtle); }
+.header h2 { margin: 0; font-size: var(--odr-font-section); line-height: var(--odr-line-section); }
+.body { min-height: 0; overflow: auto; padding: var(--odr-space-5); color: var(--odr-text-secondary); }
+.actions { justify-content: flex-end; border-top: var(--odr-border-width) solid var(--odr-border-subtle); }
+.drawer { width: min(28rem, calc(100vw - var(--odr-space-5))); height: 100dvh; max-height: none; margin: 0 0 0 auto; border-radius: 0; }
+
+@media (max-width: 48rem) { .dialog { width: min(100vw - var(--odr-space-4), 42rem); max-height: calc(100dvh - var(--odr-space-4)); } .header, .actions, .body { padding: var(--odr-space-4); } }
