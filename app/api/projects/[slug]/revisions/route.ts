@@ -7,6 +7,8 @@ import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
+import { validateRightsSourceFiles } from "@/src/lib/revision-rights";
+import { parseRightsDeclaration, type RightsDeclarationInput } from "@/src/lib/rights";
 import {
   maxRevisionPreviewBytes,
   maxRevisionPreviewTotalBytes,
@@ -97,6 +99,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (toolVersionResult.data && !tool) return error("Provide a tool name with the tool version");
   const tagResult = parseRevisionTags(form.getAll("tags").concat(form.getAll("tag")));
   if ("error" in tagResult) return error(tagResult.error ?? "Invalid tags");
+  let rightsInput: RightsDeclarationInput | null = null;
+  const rightsValue = ["rightsManifest", "rights"].map((name) => form.get(name)).find((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  if (rightsValue) {
+    let rightsPayload: unknown;
+    try {
+      rightsPayload = JSON.parse(rightsValue);
+    } catch {
+      return error("Rights declaration is invalid");
+    }
+    const rightsResult = parseRightsDeclaration(rightsPayload);
+    if ("error" in rightsResult) return error("Rights declaration is invalid");
+    rightsInput = rightsResult.data;
+  }
   const checksumValue = ["sourceChecksum", "checksum", "sourceHash"].map((name) => form.get(name)).find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
   const checksumResult = checksumValue ? revisionSourceChecksum.safeParse(checksumValue) : { success: true as const, data: undefined };
   if (!checksumResult.success) return error("Source checksum must be a 64-character SHA-256 hex digest");
@@ -184,6 +199,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
       if ((latest && parentId !== latest.id) || (!latest && parentId)) throw new PublishError("parentId must be the latest revision", 409);
+      if (rightsInput) {
+        const rightsSourceError = await validateRightsSourceFiles(latest ?? {}, rightsInput.items);
+        if (rightsSourceError) throw new PublishError(rightsSourceError, 400);
+      }
       let capabilityMode: "STRUCTURED" | "WHOLE_DOCUMENT" = "WHOLE_DOCUMENT";
       let capabilityUnitCount = 0;
       if (sourceAssets.length) {
@@ -237,6 +256,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           adapterMaturity: adapter?.maturity,
           isPublished: false,
           previews: { create: uploadedPreviews },
+          ...(rightsInput ? {
+            rightsDeclarations: {
+              create: {
+                version: 1,
+                sourceRightsMode: rightsInput.sourceRightsMode,
+                sourceLicenseName: rightsInput.sourceLicenseName,
+                sourceLicenseUrl: rightsInput.sourceLicenseUrl,
+                sourceRightsHolder: rightsInput.sourceRightsHolder,
+                notes: rightsInput.notes,
+                createdById: session.user.id,
+                items: { create: rightsInput.items.map((item) => ({ ...item })) },
+              },
+            },
+          } : {}),
         },
       });
       return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });

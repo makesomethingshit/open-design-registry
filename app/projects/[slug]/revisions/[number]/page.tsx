@@ -11,6 +11,7 @@ import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
 import ForkForm from "./fork-form";
 import RestoreForm from "./restore-form";
+import SourceRights from "./source-rights";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
         orderBy: { createdAt: "asc" },
         select: { id: true, appliedRevisionId: true, type: true, action: true, target: true, name: true, newName: true, kind: true },
       },
+      rightsDeclarations: { orderBy: { version: "desc" }, take: 1, include: { items: true } },
     },
   });
   if (!revision?.isPublished) notFound();
@@ -55,10 +57,22 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
   const currentImagePreviews = currentPreviews.filter((preview) => preview.mimeType !== "text/html");
   const previousImagePreviews = previousPreviews?.filter((preview) => preview.mimeType !== "text/html");
   const htmlPreviews = currentPreviews.filter((preview) => preview.mimeType === "text/html");
-  const sourceFiles = (await readRevisionBundle(revision.sourceKey))?.files.map(({ id, name, mimeType, size }) => ({ id, name, mimeType, size })) ?? [];
+  const sourceFiles = (await readRevisionBundle(revision.sourceKey))?.files.map(({ id, name, mimeType, size }) => ({ id, name, mimeType, size, href: `/api/projects/${encodeURIComponent(project.slug)}/revisions/${revision.number}/files/${encodeURIComponent(id)}` })) ?? [];
   const sourceUrl = revision.sourceUrl && revisionUrlSchema.safeParse(revision.sourceUrl).success ? revision.sourceUrl : null;
   const sourceHref = sourceUrl ?? (!sourceFiles.length && revision.sourceKey ? publicAssetUrl(revision.sourceKey) : null);
   const hasProvenance = Boolean(previous || appliedProposal || appliedChanges.length > 0);
+  const declarationRecord = revision.rightsDeclarations?.[0];
+  const declaration = declarationRecord ? {
+    id: declarationRecord.id,
+    version: declarationRecord.version,
+    sourceRightsMode: declarationRecord.sourceRightsMode,
+    sourceLicenseName: declarationRecord.sourceLicenseName,
+    sourceLicenseUrl: declarationRecord.sourceLicenseUrl,
+    sourceRightsHolder: declarationRecord.sourceRightsHolder,
+    notes: declarationRecord.notes,
+    createdAt: declarationRecord.createdAt instanceof Date ? declarationRecord.createdAt.toISOString() : String(declarationRecord.createdAt),
+    items: declarationRecord.items.map((item) => ({ type: item.type, name: item.name, sourceFileId: item.sourceFileId, rightsHolder: item.rightsHolder, licenseName: item.licenseName, licenseUrl: item.licenseUrl, sourceUrl: item.sourceUrl, redistribution: item.redistribution, derivativeUse: item.derivativeUse, notes: item.notes })),
+  } : null;
   return <article className="detail">
     <p className="meta"><Link href={`/projects/${project.slug}`}>{project.title}</Link> · Revision {revision.number}</p>
     <h1>{revision.title}</h1>
@@ -67,8 +81,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     <CapabilityBadge mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} label={`Revision ${revision.number}`} adapterId={revision.adapterId} adapterVersion={revision.adapterVersion} adapterConfidence={revision.adapterConfidence} adapterMaturity={revision.adapterMaturity} />
     <p className="meta">Revision license: {revision.license ?? "Not recorded for this legacy revision"}</p>
     {!revision.license && <p className="meta">The original publication license is unknown. Forking uses the current project license ({project.license}); confirm your rights before continuing.</p>}
-    {(revision.tool || revision.toolVersion || revision.tags.length > 0 || revision.sourceChecksum) && <p className="meta">{revision.tool ?? "Unknown tool"}{revision.toolVersion ? ` ${revision.toolVersion}` : ""}{revision.tags.length > 0 ? ` · ${revision.tags.map((tag) => `#${tag}`).join(" ")}` : ""}{revision.sourceChecksum ? ` · SHA-256 ${revision.sourceChecksum}` : ""}</p>}
-    {(sourceHref || sourceFiles.length > 0) && <section aria-labelledby="revision-source"><h2 id="revision-source">Source</h2>{sourceHref && <a className="button secondary" href={sourceHref} {...(sourceUrl ? { target: "_blank", rel: "noreferrer" } : { download: true })}>{sourceUrl ? "Open source link" : "Download source"}</a>}{sourceFiles.length > 0 && <ul className="commit-previews" aria-label="Revision source files">{sourceFiles.map((file) => <li className="commit-chip" key={file.id}><span>{file.name} · {file.mimeType} · {file.size} bytes</span><a href={`/api/projects/${encodeURIComponent(project.slug)}/revisions/${revision.number}/files/${encodeURIComponent(file.id)}`}>Download</a></li>)}</ul>}</section>}
+    <SourceRights slug={project.slug} number={revision.number} revisionLicense={revision.license} sourceHref={sourceHref} sourceFiles={sourceFiles} tool={revision.tool} toolVersion={revision.toolVersion} sourceChecksum={revision.sourceChecksum} declaration={declaration} isOwner={session?.user.id === project.ownerId} />
     {hasProvenance && <section aria-labelledby="revision-provenance"><h2 id="revision-provenance">Provenance</h2><dl>
       {previous && <div><dt>Created from</dt><dd><Link href={`/projects/${project.slug}/revisions/${previous.number}`}>Revision {previous.number}</Link></dd></div>}
       {appliedProposal && <div><dt>Applied from</dt><dd><Link href={`/proposals/${appliedProposal.id}`}>Proposal #{appliedProposal.proposalNumber} · {appliedProposal.title}</Link>{appliedProposal.author?.name && <span className="meta"> by {appliedProposal.author.name}</span>}</dd></div>}

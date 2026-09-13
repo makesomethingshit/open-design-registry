@@ -30,6 +30,7 @@ model User {
   proposalComments ProposalComment[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCreated Notification[] @relation("NotificationActor")
+  rightsDeclarations RevisionRightsDeclaration[]
 }
 
 model Session {
@@ -170,6 +171,7 @@ model Revision {
   appliedChanges Change[] @relation("ChangeAppliedRevision")
   reviewAnchors ChangeReview[] @relation("ChangeReviewCheckedLatestRevision")
   reviewInvalidations ChangeReview[] @relation("ChangeReviewCausedByRevision")
+  rightsDeclarations RevisionRightsDeclaration[]
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -193,6 +195,73 @@ enum AdapterConfidence {
   MEDIUM
   LOW
   NOT_ASSESSED
+}
+
+enum RightsPermission {
+  UNKNOWN
+  ALLOWED
+  RESTRICTED
+  NOT_ALLOWED
+}
+
+enum SourceRightsMode {
+  SAME_AS_REVISION
+  SEPARATE
+  UNKNOWN
+}
+
+enum RightsItemType {
+  SOURCE_FILE
+  FONT
+  IMAGE
+  ILLUSTRATION
+  ICON
+  TEMPLATE
+  OTHER
+}
+
+model RevisionRightsDeclaration {
+  id                String                    @id @default(cuid())
+  revisionId        String
+  version           Int
+  sourceRightsMode  SourceRightsMode
+  sourceLicenseName String?
+  sourceLicenseUrl  String?
+  sourceRightsHolder String?
+  notes             String?
+  createdById       String
+  createdAt         DateTime                  @default(now())
+  supersedesId      String?
+  revision          Revision                  @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  createdBy         User                      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  supersedes        RevisionRightsDeclaration? @relation("RightsDeclarationSupersession", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy      RevisionRightsDeclaration[] @relation("RightsDeclarationSupersession")
+  items             RevisionRightsItem[]
+
+  @@unique([revisionId, version])
+  @@index([revisionId, createdAt])
+  @@index([createdById])
+  @@index([supersedesId])
+}
+
+model RevisionRightsItem {
+  id              String          @id @default(cuid())
+  declarationId   String
+  type            RightsItemType
+  name            String
+  sourceFileId    String?
+  rightsHolder    String?
+  licenseName     String?
+  licenseUrl      String?
+  sourceUrl       String?
+  redistribution  RightsPermission @default(UNKNOWN)
+  derivativeUse   RightsPermission @default(UNKNOWN)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  declaration     RevisionRightsDeclaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  @@index([declarationId])
+  @@index([sourceFileId])
 }
 
 enum ProposalStatus {

@@ -92,4 +92,32 @@ describePostgres("Revision PostgreSQL constraints", () => {
     expect(revision.previews.some((preview) => preview.mimeType === "text/html")).toBe(true);
     await expect(prisma.$executeRaw`INSERT INTO "Preview" ("id", "revisionId", "position", "key", "url", "mimeType", "size", "altText") VALUES (${`preview-test-${crypto.randomUUID()}`}, ${revision.id}, 1, ${`preview-test-${crypto.randomUUID()}`}, 'https://example.test/late.png', 'image/png', 1, 'Late preview')`).rejects.toThrow();
   });
+
+  it("keeps rights declarations versioned and append-only", async () => {
+    const revision = await prisma.revision.findFirstOrThrow({ where: { projectId }, orderBy: { number: "desc" } });
+    const first = await prisma.revisionRightsDeclaration.create({
+      data: {
+        revisionId: revision.id,
+        version: 1,
+        sourceRightsMode: "UNKNOWN",
+        createdById: userId,
+        items: { create: [{ type: "FONT", name: "Neue Haas Grotesk", redistribution: "UNKNOWN", derivativeUse: "UNKNOWN" }] },
+      },
+      include: { items: true },
+    });
+    const second = await prisma.revisionRightsDeclaration.create({
+      data: {
+        revisionId: revision.id,
+        version: 2,
+        sourceRightsMode: "SAME_AS_REVISION",
+        createdById: userId,
+        supersedesId: first.id,
+        items: { create: [{ type: "FONT", name: "Neue Haas Grotesk", redistribution: "NOT_ALLOWED", derivativeUse: "RESTRICTED" }] },
+      },
+    });
+    expect(second.supersedesId).toBe(first.id);
+    expect((await prisma.revisionRightsDeclaration.findUniqueOrThrow({ where: { id: first.id }, include: { items: true } })).sourceRightsMode).toBe("UNKNOWN");
+    await expect(prisma.revisionRightsDeclaration.update({ where: { id: first.id }, data: { notes: "overwrite" } })).rejects.toThrow();
+    await expect(prisma.revisionRightsDeclaration.delete({ where: { id: first.id } })).rejects.toThrow();
+  });
 });
