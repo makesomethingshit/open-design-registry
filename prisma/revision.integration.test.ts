@@ -144,6 +144,7 @@ describePostgres("Revision PostgreSQL constraints", () => {
         title: "Cascade revision",
         changeDescription: "Exercise parent deletion",
         sourceUrl: "https://example.test/source.zip",
+        isPublished: false,
         previews: {
           create: {
             position: 0,
@@ -165,6 +166,8 @@ describePostgres("Revision PostgreSQL constraints", () => {
       },
       include: { previews: true, rightsDeclarations: { include: { items: true } } },
     });
+    expect(cascadeRevision.isPublished).toBe(false);
+    await prisma.revision.update({ where: { id: cascadeRevisionId }, data: { isPublished: true } });
     const cascadePreviewId = cascadeRevision.previews[0]!.id;
     const cascadeDeclarationId = cascadeRevision.rightsDeclarations[0]!.id;
     const cascadeItemId = cascadeRevision.rightsDeclarations[0]!.items[0]!.id;
