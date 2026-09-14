@@ -7,7 +7,7 @@ import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
-import { validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
+import { validateRightsAgainstRevision, validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
 import { parseRightsDeclaration, type RightsDeclarationInput } from "@/src/lib/rights";
 import {
   maxRevisionPreviewBytes,
@@ -202,6 +202,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const revision = await prisma.$transaction(async (tx) => {
       const [lockedProject] = await tx.$queryRaw<Array<{ license: string }>>`SELECT license FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) throw new PublishError("Project not found", 404);
+      if (rightsInput) {
+        const rightsContextError = validateRightsAgainstRevision(lockedProject, rightsInput);
+        if (rightsContextError) throw new PublishError(rightsContextError, 400);
+      }
       const latest = await tx.revision.findFirst({ where: { projectId: project.id, isPublished: true }, orderBy: { number: "desc" } });
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;

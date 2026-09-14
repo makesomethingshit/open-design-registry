@@ -2,6 +2,16 @@ import type { Prisma } from "@prisma/client";
 import { readRevisionBundle, type RevisionBundle } from "./revision-bundle";
 import type { RightsDeclarationInput } from "./rights";
 
+export function validateRightsAgainstRevision(
+  revision: { license?: string | null },
+  input: RightsDeclarationInput,
+) {
+  if (input.sourceRightsMode === "SAME_AS_REVISION" && !revision.license) {
+    return "This revision has no recorded license; choose Unknown or a separate license";
+  }
+  return null;
+}
+
 function validateRightsSourceFilesInBundle(bundle: RevisionBundle | null, items: RightsDeclarationInput["items"]) {
   const ids = items.map((item) => item.sourceFileId).filter((id): id is string => Boolean(id));
   if (!ids.length) return null;

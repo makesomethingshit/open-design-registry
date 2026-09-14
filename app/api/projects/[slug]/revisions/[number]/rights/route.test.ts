@@ -64,6 +64,27 @@ describe("revision rights API", () => {
     expect(mocks.createDeclaration).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceRightsMode: "SAME_AS_REVISION", version: 1, items: { create: expect.arrayContaining([expect.objectContaining({ sourceFileId: "file-1", redistribution: "UNKNOWN" }), expect.objectContaining({ name: "Neue Haas Grotesk", derivativeUse: "RESTRICTED" })]) } }) }));
   });
 
+  it("rejects same-as-revision when the revision has no recorded license before opening a transaction", async () => {
+    mocks.findRevision.mockResolvedValue({ id: "revision", sourceKey: "bundle", isPublished: true, license: null });
+    const response = (await POST(request({ sourceRightsMode: "SAME_AS_REVISION", items: [] }), params))!;
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining("no recorded license") });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.createDeclaration).not.toHaveBeenCalled();
+  });
+
+  it("allows unknown and separate rights on a legacy revision", async () => {
+    mocks.findRevision.mockResolvedValue({ id: "revision", sourceKey: "bundle", isPublished: true, license: null });
+    expect((await POST(request({ sourceRightsMode: "UNKNOWN", sourceRightsHolder: "Studio", items: [] }), params))!.status).toBe(201);
+    mocks.findRevision.mockResolvedValue({ id: "revision", sourceKey: "bundle", isPublished: true, license: null });
+    expect((await POST(request({ sourceRightsMode: "SEPARATE", sourceLicenseName: "Studio License", items: [] }), params))!.status).toBe(201);
+  });
+
+  it("allows same-as-revision when the revision has a recorded license", async () => {
+    mocks.findRevision.mockResolvedValue({ id: "revision", sourceKey: "bundle", isPublished: true, license: "MIT" });
+    expect((await POST(request({ sourceRightsMode: "SAME_AS_REVISION", items: [] }), params))!.status).toBe(201);
+  });
+
   it("rejects an unknown bundle file before writing", async () => {
     const response = (await POST(request({ sourceRightsMode: "UNKNOWN", items: [{ type: "IMAGE", name: "Hero", sourceFileId: "missing" }] }), params))!;
     expect(response.status).toBe(400);

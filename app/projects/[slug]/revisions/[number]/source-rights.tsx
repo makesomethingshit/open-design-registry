@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import { permissionLabel, rightsItemTypeLabel, unknownRightsCount, type RightsDeclarationInput, type RightsItemInput } from "@/src/lib/rights";
+import { permissionLabel, rightsItemTypeLabel, sourceLicenseFieldsForMode, unknownRightsCount, type RightsDeclarationInput, type RightsItemInput } from "@/src/lib/rights";
 
 type DeclarationItem = { type: RightsItemInput["type"]; name: string; sourceFileId?: string | null; rightsHolder?: string | null; licenseName?: string | null; licenseUrl?: string | null; sourceUrl?: string | null; redistribution: RightsItemInput["redistribution"]; derivativeUse: RightsItemInput["derivativeUse"]; notes?: string | null };
 type Declaration = { id: string; version: number; createdAt: string; sourceRightsMode: RightsDeclarationInput["sourceRightsMode"]; sourceLicenseName?: string | null; sourceLicenseUrl?: string | null; sourceRightsHolder?: string | null; notes?: string | null; items: DeclarationItem[] };
@@ -65,16 +65,24 @@ export default function SourceRights({
   const [status, setStatus] = useState("");
   const unknownCount = declaration ? unknownRightsCount(declaration) : 0;
   const sourceRightsUnknown = declaration?.sourceRightsMode === "UNKNOWN";
+  const sameAsRevisionUnavailable = revisionLicense === null;
 
   function updateItem(index: number, patch: Partial<RightsItemInput>) {
     setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  function selectSourceRightsMode(mode: RightsDeclarationInput["sourceRightsMode"]) {
+    setSourceRightsMode(mode);
+    const fields = sourceLicenseFieldsForMode(mode, sourceLicenseName, sourceLicenseUrl);
+    setSourceLicenseName(fields.sourceLicenseName);
+    setSourceLicenseUrl(fields.sourceLicenseUrl);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setStatus("");
-    const payload = { sourceRightsMode, sourceLicenseName, sourceLicenseUrl, sourceRightsHolder, notes, items: items.filter((item) => item.name.trim()) };
+    const payload = { sourceRightsMode, sourceLicenseName: sourceLicenseName || undefined, sourceLicenseUrl: sourceLicenseUrl || undefined, sourceRightsHolder, notes, items: items.filter((item) => item.name.trim()) };
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(slug)}/revisions/${number}/rights`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json().catch(() => null) as { error?: string } | null;
@@ -108,6 +116,7 @@ export default function SourceRights({
       {declaration ? <>
         <p><strong>Revision license:</strong> {revisionLicense ?? "Not recorded for this legacy revision"}</p>
         <p><strong>Source package:</strong> {sourceModeLabel(declaration.sourceRightsMode, revisionLicense)}</p>
+        {declaration.sourceRightsMode !== "SEPARATE" && declaration.sourceRightsHolder && <p className="meta">Rights holder: {declaration.sourceRightsHolder}</p>}
         {declaration.sourceRightsMode === "SEPARATE" && <p className="meta">{declaration.sourceLicenseName}{declaration.sourceRightsHolder ? ` · Rights holder: ${declaration.sourceRightsHolder}` : ""}{declaration.sourceLicenseUrl ? <> · <a href={declaration.sourceLicenseUrl} target="_blank" rel="noreferrer">View source reference</a></> : ""}</p>}
         <p className="meta">Rights declaration Version {declaration.version} · Updated <time dateTime={declaration.createdAt}>{new Date(declaration.createdAt).toLocaleDateString("en-US", { dateStyle: "medium" })}</time></p>
         {declaration.items.length > 0 ? <ul className="rights-items" aria-label="Declared dependencies">{declaration.items.map((item, index) => {
@@ -123,11 +132,11 @@ export default function SourceRights({
     {editing && isOwner && <form className="rights-form" onSubmit={submit}>
       <h3>{declaration ? "Add a rights declaration version" : "Add rights information"}</h3>
       <fieldset><legend>Source package rights</legend>
-        <label><input type="radio" name="sourceRightsMode" value="SAME_AS_REVISION" checked={sourceRightsMode === "SAME_AS_REVISION"} onChange={() => setSourceRightsMode("SAME_AS_REVISION")} /> Same as Revision license</label>
-        <label><input type="radio" name="sourceRightsMode" value="SEPARATE" checked={sourceRightsMode === "SEPARATE"} onChange={() => setSourceRightsMode("SEPARATE")} /> Different license</label>
-        <label><input type="radio" name="sourceRightsMode" value="UNKNOWN" checked={sourceRightsMode === "UNKNOWN"} onChange={() => setSourceRightsMode("UNKNOWN")} /> Unknown / not declared</label>
+        <label><input type="radio" name="sourceRightsMode" value="SAME_AS_REVISION" checked={sourceRightsMode === "SAME_AS_REVISION"} disabled={sameAsRevisionUnavailable} onChange={() => selectSourceRightsMode("SAME_AS_REVISION")} /> Same as Revision license{sameAsRevisionUnavailable && <span className="meta">Unavailable because this revision has no recorded license.</span>}</label>
+        <label><input type="radio" name="sourceRightsMode" value="SEPARATE" checked={sourceRightsMode === "SEPARATE"} onChange={() => selectSourceRightsMode("SEPARATE")} /> Different license</label>
+        <label><input type="radio" name="sourceRightsMode" value="UNKNOWN" checked={sourceRightsMode === "UNKNOWN"} onChange={() => selectSourceRightsMode("UNKNOWN")} /> Unknown / not declared</label>
       </fieldset>
-      {sourceRightsMode === "SEPARATE" && <div className="rights-form-grid"><label>License name<input value={sourceLicenseName} onChange={(event) => setSourceLicenseName(event.target.value)} required /></label><label>License/reference URL<input type="url" value={sourceLicenseUrl} onChange={(event) => setSourceLicenseUrl(event.target.value)} /></label><label>Rights holder<input value={sourceRightsHolder} onChange={(event) => setSourceRightsHolder(event.target.value)} /></label></div>}
+      <div className="rights-form-grid">{sourceRightsMode === "SEPARATE" && <><label>License name<input value={sourceLicenseName} onChange={(event) => setSourceLicenseName(event.target.value)} required /></label><label>License/reference URL<input type="url" value={sourceLicenseUrl} onChange={(event) => setSourceLicenseUrl(event.target.value)} /></label></>}<label>Rights holder<input value={sourceRightsHolder} onChange={(event) => setSourceRightsHolder(event.target.value)} /></label></div>
       <label>Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} /></label>
       <div className="rights-form-heading"><h4>Dependencies &amp; third-party assets</h4><button className="button secondary" type="button" onClick={() => setItems((current) => [...current, emptyItem()])}>Add dependency</button></div>
       {items.map((item, index) => <div className="rights-form-item" key={index}><label>Name<input value={item.name} onChange={(event) => updateItem(index, { name: event.target.value })} required /></label><label>Type<select value={item.type} onChange={(event) => updateItem(index, { type: event.target.value as RightsItemInput["type"] })}>{["SOURCE_FILE", "FONT", "IMAGE", "ILLUSTRATION", "ICON", "TEMPLATE", "OTHER"].map((type) => <option key={type} value={type}>{rightsItemTypeLabel(type as RightsItemInput["type"])}</option>)}</select></label><label>Source bundle file (optional)<select value={item.sourceFileId ?? ""} onChange={(event) => updateItem(index, { sourceFileId: event.target.value || undefined })}><option value="">External dependency</option>{sourceFiles.map((file) => <option key={file.id} value={file.id}>{file.name}</option>)}</select></label><label>Redistribution<select aria-label={`Redistribution for ${item.name || "dependency"}`} value={item.redistribution} onChange={(event) => updateItem(index, { redistribution: event.target.value as RightsItemInput["redistribution"] })}>{["UNKNOWN", "ALLOWED", "RESTRICTED", "NOT_ALLOWED"].map((permission) => <option key={permission} value={permission}>{permissionLabel(permission as RightsItemInput["redistribution"])}</option>)}</select></label><label>Derivative use<select aria-label={`Derivative use for ${item.name || "dependency"}`} value={item.derivativeUse} onChange={(event) => updateItem(index, { derivativeUse: event.target.value as RightsItemInput["derivativeUse"] })}>{["UNKNOWN", "ALLOWED", "RESTRICTED", "NOT_ALLOWED"].map((permission) => <option key={permission} value={permission}>{permissionLabel(permission as RightsItemInput["derivativeUse"])}</option>)}</select></label><label>License name<input value={item.licenseName ?? ""} onChange={(event) => updateItem(index, { licenseName: event.target.value || undefined })} /></label><label>License/reference URL<input type="url" value={item.licenseUrl ?? ""} onChange={(event) => updateItem(index, { licenseUrl: event.target.value || undefined })} /></label><label>Rights holder<input value={item.rightsHolder ?? ""} onChange={(event) => updateItem(index, { rightsHolder: event.target.value || undefined })} /></label><label>Source reference URL<input type="url" value={item.sourceUrl ?? ""} onChange={(event) => updateItem(index, { sourceUrl: event.target.value || undefined })} /></label><label>Notes<textarea value={item.notes ?? ""} onChange={(event) => updateItem(index, { notes: event.target.value || undefined })} maxLength={2000} /></label><button className="link-button" type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove dependency</button></div>)}

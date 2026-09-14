@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { createRightsDeclaration, validateRightsSourceFiles } from "@/src/lib/revision-rights";
+import { createRightsDeclaration, validateRightsAgainstRevision, validateRightsSourceFiles } from "@/src/lib/revision-rights";
 import { parseRightsDeclaration } from "@/src/lib/rights";
 
 function error(message: string, status = 400) {
@@ -42,6 +42,8 @@ async function save(request: Request, { params }: { params: Promise<{ slug: stri
   const parsed = parseRightsDeclaration(await request.json().catch(() => null));
   if ("error" in parsed) return error("Rights declaration is invalid", 400);
   try {
+    const revisionRightsError = validateRightsAgainstRevision(result.revision, parsed.data);
+    if (revisionRightsError) return error(revisionRightsError, 400);
     const sourceError = await validateRightsSourceFiles(result.revision, parsed.data.items);
     if (sourceError) return error(sourceError, 400);
     const declaration = await prisma.$transaction((tx) => createRightsDeclaration(tx, result.revision.id, userId, parsed.data));

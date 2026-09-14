@@ -47,16 +47,80 @@ CREATE INDEX "RevisionRightsDeclaration_supersedesId_idx" ON "RevisionRightsDecl
 CREATE INDEX "RevisionRightsItem_declarationId_idx" ON "RevisionRightsItem"("declarationId");
 CREATE INDEX "RevisionRightsItem_sourceFileId_idx" ON "RevisionRightsItem"("sourceFileId");
 
-CREATE OR REPLACE FUNCTION prevent_rights_manifest_mutation() RETURNS trigger AS $$
+-- Parent cascades must be able to remove immutable rows while direct mutations
+-- remain blocked for live parent records.
+CREATE OR REPLACE FUNCTION prevent_revision_publish() RETURNS trigger AS $$
 BEGIN
-  RAISE EXCEPTION 'rights declarations are append-only';
+  IF TG_OP = 'DELETE' THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM "Project"
+      WHERE "id" = OLD."projectId"
+    ) THEN
+      RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'published revisions and previews are immutable';
+  END IF;
+
+  IF OLD."isPublished" IS FALSE
+     AND NEW."isPublished" IS TRUE
+     AND (to_jsonb(OLD) - 'isPublished') IS NOT DISTINCT FROM (to_jsonb(NEW) - 'isPublished')
+  THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'published revisions and previews are immutable';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION prevent_revision_mutation() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND NOT EXISTS (
+       SELECT 1
+       FROM "Revision"
+       WHERE "id" = OLD."revisionId"
+     )
+  THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'published revisions and previews are immutable';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION prevent_rights_declaration_mutation() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     OR EXISTS (
+       SELECT 1
+       FROM "Revision"
+       WHERE "id" = OLD."revisionId"
+     )
+  THEN
+    RAISE EXCEPTION 'rights declarations are append-only';
+  END IF;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION prevent_rights_item_mutation() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     OR EXISTS (
+       SELECT 1
+       FROM "RevisionRightsDeclaration"
+       WHERE "id" = OLD."declarationId"
+     )
+  THEN
+    RAISE EXCEPTION 'rights declarations are append-only';
+  END IF;
+  RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER "RevisionRightsDeclaration_append_only"
   BEFORE UPDATE OR DELETE ON "RevisionRightsDeclaration"
-  FOR EACH ROW EXECUTE FUNCTION prevent_rights_manifest_mutation();
+  FOR EACH ROW EXECUTE FUNCTION prevent_rights_declaration_mutation();
 
 CREATE TRIGGER "RevisionRightsItem_append_only"
   BEFORE UPDATE OR DELETE ON "RevisionRightsItem"
-  FOR EACH ROW EXECUTE FUNCTION prevent_rights_manifest_mutation();
+  FOR EACH ROW EXECUTE FUNCTION prevent_rights_item_mutation();

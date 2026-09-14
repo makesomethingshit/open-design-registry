@@ -44,10 +44,24 @@ export const rightsDeclarationSchema = z.object({
   if (value.sourceRightsMode === "SEPARATE" && !value.sourceLicenseName) {
     context.addIssue({ code: "custom", path: ["sourceLicenseName"], message: "A separate source license name is required" });
   }
+  if (value.sourceRightsMode !== "SEPARATE" && value.sourceLicenseName) {
+    context.addIssue({ code: "custom", path: ["sourceLicenseName"], message: "Source license name is only valid for separate source rights" });
+  }
+  if (value.sourceRightsMode !== "SEPARATE" && value.sourceLicenseUrl) {
+    context.addIssue({ code: "custom", path: ["sourceLicenseUrl"], message: "Source license URL is only valid for separate source rights" });
+  }
 });
 
 export type RightsDeclarationInput = z.infer<typeof rightsDeclarationSchema>;
 export type RightsItemInput = z.infer<typeof rightsItemSchema>;
+
+export function sourceLicenseFieldsForMode(
+  mode: RightsDeclarationInput["sourceRightsMode"],
+  sourceLicenseName: string,
+  sourceLicenseUrl: string,
+) {
+  return mode === "SEPARATE" ? { sourceLicenseName, sourceLicenseUrl } : { sourceLicenseName: "", sourceLicenseUrl: "" };
+}
 
 export function parseRightsDeclaration(value: unknown) {
   const result = rightsDeclarationSchema.safeParse(value);

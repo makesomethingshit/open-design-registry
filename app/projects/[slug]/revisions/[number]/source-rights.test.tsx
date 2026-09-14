@@ -31,17 +31,19 @@ const declaration = {
   }],
 };
 
-function render(isOwner: boolean) {
+type SourceRightsDeclaration = NonNullable<Parameters<typeof SourceRights>[0]["declaration"]>;
+
+function render(isOwner: boolean, currentDeclaration: SourceRightsDeclaration = declaration, currentRevisionLicense: string | null = "MIT") {
   return renderToStaticMarkup(createElement(SourceRights, {
     slug: "demo",
     number: 2,
-    revisionLicense: "MIT",
+    revisionLicense: currentRevisionLicense,
     sourceHref: null,
     sourceFiles: [],
     tool: "penpot",
     toolVersion: "2",
     sourceChecksum: null,
-    declaration,
+    declaration: currentDeclaration,
     isOwner,
   }));
 }
@@ -65,5 +67,10 @@ describe("revision source rights detail", () => {
 
   it("keeps the owner editing affordance on the same detail", () => {
     expect(render(true)).toContain("Add rights information");
+  });
+
+  it("shows a source rights holder regardless of source license mode", () => {
+    const unknownDeclaration = { ...declaration, sourceRightsMode: "UNKNOWN" as const, sourceLicenseName: null, sourceLicenseUrl: null };
+    expect(render(false, unknownDeclaration)).toContain("Rights holder: Studio");
   });
 });
