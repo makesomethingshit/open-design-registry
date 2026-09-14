@@ -136,7 +136,7 @@ describePostgres("Revision PostgreSQL constraints", () => {
         ownerId: userId,
       },
     });
-    await prisma.revision.create({
+    const cascadeRevision = await prisma.revision.create({
       data: {
         id: cascadeRevisionId,
         projectId: cascadeProjectId,
@@ -144,6 +144,16 @@ describePostgres("Revision PostgreSQL constraints", () => {
         title: "Cascade revision",
         changeDescription: "Exercise parent deletion",
         sourceUrl: "https://example.test/source.zip",
+        previews: {
+          create: {
+            position: 0,
+            key: `revision-rights-cascade-preview-${crypto.randomUUID()}`,
+            url: "https://example.test/cascade.png",
+            mimeType: "image/png",
+            size: 1,
+            altText: "Cascade preview",
+          },
+        },
         rightsDeclarations: {
           create: {
             version: 1,
@@ -153,10 +163,18 @@ describePostgres("Revision PostgreSQL constraints", () => {
           },
         },
       },
+      include: { previews: true, rightsDeclarations: { include: { items: true } } },
     });
+    const cascadePreviewId = cascadeRevision.previews[0]!.id;
+    const cascadeDeclarationId = cascadeRevision.rightsDeclarations[0]!.id;
+    const cascadeItemId = cascadeRevision.rightsDeclarations[0]!.items[0]!.id;
+    await expect(prisma.revision.delete({ where: { id: cascadeRevisionId } })).rejects.toThrow();
+    await expect(prisma.preview.update({ where: { id: cascadePreviewId }, data: { altText: "overwrite" } })).rejects.toThrow();
+    await expect(prisma.preview.delete({ where: { id: cascadePreviewId } })).rejects.toThrow();
     await prisma.project.delete({ where: { id: cascadeProjectId } });
-    expect(await prisma.revision.count({ where: { id: cascadeRevisionId } })).toBe(0);
-    expect(await prisma.revisionRightsDeclaration.count({ where: { revisionId: cascadeRevisionId } })).toBe(0);
-    expect(await prisma.revisionRightsItem.count({ where: { declaration: { revisionId: cascadeRevisionId } } })).toBe(0);
+    expect(await prisma.revision.findUnique({ where: { id: cascadeRevisionId } })).toBeNull();
+    expect(await prisma.preview.findUnique({ where: { id: cascadePreviewId } })).toBeNull();
+    expect(await prisma.revisionRightsDeclaration.findUnique({ where: { id: cascadeDeclarationId } })).toBeNull();
+    expect(await prisma.revisionRightsItem.findUnique({ where: { id: cascadeItemId } })).toBeNull();
   });
 });

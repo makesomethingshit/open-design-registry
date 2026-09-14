@@ -1,7 +1,75 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import SourceRights from "./source-rights";
+import RevisionPublishForm from "../../revision-publish-form";
+
+const hookState = vi.hoisted(() => ({
+  values: [] as unknown[],
+  refs: [] as Array<{ current: unknown }>,
+  cursor: 0,
+  refCursor: 0,
+  overrides: {} as Record<number, unknown>,
+}));
+
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    useState: (initial: unknown) => {
+      const index = hookState.cursor++;
+      if (!(index in hookState.values)) hookState.values[index] = index in hookState.overrides ? hookState.overrides[index] : typeof initial === "function" ? (initial as () => unknown)() : initial;
+      return [hookState.values[index], (next: unknown) => { hookState.values[index] = typeof next === "function" ? (next as (current: unknown) => unknown)(hookState.values[index]) : next; }] as const;
+    },
+    useRef: (initial: unknown) => {
+      const index = hookState.refCursor++;
+      if (!(index in hookState.refs)) hookState.refs[index] = { current: initial };
+      return hookState.refs[index];
+    },
+  };
+});
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+function resetHooks(overrides: Record<number, unknown> = {}) {
+  hookState.values = [];
+  hookState.refs = [];
+  hookState.cursor = 0;
+  hookState.refCursor = 0;
+  hookState.overrides = overrides;
+}
+
+function beginRender() {
+  hookState.cursor = 0;
+  hookState.refCursor = 0;
+}
+
+type TestElement = { type: unknown; props?: Record<string, any> };
+
+function elements(value: unknown): TestElement[] {
+  if (Array.isArray(value)) return value.flatMap(elements);
+  if (!value || typeof value !== "object" || !("props" in value)) return [];
+  const element = value as TestElement;
+  return [element, ...elements(element.props?.children)];
+}
+
+function findElement(root: unknown, predicate: (element: TestElement) => boolean) {
+  const element = elements(root).find(predicate);
+  if (!element) throw new Error("Expected element was not rendered");
+  return element;
+}
+
+function textContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(textContent).join("");
+  if (!value || typeof value !== "object" || !("props" in value)) return "";
+  return textContent((value as TestElement).props?.children);
+}
+
+function findLabeledInput(root: unknown, label: string) {
+  const field = findElement(root, (element) => element.type === "label" && textContent(element).includes(label));
+  return findElement(field.props?.children, (element) => element.type === "input");
+}
 
 const declaration = {
   id: "declaration-1",
@@ -33,8 +101,8 @@ const declaration = {
 
 type SourceRightsDeclaration = NonNullable<Parameters<typeof SourceRights>[0]["declaration"]>;
 
-function render(isOwner: boolean, currentDeclaration: SourceRightsDeclaration = declaration, currentRevisionLicense: string | null = "MIT") {
-  return renderToStaticMarkup(createElement(SourceRights, {
+function props(currentDeclaration: SourceRightsDeclaration | null = declaration, currentRevisionLicense: string | null = "MIT") {
+  return {
     slug: "demo",
     number: 2,
     revisionLicense: currentRevisionLicense,
@@ -44,8 +112,19 @@ function render(isOwner: boolean, currentDeclaration: SourceRightsDeclaration = 
     toolVersion: "2",
     sourceChecksum: null,
     declaration: currentDeclaration,
-    isOwner,
-  }));
+    isOwner: true,
+  };
+}
+
+function render(isOwner: boolean, currentDeclaration: SourceRightsDeclaration = declaration, currentRevisionLicense: string | null = "MIT") {
+  resetHooks();
+  return renderToStaticMarkup(createElement(SourceRights, { ...props(currentDeclaration, currentRevisionLicense), isOwner }));
+}
+
+function renderSourceRightsElement(currentRevisionLicense: string | null = "MIT") {
+  resetHooks({ 0: true });
+  beginRender();
+  return SourceRights(props(declaration, currentRevisionLicense));
 }
 
 describe("revision source rights detail", () => {
@@ -69,8 +148,59 @@ describe("revision source rights detail", () => {
     expect(render(true)).toContain("Add rights information");
   });
 
+  it("renders the null-license edit state with Same as Revision disabled", () => {
+    const root = renderSourceRightsElement(null);
+    const sameAsRevision = findElement(root, (element) => element.type === "input" && element.props?.value === "SAME_AS_REVISION");
+    expect(sameAsRevision.props?.disabled).toBe(true);
+    expect(renderToStaticMarkup(root)).toContain("Unavailable because this revision has no recorded license.");
+  });
+
+  it.each(["UNKNOWN", "SAME_AS_REVISION"] as const)("removes source license metadata from the submitted %s edit while retaining the holder", async (mode) => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "expected test response" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const componentProps = props(declaration, "MIT");
+      let root = renderSourceRightsElement("MIT");
+      const modeRadio = findElement(root, (element) => element.type === "input" && element.props?.value === mode);
+      modeRadio.props?.onChange();
+      beginRender();
+      root = SourceRights(componentProps);
+      const form = findElement(root, (element) => element.type === "form");
+      await form.props?.onSubmit({ preventDefault: vi.fn() });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("sourceLicenseName");
+      expect(body).not.toHaveProperty("sourceLicenseUrl");
+      expect(body.sourceRightsHolder).toBe("Studio");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("shows a source rights holder regardless of source license mode", () => {
     const unknownDeclaration = { ...declaration, sourceRightsMode: "UNKNOWN" as const, sourceLicenseName: null, sourceLicenseUrl: null };
     expect(render(false, unknownDeclaration)).toContain("Rights holder: Studio");
+  });
+
+  it.each(["UNKNOWN", "SAME_AS_REVISION"] as const)("publishing form removes source license metadata from the hidden manifest in %s mode", (mode) => {
+    resetHooks();
+    beginRender();
+    let root = RevisionPublishForm({ slug: "demo", existingFiles: [] });
+    const separate = findElement(root, (element) => element.type === "input" && element.props?.value === "SEPARATE");
+    separate.props?.onChange();
+    beginRender();
+    root = RevisionPublishForm({ slug: "demo", existingFiles: [] });
+    findLabeledInput(root, "License name").props?.onChange({ target: { value: "Studio License" } });
+    findLabeledInput(root, "License/reference URL").props?.onChange({ target: { value: "https://example.com/license" } });
+    findLabeledInput(root, "Rights holder").props?.onChange({ target: { value: "Studio" } });
+    const target = findElement(root, (element) => element.type === "input" && element.props?.value === mode);
+    target.props?.onChange();
+    beginRender();
+    root = RevisionPublishForm({ slug: "demo", existingFiles: [] });
+    const manifest = findElement(root, (element) => element.type === "input" && element.props?.name === "rightsManifest");
+    const body = JSON.parse(manifest.props?.value as string) as Record<string, unknown>;
+    expect(body.sourceRightsMode).toBe(mode);
+    expect(body).not.toHaveProperty("sourceLicenseName");
+    expect(body).not.toHaveProperty("sourceLicenseUrl");
+    expect(body.sourceRightsHolder).toBe("Studio");
   });
 });
