@@ -7,6 +7,8 @@ import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
+import { validateRightsAgainstRevision, validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
+import { parseRightsDeclaration, type RightsDeclarationInput } from "@/src/lib/rights";
 import {
   maxRevisionPreviewBytes,
   maxRevisionPreviewTotalBytes,
@@ -97,6 +99,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (toolVersionResult.data && !tool) return error("Provide a tool name with the tool version");
   const tagResult = parseRevisionTags(form.getAll("tags").concat(form.getAll("tag")));
   if ("error" in tagResult) return error(tagResult.error ?? "Invalid tags");
+  let rightsInput: RightsDeclarationInput | null = null;
+  const rightsValue = ["rightsManifest", "rights"].map((name) => form.get(name)).find((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  if (rightsValue) {
+    let rightsPayload: unknown;
+    try {
+      rightsPayload = JSON.parse(rightsValue);
+    } catch {
+      return error("Rights declaration is invalid");
+    }
+    const rightsResult = parseRightsDeclaration(rightsPayload);
+    if ("error" in rightsResult) return error("Rights declaration is invalid");
+    rightsInput = rightsResult.data;
+  }
   const checksumValue = ["sourceChecksum", "checksum", "sourceHash"].map((name) => form.get(name)).find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim();
   const checksumResult = checksumValue ? revisionSourceChecksum.safeParse(checksumValue) : { success: true as const, data: undefined };
   if (!checksumResult.success) return error("Source checksum must be a 64-character SHA-256 hex digest");
@@ -109,6 +124,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const value = sourceFileIds[index];
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
   });
+  const sourceBundleFileIds = form.getAll("sourceBundleFileIds");
+  if (sourceBundleFileIds.length && sourceBundleFileIds.length !== sourceFiles.length) return error("Provide one bundle file ID for each uploaded source file");
+  const requestedBundleFileIds = sourceFiles.map((_, index) => {
+    const value = sourceBundleFileIds[index];
+    return typeof value === "string" && value.trim() ? value.trim() : crypto.randomUUID();
+  });
+  if (new Set(requestedBundleFileIds).size !== requestedBundleFileIds.length) return error("Each source file must have a unique bundle file ID");
   const sourceKinds = form.getAll("sourceKinds");
   if (sourceFiles.length && sourceKinds.length !== sourceFiles.length) return error("Select a kind for each source file");
   const requestedSourceKinds = sourceFiles.map((_, index) => typeof sourceKinds[index] === "string" ? normalizeUnitKind(sourceKinds[index] as string) : null);
@@ -180,6 +202,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const revision = await prisma.$transaction(async (tx) => {
       const [lockedProject] = await tx.$queryRaw<Array<{ license: string }>>`SELECT license FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) throw new PublishError("Project not found", 404);
+      if (rightsInput) {
+        const rightsContextError = validateRightsAgainstRevision(lockedProject, rightsInput);
+        if (rightsContextError) throw new PublishError(rightsContextError, 400);
+      }
       const latest = await tx.revision.findFirst({ where: { projectId: project.id, isPublished: true }, orderBy: { number: "desc" } });
       const requestedParent = form.get("parentId");
       const parentId = typeof requestedParent === "string" && requestedParent.trim() ? requestedParent.trim() : latest?.id;
@@ -198,7 +224,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             const kind = previous?.kind ?? requestedSourceKinds[index];
             if (!kind) throw new PublishError("Select a kind for each source file", 400);
             return {
-              id: mappedSourceFileIds[index] ?? crypto.randomUUID(),
+              id: mappedSourceFileIds[index] ?? requestedBundleFileIds[index],
               name: sourceNames[index]!,
               kind,
               mimeType: file.type || "application/octet-stream",
@@ -209,13 +235,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             };
           }),
         };
+        if (new Set(bundle.files.map((file) => file.id)).size !== bundle.files.length) throw new PublishError("Each final bundle file ID must be unique", 400);
+        if (rightsInput) {
+          const rightsSourceError = validateRightsSourceFilesInBundle(bundle, rightsInput.items);
+          if (rightsSourceError) throw new PublishError(rightsSourceError, 400);
+        }
         publishedSourceKey = `revisions/${project.id}/${crypto.randomUUID()}/bundle.json`;
-        const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);
         uploadedKeys.push(publishedSourceKey);
+        const { checksum } = await putRevisionBundle(publishedSourceKey, bundle);
         sourceChecksum = checksum;
         const capability = capabilityForBundle(bundle);
         capabilityMode = capability.mode === "structured" ? "STRUCTURED" : "WHOLE_DOCUMENT";
         capabilityUnitCount = capability.unitCount;
+      } else if (rightsInput) {
+        const rightsSourceError = validateRightsSourceFilesInBundle(null, rightsInput.items);
+        if (rightsSourceError) throw new PublishError(rightsSourceError, 400);
       }
       const adapter = sourceSuggestions.find((suggestion, index) => requestedKindModes[index] === "auto" && Boolean(suggestion));
       const adapterConfidence = adapter ? ({ high: "HIGH", medium: "MEDIUM", low: "LOW", not_assessed: "NOT_ASSESSED" } as const)[adapter.confidence] : undefined;
@@ -237,6 +271,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           adapterMaturity: adapter?.maturity,
           isPublished: false,
           previews: { create: uploadedPreviews },
+          ...(rightsInput ? {
+            rightsDeclarations: {
+              create: {
+                version: 1,
+                sourceRightsMode: rightsInput.sourceRightsMode,
+                sourceLicenseName: rightsInput.sourceLicenseName,
+                sourceLicenseUrl: rightsInput.sourceLicenseUrl,
+                sourceRightsHolder: rightsInput.sourceRightsHolder,
+                notes: rightsInput.notes,
+                createdById: session.user.id,
+                items: { create: rightsInput.items.map((item) => ({ ...item })) },
+              },
+            },
+          } : {}),
         },
       });
       return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });

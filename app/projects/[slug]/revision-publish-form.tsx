@@ -4,9 +4,25 @@ import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import CapabilityBadge from "@/app/capability-badge";
 import { suggestFile, type AdapterSuggestion } from "@/src/lib/adapters";
+import { sourceLicenseFieldsForMode } from "@/src/lib/rights";
 
 type ExistingFile = { id: string; name: string; kind?: string };
 type SuggestionState = { status: "detecting" | "unsupported" | "error" | "preserved" } | { status: "available"; suggestion: AdapterSuggestion };
+export type RightsDraftItem = { type: "SOURCE_FILE" | "FONT" | "IMAGE" | "ILLUSTRATION" | "ICON" | "TEMPLATE" | "OTHER"; name: string; sourceFileId?: string; rightsHolder?: string; licenseName?: string; licenseUrl?: string; sourceUrl?: string; redistribution: "UNKNOWN" | "ALLOWED" | "RESTRICTED" | "NOT_ALLOWED"; derivativeUse: "UNKNOWN" | "ALLOWED" | "RESTRICTED" | "NOT_ALLOWED"; notes?: string };
+
+export function createNewBundleFileId() {
+  return crypto.randomUUID();
+}
+
+export function remapRightsSourceFileId(items: RightsDraftItem[], previousId: string | undefined, nextId: string | undefined) {
+  if (!previousId || previousId === nextId) return items;
+  return items.map((item) => item.sourceFileId === previousId ? { ...item, sourceFileId: nextId || undefined } : item);
+}
+
+export function clearRightsSourceFileIds(items: RightsDraftItem[], ids: readonly string[]) {
+  const removed = new Set(ids.filter(Boolean));
+  return removed.size ? items.map((item) => removed.has(item.sourceFileId ?? "") ? { ...item, sourceFileId: undefined } : item) : items;
+}
 
 function kindLabel(kind?: string) {
   return kind ? `${kind.slice(0, 1).toUpperCase()}${kind.slice(1)}` : "Asset · legacy";
@@ -31,14 +47,28 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
   const router = useRouter();
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFileIds, setSourceFileIds] = useState<string[]>([]);
+  const [sourceBundleFileIds, setSourceBundleFileIds] = useState<string[]>([]);
   const [sourceKinds, setSourceKinds] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestionState[]>([]);
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [rightsSourceMode, setRightsSourceMode] = useState<"SAME_AS_REVISION" | "SEPARATE" | "UNKNOWN">("UNKNOWN");
+  const [rightsSourceLicenseName, setRightsSourceLicenseName] = useState("");
+  const [rightsSourceLicenseUrl, setRightsSourceLicenseUrl] = useState("");
+  const [rightsSourceHolder, setRightsSourceHolder] = useState("");
+  const [rightsItems, setRightsItems] = useState<RightsDraftItem[]>([]);
   const suggestionRequests = useRef<number[]>([]);
   const suggestionRequestCounter = useRef(0);
   const sourceFileIdsRef = useRef<string[]>([]);
+  const sourceBundleFileIdsRef = useRef<string[]>([]);
+
+  function selectRightsSourceMode(mode: "SAME_AS_REVISION" | "SEPARATE" | "UNKNOWN") {
+    setRightsSourceMode(mode);
+    const fields = sourceLicenseFieldsForMode(mode, rightsSourceLicenseName, rightsSourceLicenseUrl);
+    setRightsSourceLicenseName(fields.sourceLicenseName);
+    setRightsSourceLicenseUrl(fields.sourceLicenseUrl);
+  }
 
   function updateSuggestion(index: number, suggestion: SuggestionState) {
     setSuggestions((current) => current.map((value, currentIndex) => currentIndex === index ? suggestion : value));
@@ -63,9 +93,13 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
 
   function selectSources(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
+    const previousBundleIds = [...sourceFileIdsRef.current, ...sourceBundleFileIdsRef.current];
+    setRightsItems((current) => clearRightsSourceFileIds(current, previousBundleIds));
     sourceFileIdsRef.current = files.map(() => "");
+    sourceBundleFileIdsRef.current = files.map(() => createNewBundleFileId());
     setSourceFiles(files);
     setSourceFileIds(sourceFileIdsRef.current);
+    setSourceBundleFileIds(sourceBundleFileIdsRef.current);
     setSourceKinds(files.map(() => ""));
     setSuggestions(files.map(() => ({ status: "detecting" })));
     files.forEach((file, index) => detectSuggestion(file, index));
@@ -73,8 +107,13 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
 
   function selectExisting(index: number, id: string) {
     const existing = existingFiles.find((file) => file.id === id);
+    const previousBundleId = sourceBundleFileIdsRef.current[index];
+    const bundleId = id || createNewBundleFileId();
+    if (previousBundleId !== bundleId) setRightsItems((current) => remapRightsSourceFileId(current, previousBundleId, bundleId));
     sourceFileIdsRef.current = sourceFileIdsRef.current.map((value, currentIndex) => currentIndex === index ? id : value);
+    sourceBundleFileIdsRef.current = sourceBundleFileIdsRef.current.map((value, currentIndex) => currentIndex === index ? bundleId : value);
     setSourceFileIds(sourceFileIdsRef.current);
+    setSourceBundleFileIds(sourceBundleFileIdsRef.current);
     setSourceKinds((current) => current.map((value, currentIndex) => currentIndex === index ? "" : value));
     if (existing?.kind) {
       nextSuggestionRequest(suggestionRequests.current, suggestionRequestCounter, index);
@@ -86,6 +125,10 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
 
   function selectPreviews(event: ChangeEvent<HTMLInputElement>) {
     setPreviewFiles(Array.from(event.target.files ?? []));
+  }
+
+  function updateRightsItem(index: number, patch: Partial<RightsDraftItem>) {
+    setRightsItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -123,6 +166,17 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
     <p className="meta">Use a source URL instead when no files are uploaded. ZIP contents are kept as one file.</p>
     <label>Source URL<input name="sourceUrl" type="url" placeholder="https://example.com/design.zip" /></label>
     <label>Source SHA-256 checksum<input name="sourceChecksum" inputMode="text" pattern="[a-fA-F0-9]{64}" maxLength={64} placeholder="Optional for one uploaded file" /></label>
+    <fieldset className="rights-form"><legend>Source &amp; rights</legend>
+      <p className="meta">Rights are contributor-supplied declarations. Unknown values do not block publication.</p>
+      <label><input type="radio" name="rightsSourceMode" value="SAME_AS_REVISION" checked={rightsSourceMode === "SAME_AS_REVISION"} onChange={() => selectRightsSourceMode("SAME_AS_REVISION")} /> Same as Revision license</label>
+      <label><input type="radio" name="rightsSourceMode" value="SEPARATE" checked={rightsSourceMode === "SEPARATE"} onChange={() => selectRightsSourceMode("SEPARATE")} /> Different license</label>
+      <label><input type="radio" name="rightsSourceMode" value="UNKNOWN" checked={rightsSourceMode === "UNKNOWN"} onChange={() => selectRightsSourceMode("UNKNOWN")} /> Unknown / not declared</label>
+      <div className="rights-form-grid">{rightsSourceMode === "SEPARATE" && <><label>License name<input value={rightsSourceLicenseName} onChange={(event) => setRightsSourceLicenseName(event.target.value)} required /></label><label>License/reference URL<input type="url" value={rightsSourceLicenseUrl} onChange={(event) => setRightsSourceLicenseUrl(event.target.value)} /></label></>}<label>Rights holder<input value={rightsSourceHolder} onChange={(event) => setRightsSourceHolder(event.target.value)} /></label></div>
+      <div className="rights-form-heading"><h3>Dependencies &amp; third-party assets</h3><button className="button secondary" type="button" onClick={() => setRightsItems((current) => [...current, { type: "OTHER", name: "", redistribution: "UNKNOWN", derivativeUse: "UNKNOWN" }])}>Add dependency</button></div>
+      {rightsItems.map((item, index) => <div className="rights-form-item" key={index}><label>Name<input value={item.name} onChange={(event) => updateRightsItem(index, { name: event.target.value })} required /></label><label>Type<select value={item.type} onChange={(event) => updateRightsItem(index, { type: event.target.value as RightsDraftItem["type"] })}>{["SOURCE_FILE", "FONT", "IMAGE", "ILLUSTRATION", "ICON", "TEMPLATE", "OTHER"].map((type) => <option key={type} value={type}>{kindLabel(type.toLowerCase())}</option>)}</select></label><label>Source bundle file (optional)<select value={item.sourceFileId ?? ""} onChange={(event) => updateRightsItem(index, { sourceFileId: event.target.value || undefined })}><option value="">External dependency</option>{existingFiles.map((file) => <option key={file.id} value={file.id}>{file.name} · Existing source</option>)}{sourceFiles.map((file, fileIndex) => <option key={sourceBundleFileIds[fileIndex]} value={sourceBundleFileIds[fileIndex]}>{file.name} · New upload</option>)}</select></label><label>Redistribution<select aria-label={`Redistribution for ${item.name || "dependency"}`} value={item.redistribution} onChange={(event) => updateRightsItem(index, { redistribution: event.target.value as RightsDraftItem["redistribution"] })}>{["UNKNOWN", "ALLOWED", "RESTRICTED", "NOT_ALLOWED"].map((value) => <option key={value} value={value}>{value === "UNKNOWN" ? "Unknown" : value === "ALLOWED" ? "Declared allowed" : value === "RESTRICTED" ? "Restricted" : "Declared not allowed"}</option>)}</select></label><label>Derivative use<select aria-label={`Derivative use for ${item.name || "dependency"}`} value={item.derivativeUse} onChange={(event) => updateRightsItem(index, { derivativeUse: event.target.value as RightsDraftItem["derivativeUse"] })}>{["UNKNOWN", "ALLOWED", "RESTRICTED", "NOT_ALLOWED"].map((value) => <option key={value} value={value}>{value === "UNKNOWN" ? "Unknown" : value === "ALLOWED" ? "Declared allowed" : value === "RESTRICTED" ? "Restricted" : "Declared not allowed"}</option>)}</select></label><label>License name<input value={item.licenseName ?? ""} onChange={(event) => updateRightsItem(index, { licenseName: event.target.value || undefined })} /></label><label>License/reference URL<input type="url" value={item.licenseUrl ?? ""} onChange={(event) => updateRightsItem(index, { licenseUrl: event.target.value || undefined })} /></label><label>Rights holder<input value={item.rightsHolder ?? ""} onChange={(event) => updateRightsItem(index, { rightsHolder: event.target.value || undefined })} /></label><label>Source reference URL<input type="url" value={item.sourceUrl ?? ""} onChange={(event) => updateRightsItem(index, { sourceUrl: event.target.value || undefined })} /></label><label>Notes<textarea value={item.notes ?? ""} onChange={(event) => updateRightsItem(index, { notes: event.target.value || undefined })} maxLength={2000} /></label><button className="link-button" type="button" onClick={() => setRightsItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove dependency</button></div>)}
+      {(rightsSourceMode === "UNKNOWN" || rightsItems.some((item) => item.redistribution === "UNKNOWN" || item.derivativeUse === "UNKNOWN")) && <p className="rights-warning" role="status">Some rights information is unknown. The revision can still be published, but contributors may need to verify these dependencies.</p>}
+      <input type="hidden" name="rightsManifest" value={JSON.stringify({ sourceRightsMode: rightsSourceMode, sourceLicenseName: rightsSourceLicenseName || undefined, sourceLicenseUrl: rightsSourceLicenseUrl || undefined, sourceRightsHolder: rightsSourceHolder || undefined, items: rightsItems.filter((item) => item.name.trim()) })} />
+    </fieldset>
     <label>Previews (PNG/JPG/HTML, up to 10)<input name="previews" type="file" accept="image/png,image/jpeg,text/html" multiple required onChange={selectPreviews} /></label>
     {previewFiles.map((file, index) => <label key={`${file.name}-${index}`}>Alt text for {file.name}<input name="altTexts" required maxLength={500} /></label>)}
     {sourceFiles.length > 0 ? <CapabilityBadge mode="structured" unitCount={sourceFiles.length} label="Capability" provisional /> : <p className="meta">Add source files to enable file-level units.</p>}
@@ -137,6 +191,7 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
         <h3>{file.name}</h3>
         <label>Unit identity<select value={sourceFileIds[index] ?? ""} onChange={(event) => selectExisting(index, event.target.value)}><option value="">New unit</option>{existingFiles.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name} · {kindLabel(candidate.kind)}</option>)}</select></label>
         <input type="hidden" name="sourceFileIds" value={sourceFileIds[index] ?? ""} />
+        <input type="hidden" name="sourceBundleFileIds" value={sourceBundleFileIds[index] ?? ""} />
         <input type="hidden" name="sourceKinds" value={actualKind} />
         <input type="hidden" name="sourceKindModes" value={selectionMode} />
         {existing?.kind ? <p className="meta">{kindLabel(existing.kind)} · Preserved from the current revision.</p> : <>
