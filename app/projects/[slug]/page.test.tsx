@@ -95,11 +95,14 @@ describe("Project issue proposal visibility", () => {
     const layoutCss = readFileSync(new URL("../../../src/components/ui/layout.module.css", import.meta.url), "utf8");
     const tokensCss = readFileSync(new URL("../../../src/styles/tokens.css", import.meta.url), "utf8");
     const catalog = readFileSync(new URL("../../../app/(internal)/design-system/catalog.tsx", import.meta.url), "utf8");
+    const revisionPage = readFileSync(new URL("./revisions/[number]/page.tsx", import.meta.url), "utf8");
     const spanWidth = (span: number) => span * 100 + (span - 1) * 16;
 
     expect([spanWidth(6), spanWidth(8), spanWidth(12)]).toEqual([680, 912, 1376]);
     expect(tokensCss).toContain("--odr-layout-grid-columns: 12");
     expect(layoutCss).toContain("@media (max-width: 47.999rem)");
     expect(catalog).toContain("SAME_AS_REVISION unavailable");
+    expect(revisionPage).not.toContain("WideColumn");
+    expect(revisionPage).toContain("<ReadingColumn>\n      <section className=\"detail\" aria-label=\"Revision visual previews\">");
   });
 });

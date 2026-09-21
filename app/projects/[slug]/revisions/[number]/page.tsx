@@ -7,7 +7,7 @@ import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
 import { Tag } from "@/src/components/ui/badge";
-import { FormColumn, PageGrid, ReadingColumn, WideColumn } from "@/src/components/ui/layout";
+import { FormColumn, PageGrid, ReadingColumn } from "@/src/components/ui/layout";
 import CapabilityBadge from "@/app/capability-badge";
 import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
@@ -94,12 +94,12 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     </dl></section>}
       </article>
     </ReadingColumn>
-    {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length) || htmlPreviews.length > 0) && <WideColumn>
+    {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length) || htmlPreviews.length > 0) && <ReadingColumn>
       <section className="detail" aria-label="Revision visual previews">
         {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length)) && <RevisionDiff current={currentImagePreviews} previous={previousImagePreviews} currentNumber={revision.number} previousNumber={previous?.number} />}
     {htmlPreviews.length > 0 && <section aria-labelledby="html-previews"><h2 id="html-previews">HTML previews</h2><div className="html-previews">{htmlPreviews.map((preview) => <figure className="preview-diff" key={preview.id}><figcaption>{preview.altText}</figcaption><iframe className="html-preview" src={preview.url} title={preview.altText} sandbox="" loading="lazy" /></figure>)}</div></section>}
       </section>
-    </WideColumn>
+    </ReadingColumn>
     }
     <FormColumn>
       <div className="detail revision-actions">
