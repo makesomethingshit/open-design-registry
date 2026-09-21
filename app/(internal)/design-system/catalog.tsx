@@ -19,6 +19,7 @@ import { RevisionItem } from "@/src/components/design/revision-item";
 import type { ReviewChange } from "@/src/components/design/review-types";
 import ProposalReview from "@/app/proposals/[id]/proposal-review";
 import ContributeDialog from "@/app/projects/[slug]/contribute-dialog";
+import SourceRights from "@/app/projects/[slug]/revisions/[number]/source-rights";
 import { proposalStatuses, type ChangeReviewStatusValue } from "@/src/lib/proposal-status";
 import { changeReviewStatusPresentation, proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import styles from "./catalog.module.css";
@@ -36,6 +37,17 @@ function fixturePreview(id: string, label: string, surface: string, width = 800,
 const fixtureBasePreviews = [fixturePreview("fixture-base", "BASE", "white")];
 const fixtureSourcePreviews = [fixturePreview("fixture-proposal", "PROPOSAL", "white")];
 const fixtureLatestPreviews = [fixturePreview("fixture-latest", "LATEST", "white", 600, 800)];
+const fixtureRightsDeclaration = {
+  id: "fixture-rights",
+  version: 2,
+  createdAt: "2026-09-13T00:00:00.000Z",
+  sourceRightsMode: "SEPARATE" as const,
+  sourceLicenseName: "Studio license",
+  sourceLicenseUrl: "https://example.com/source-license",
+  sourceRightsHolder: "Studio",
+  notes: "Provenance fixture for the F1 Read/Edit grouping.",
+  items: [{ type: "IMAGE" as const, name: "Hero image", rightsHolder: "Image Studio", licenseName: "Custom", licenseUrl: "https://example.com/hero-license", sourceUrl: "https://example.com/hero", redistribution: "RESTRICTED" as const, derivativeUse: "UNKNOWN" as const, notes: "Do not redistribute the original." }],
+} satisfies NonNullable<Parameters<typeof SourceRights>[0]["declaration"]>;
 
 const fixtureChanges: ReviewChange[] = [
   { id: "fixture-pending", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "A deliberately long pending poster name for responsive review verification", targetFileId: "pending", name: "A deliberately long pending poster name for responsive review verification", newName: null, kind: "artboard", mimeType: "image/png", size: 284000, reviewStatus: "PENDING", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long pending poster name for responsive review verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
@@ -108,6 +120,10 @@ export default function DesignSystemCatalog() {
 
     <section aria-labelledby="rights-fixtures-heading">
       <SectionHeader id="rights-fixtures-heading" title="F1 source and rights fixtures" description="Read and Edit grouping keeps provenance, unknown rights, and restricted dependencies visible without relying on color alone." />
+      <PageGrid aria-label="Production Source Rights Read and Edit fixtures">
+        <ReadingColumn><SourceRights slug="fixture" number={1} revisionLicense={null} sourceHref={null} sourceFiles={[]} tool={null} toolVersion={null} sourceChecksum={null} declaration={null} isOwner={false} /></ReadingColumn>
+        <ReadingColumn><SourceRights slug="fixture" number={2} revisionLicense="MIT" sourceHref="/fixtures/source.zip" sourceFiles={[{ id: "fixture-source", name: "source.zip", mimeType: "application/zip", size: 1200, href: "/fixtures/source.zip" }]} tool="Penpot" toolVersion="2" sourceChecksum="fixture-checksum" declaration={fixtureRightsDeclaration} isOwner /></ReadingColumn>
+      </PageGrid>
       <div className={styles.statusGrid}>
         <Panel><Stack gap={2}><h3>No source</h3><Badge>no-source</Badge><p>No editable source is recorded. The revision remains readable.</p></Stack></Panel>
         <Panel><Stack gap={2}><h3>Unknown and unavailable</h3><Inline gap={2}><Badge tone="warning">UNKNOWN</Badge><Badge>SAME_AS_REVISION unavailable</Badge></Inline><p>The revision license is absent, so matching it is not selectable.</p></Stack></Panel>

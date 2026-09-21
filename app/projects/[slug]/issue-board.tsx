@@ -28,6 +28,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
   const [commentingIds, setCommentingIds] = useState<Record<string, boolean>>({});
   const [togglingIds, setTogglingIds] = useState<Record<string, boolean>>({});
   const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
+  const [commentFieldErrors, setCommentFieldErrors] = useState<Record<string, string>>({});
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,9 +65,11 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     if (commentingIds[id]) return;
     const formElement = event.currentTarget;
     if (!formElement.checkValidity()) {
+      setCommentFieldErrors((current) => setRowMessage(current, id, invalidFieldErrors(formElement).body ?? "Enter a comment."));
       focusFirstInvalid(formElement);
       return;
     }
+    setCommentFieldErrors((current) => setRowMessage(current, id, ""));
     setCommentErrors((current) => setRowMessage(current, id, ""));
     setCommentSuccesses((current) => setRowMessage(current, id, ""));
     setCommentingIds((current) => setRowBusy(current, id, true));
@@ -124,7 +127,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         })}</ul></section> : null}
         {issue.comments.map((commentItem) => <div className="issue-comment" key={commentItem.id}><p>{commentItem.body}</p><span className="meta">{commentItem.author.name}</span></div>)}
         {signedIn && issue.status === "OPEN" && <form noValidate onSubmit={(event) => { void comment(event, issue.id); }} className="inline-form" aria-busy={Boolean(commentingIds[issue.id])}>
-          <Input name="body" required maxLength={10000} placeholder="Add a comment" aria-label={`Comment on ${issue.title}`} />
+          <Field className="inline-form-field" error={commentFieldErrors[issue.id]} id={`issue-comment-${issue.id}`} invalid={Boolean(commentFieldErrors[issue.id])} label="Comment"><Input name="body" required maxLength={10000} placeholder="Add a comment" aria-label={`Comment on ${issue.title}`} onChange={() => setCommentFieldErrors((current) => setRowMessage(current, issue.id, ""))} /></Field>
           <Button loading={Boolean(commentingIds[issue.id])} loadingLabel="Saving comment" disabled={Boolean(commentingIds[issue.id])} size="sm" type="submit" variant="secondary">Comment</Button>
         </form>}
         {commentErrors[issue.id] && <Banner tone="error" title="Comment failed">{commentErrors[issue.id]}</Banner>}

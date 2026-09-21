@@ -7,7 +7,7 @@ export function invalidFieldErrors(form: HTMLFormElement) {
 }
 
 export function focusFirstInvalid(form: HTMLFormElement) {
-  const firstInvalid = form.querySelector<HTMLElement>(":invalid");
+  const firstInvalid = form.querySelector<HTMLElement>("input:invalid,select:invalid,textarea:invalid");
   firstInvalid?.focus();
   return Boolean(firstInvalid);
 }

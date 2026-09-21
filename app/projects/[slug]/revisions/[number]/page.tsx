@@ -95,7 +95,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
       </article>
     </ReadingColumn>
     {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length) || htmlPreviews.length > 0) && <ReadingColumn>
-      <section className="detail" aria-label="Revision visual previews">
+      <section className="detail revision-visuals" aria-label="Revision visual previews">
         {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length)) && <RevisionDiff current={currentImagePreviews} previous={previousImagePreviews} currentNumber={revision.number} previousNumber={previous?.number} />}
     {htmlPreviews.length > 0 && <section aria-labelledby="html-previews"><h2 id="html-previews">HTML previews</h2><div className="html-previews">{htmlPreviews.map((preview) => <figure className="preview-diff" key={preview.id}><figcaption>{preview.altText}</figcaption><iframe className="html-preview" src={preview.url} title={preview.altText} sandbox="" loading="lazy" /></figure>)}</div></section>}
       </section>
