@@ -1,4 +1,4 @@
-.page { display: grid; gap: var(--odr-space-5); max-width: var(--odr-layout-page); padding: 0; margin: 0 auto; }
+.page { display: grid; gap: var(--odr-space-5); width: 100%; padding: 0; }
 .breadcrumb, .meta { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .breadcrumb a { color: var(--odr-accent); text-decoration: underline; text-underline-offset: 0.15em; }
 .header { display: grid; gap: var(--odr-space-3); }

@@ -5,6 +5,7 @@ import ReportForm from "@/app/reports/report-form";
 import { ProjectHeader } from "@/src/components/design/project-header";
 import { RevisionItem } from "@/src/components/design/revision-item";
 import { StatusBadge } from "@/src/components/ui/badge";
+import { PageGrid, WideColumn } from "@/src/components/ui/layout";
 import { SectionNav } from "@/src/components/ui/section-nav";
 import { changeSummary, countVisibleProposals, findVisibleProposal, isVisible, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
@@ -70,7 +71,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { href: "#forks", label: <>Forks <span className={styles.navCount}>{project._count.forks}</span></> },
   ];
 
-  return <article className={styles.project}>
+  return <PageGrid aria-labelledby="project-title">
+    <WideColumn>
+      <article className={styles.project}>
     <ProjectHeader
       actions={<><ContributeDialog revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /><ContributeDialog initialIntent="fork" revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /></>}
       description={project.description}
@@ -141,8 +144,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Lineage</p><h2 id="forks-heading">Forks</h2></div><span>Project descendants</span></header>
       {project.forks.length ? <ul className={styles.forkList}>{project.forks.map((fork) => <li key={fork.id}><Link href={`/projects/${fork.slug}`}>{fork.title}</Link>{fork.description && <p>{fork.description}</p>}<span>{fork.owner.name} <span aria-hidden="true">·</span> {fork.license} <span aria-hidden="true">·</span> Created <time dateTime={fork.createdAt.toISOString()}>{formatDate(fork.createdAt)}</time></span></li>)}</ul> : <p className={styles.muted}>No forks yet.</p>}
     </section>
-    {project.isPublic && <ReportForm projectSlug={project.slug} />}
-  </article>;
+        {project.isPublic && <ReportForm projectSlug={project.slug} />}
+      </article>
+    </WideColumn>
+  </PageGrid>;
 }
 
 function formatDate(value: Date) {

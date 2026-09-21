@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { PageGrid, PageHeader, Panel, ReadingColumn } from "@/src/components/ui/layout";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
@@ -25,11 +26,15 @@ export default async function NewProposalPage({ params, searchParams }: { params
   const preferred = sourceRevisions.find((revision) => revision.projectSlug === query.sourceProject && String(revision.number) === query.sourceRevision);
   const initialChanges = preferred ? parseInitialChanges(query.changes) : [];
   const defaultRelatedIssueId = project.issues.some((issue) => issue.id === query.relatedIssue) ? query.relatedIssue : "";
-  return <article className="detail proposal-page">
-    <p className="meta"><Link href={`/projects/${slug}`}>{project.title}</Link> · Proposal</p>
-    <h1>Propose changes</h1>
-    {sourceRevisions.length ? <ProposalForm baseRevision={{ ...baseRevision, files: baseFiles }} defaultRelatedIssueId={defaultRelatedIssueId} defaultSourceRevisionId={preferred?.id ?? sourceRevisions[0].id} initialChanges={initialChanges} relatedIssues={project.issues} slug={slug} sourceRevisions={sourceRevisions} /> : <p className="empty-state">Publish a revision in one of your projects before proposing changes.</p>}
-  </article>;
+  return <PageGrid aria-labelledby="new-proposal-heading">
+    <ReadingColumn>
+      <article className="detail proposal-page">
+        <p className="meta"><Link href={`/projects/${slug}`}>{project.title}</Link> · Proposal</p>
+        <PageHeader id="new-proposal-heading" title="Propose changes" description={`Create a focused proposal against Revision ${baseRevision.number}.`} />
+        {sourceRevisions.length ? <Panel><ProposalForm baseRevision={{ ...baseRevision, files: baseFiles }} defaultRelatedIssueId={defaultRelatedIssueId} defaultSourceRevisionId={preferred?.id ?? sourceRevisions[0].id} initialChanges={initialChanges} relatedIssues={project.issues} slug={slug} sourceRevisions={sourceRevisions} /></Panel> : <p className="empty-state">Publish a revision in one of your projects before proposing changes.</p>}
+      </article>
+    </ReadingColumn>
+  </PageGrid>;
 }
 
 function validId(value: unknown) {

@@ -1,6 +1,9 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { Banner } from "@/src/components/ui/banner";
+import { Button } from "@/src/components/ui/button";
+import { focusFirstInvalid } from "@/src/components/ui/form";
 import { permissionLabel, rightsItemTypeLabel, sourceLicenseFieldsForMode, unknownRightsCount, type RightsDeclarationInput, type RightsItemInput } from "@/src/lib/rights";
 
 type DeclarationItem = { type: RightsItemInput["type"]; name: string; sourceFileId?: string | null; rightsHolder?: string | null; licenseName?: string | null; licenseUrl?: string | null; sourceUrl?: string | null; redistribution: RightsItemInput["redistribution"]; derivativeUse: RightsItemInput["derivativeUse"]; notes?: string | null };
@@ -63,6 +66,7 @@ export default function SourceRights({
   const [notes, setNotes] = useState(declaration?.notes ?? "");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [saving, setSaving] = useState(false);
   const unknownCount = declaration ? unknownRightsCount(declaration) : 0;
   const sourceRightsUnknown = declaration?.sourceRightsMode === "UNKNOWN";
   const sameAsRevisionUnavailable = revisionLicense === null;
@@ -80,8 +84,13 @@ export default function SourceRights({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!event.currentTarget.checkValidity()) {
+      focusFirstInvalid(event.currentTarget);
+      return;
+    }
     setError("");
     setStatus("");
+    setSaving(true);
     const payload = { sourceRightsMode, sourceLicenseName: sourceLicenseName || undefined, sourceLicenseUrl: sourceLicenseUrl || undefined, sourceRightsHolder, notes, items: items.filter((item) => item.name.trim()) };
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(slug)}/revisions/${number}/rights`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
@@ -95,6 +104,8 @@ export default function SourceRights({
       window.location.reload();
     } catch {
       setError("Rights declaration could not be saved");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -127,9 +138,9 @@ export default function SourceRights({
         {(sourceRightsUnknown || unknownCount > 0) && <p className="rights-warning" role="status">Some rights information is unknown. The revision can still be published, but contributors may need to verify these dependencies.</p>}
       </> : <p><strong>No rights manifest recorded.</strong> Rights for this source or one or more dependencies have not been declared.</p>}
       <p className="meta rights-notice">Rights information is contributor-supplied provenance and does not constitute legal advice.</p>
-      {isOwner && <div className="rights-owner-actions">{!editing && <button className="button secondary" type="button" onClick={() => setEditing(true)}>{declaration ? "Add rights information" : "Add rights information"}</button>}{status && <span role="status">{status}</span>}</div>}
+      {isOwner && <div className="rights-owner-actions">{!editing && <Button onClick={() => setEditing(true)} type="button" variant="secondary">Add rights information</Button>}{status && <Banner tone="success" title="Saved">{status}</Banner>}</div>}
     </div>
-    {editing && isOwner && <form className="rights-form" onSubmit={submit}>
+    {editing && isOwner && <form className="rights-form" onSubmit={submit} aria-busy={saving}>
       <h3>{declaration ? "Add a rights declaration version" : "Add rights information"}</h3>
       <fieldset><legend>Source package rights</legend>
         <label><input type="radio" name="sourceRightsMode" value="SAME_AS_REVISION" checked={sourceRightsMode === "SAME_AS_REVISION"} disabled={sameAsRevisionUnavailable} onChange={() => selectSourceRightsMode("SAME_AS_REVISION")} /> Same as Revision license{sameAsRevisionUnavailable && <span className="meta">Unavailable because this revision has no recorded license.</span>}</label>
@@ -138,10 +149,10 @@ export default function SourceRights({
       </fieldset>
       <div className="rights-form-grid">{sourceRightsMode === "SEPARATE" && <><label>License name<input value={sourceLicenseName} onChange={(event) => setSourceLicenseName(event.target.value)} required /></label><label>License/reference URL<input type="url" value={sourceLicenseUrl} onChange={(event) => setSourceLicenseUrl(event.target.value)} /></label></>}<label>Rights holder<input value={sourceRightsHolder} onChange={(event) => setSourceRightsHolder(event.target.value)} /></label></div>
       <label>Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} /></label>
-      <div className="rights-form-heading"><h4>Dependencies &amp; third-party assets</h4><button className="button secondary" type="button" onClick={() => setItems((current) => [...current, emptyItem()])}>Add dependency</button></div>
+      <div className="rights-form-heading"><h4>Dependencies &amp; third-party assets</h4><Button size="sm" type="button" variant="secondary" onClick={() => setItems((current) => [...current, emptyItem()])}>Add dependency</Button></div>
       {items.map((item, index) => <div className="rights-form-item" key={index}><label>Name<input value={item.name} onChange={(event) => updateItem(index, { name: event.target.value })} required /></label><label>Type<select value={item.type} onChange={(event) => updateItem(index, { type: event.target.value as RightsItemInput["type"] })}>{["SOURCE_FILE", "FONT", "IMAGE", "ILLUSTRATION", "ICON", "TEMPLATE", "OTHER"].map((type) => <option key={type} value={type}>{rightsItemTypeLabel(type as RightsItemInput["type"])}</option>)}</select></label><label>Source bundle file (optional)<select value={item.sourceFileId ?? ""} onChange={(event) => updateItem(index, { sourceFileId: event.target.value || undefined })}><option value="">External dependency</option>{sourceFiles.map((file) => <option key={file.id} value={file.id}>{file.name}</option>)}</select></label><label>Redistribution<select aria-label={`Redistribution for ${item.name || "dependency"}`} value={item.redistribution} onChange={(event) => updateItem(index, { redistribution: event.target.value as RightsItemInput["redistribution"] })}>{["UNKNOWN", "ALLOWED", "RESTRICTED", "NOT_ALLOWED"].map((permission) => <option key={permission} value={permission}>{permissionLabel(permission as RightsItemInput["redistribution"])}</option>)}</select></label><label>Derivative use<select aria-label={`Derivative use for ${item.name || "dependency"}`} value={item.derivativeUse} onChange={(event) => updateItem(index, { derivativeUse: event.target.value as RightsItemInput["derivativeUse"] })}>{["UNKNOWN", "ALLOWED", "RESTRICTED", "NOT_ALLOWED"].map((permission) => <option key={permission} value={permission}>{permissionLabel(permission as RightsItemInput["derivativeUse"])}</option>)}</select></label><label>License name<input value={item.licenseName ?? ""} onChange={(event) => updateItem(index, { licenseName: event.target.value || undefined })} /></label><label>License/reference URL<input type="url" value={item.licenseUrl ?? ""} onChange={(event) => updateItem(index, { licenseUrl: event.target.value || undefined })} /></label><label>Rights holder<input value={item.rightsHolder ?? ""} onChange={(event) => updateItem(index, { rightsHolder: event.target.value || undefined })} /></label><label>Source reference URL<input type="url" value={item.sourceUrl ?? ""} onChange={(event) => updateItem(index, { sourceUrl: event.target.value || undefined })} /></label><label>Notes<textarea value={item.notes ?? ""} onChange={(event) => updateItem(index, { notes: event.target.value || undefined })} maxLength={2000} /></label><button className="link-button" type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove dependency</button></div>)}
-      {error && <p className="error" role="alert">{error}</p>}
-      <div className="rights-form-actions"><button className="button" type="submit">Save rights declaration</button><button className="button secondary" type="button" onClick={() => setEditing(false)}>Cancel</button></div>
+      {error && <Banner tone="error" title="Could not save rights declaration">{error}</Banner>}
+      <div className="rights-form-actions"><Button loading={saving} loadingLabel="Saving rights declaration" type="submit">Save rights declaration</Button><Button disabled={saving} onClick={() => setEditing(false)} type="button" variant="secondary">Cancel</Button></div>
     </form>}
   </section>;
 }

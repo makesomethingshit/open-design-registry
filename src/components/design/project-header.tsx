@@ -22,7 +22,7 @@ export function ProjectHeader({ actions, description, lineage, license, owner, r
   return <header className={styles.header}>
     <div className={styles.content}>
       <p className={styles.path}><Link href="/">Open Design Registry</Link> <span aria-hidden="true">/</span> {slug}</p>
-      <div className={styles.titleRow}><h1>{title}</h1><Tag><Icon name={isPublic ? "globe" : "lock"} size={16} />{isPublic ? "Public" : "Private"}</Tag></div>
+      <div className={styles.titleRow}><h1 id="project-title">{title}</h1><Tag><Icon name={isPublic ? "globe" : "lock"} size={16} />{isPublic ? "Public" : "Private"}</Tag></div>
       {introduction && <p className={styles.description}>{introduction}</p>}
       {lineage && <p className={styles.lineage}>{lineage}</p>}
       <dl className={styles.meta}>
