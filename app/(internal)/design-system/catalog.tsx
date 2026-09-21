@@ -8,7 +8,7 @@ import { Checkbox } from "@/src/components/ui/checkbox";
 import { Dialog, Drawer } from "@/src/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
 import { Icon } from "@/src/components/ui/icon";
-import { Divider, Inline, PageHeader, Panel, SectionHeader, Stack } from "@/src/components/ui/layout";
+import { Divider, FormColumn, Inline, PageGrid, PageHeader, Panel, ReadingColumn, SectionHeader, Stack, WideColumn } from "@/src/components/ui/layout";
 import { RouteNav, SectionNav } from "@/src/components/ui/section-nav";
 import { SegmentedControl } from "@/src/components/ui/segmented-control";
 import { Tabs } from "@/src/components/ui/tabs";
@@ -61,6 +61,15 @@ export default function DesignSystemCatalog() {
 
   return <Stack className={styles.catalog} gap={7}>
     <PageHeader eyebrow="Foundation / Catalog" title="ODR design system" description="Development fixtures only. Theme is controlled from the global header; production requests return 404." />
+
+    <section aria-labelledby="layout-heading">
+      <SectionHeader id="layout-heading" title="Stage D layout grid" description="The shared page grid is the source of truth for form, reading, and wide surfaces." />
+      <PageGrid className={styles.layoutFixture}>
+        <FormColumn className={styles.layoutCell} data-layout-span="6"><span>Form · span 6</span><strong>680px target at 1440</strong><p>Default form composition for focused creation and edit flows.</p></FormColumn>
+        <ReadingColumn className={styles.layoutCell} data-layout-span="8"><span>Reading · span 8</span><strong>912px target at 1440</strong><p>Reading and metadata surfaces keep a comfortable line length.</p></ReadingColumn>
+        <WideColumn className={styles.layoutCell} data-layout-span="12"><span>Wide · span 12</span><strong>1376px target at 1440</strong><p>Visual diff and preview surfaces may use the full grid.</p></WideColumn>
+      </PageGrid>
+    </section>
 
     <section aria-labelledby="buttons-heading">
       <SectionHeader id="buttons-heading" title="Buttons and links" />

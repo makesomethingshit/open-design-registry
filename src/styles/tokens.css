@@ -166,8 +166,16 @@
   --odr-z-toast: 60;
 
   --odr-layout-page: 90rem;
-  --odr-layout-reading: 48rem;
-  --odr-layout-form: 40rem;
+  --odr-layout-grid-columns: 12;
+  --odr-layout-grid-gutter: 1rem;
+  --odr-layout-page-margin: 2rem;
+  --odr-layout-page-margin-tablet: 1.5rem;
+  --odr-layout-page-margin-mobile: 1rem;
+  --odr-layout-form-span: 6;
+  --odr-layout-reading-span: 8;
+  --odr-layout-wide-span: 12;
+  --odr-layout-reading-fallback: 57rem;
+  --odr-layout-form-fallback: 42.5rem;
   --odr-review-rail: 16rem;
   --odr-review-inspector: 18rem;
   --odr-header-height: 3.5rem;

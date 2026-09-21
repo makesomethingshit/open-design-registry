@@ -4,6 +4,7 @@ import styles from "./layout.module.css";
 type Gap = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 type SpacedProps = ComponentPropsWithoutRef<"div"> & { children: ReactNode; gap?: Gap };
 type GapStyle = CSSProperties & { "--odr-layout-gap": string };
+type LayoutProps = ComponentPropsWithoutRef<"div"> & { children: ReactNode };
 
 function gapStyle(gap: Gap, style?: CSSProperties): GapStyle {
   return { ...style, "--odr-layout-gap": `var(--odr-space-${gap})` };
@@ -15,6 +16,22 @@ export function Stack({ children, className, gap = 4, style, ...props }: SpacedP
 
 export function Inline({ children, className, gap = 2, style, ...props }: SpacedProps) {
   return <div {...props} className={`${styles.inline}${className ? ` ${className}` : ""}`} style={gapStyle(gap, style)}>{children}</div>;
+}
+
+export function PageGrid({ children, className, ...props }: LayoutProps) {
+  return <div {...props} className={`${styles.pageGrid}${className ? ` ${className}` : ""}`}>{children}</div>;
+}
+
+export function FormColumn({ children, className, ...props }: LayoutProps) {
+  return <div {...props} className={`${styles.formColumn}${className ? ` ${className}` : ""}`}>{children}</div>;
+}
+
+export function ReadingColumn({ children, className, ...props }: LayoutProps) {
+  return <div {...props} className={`${styles.readingColumn}${className ? ` ${className}` : ""}`}>{children}</div>;
+}
+
+export function WideColumn({ children, className, ...props }: LayoutProps) {
+  return <div {...props} className={`${styles.wideColumn}${className ? ` ${className}` : ""}`}>{children}</div>;
 }
 
 type HeaderProps = { eyebrow?: ReactNode; title: ReactNode; description?: ReactNode; actions?: ReactNode; className?: string; id?: string };
