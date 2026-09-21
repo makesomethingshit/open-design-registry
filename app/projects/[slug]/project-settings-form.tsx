@@ -6,25 +6,29 @@ import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
 import { Checkbox } from "@/src/components/ui/checkbox";
 import { Field, Input, Textarea } from "@/src/components/ui/field";
-import { focusFirstInvalid } from "@/src/components/ui/form";
+import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 import { Stack } from "@/src/components/ui/layout";
 
 export default function ProjectSettingsForm({ slug, title, description, license, isPublic }: { slug: string; title: string; description: string; license: string; isPublic: boolean }) {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!event.currentTarget.checkValidity()) {
-      focusFirstInvalid(event.currentTarget);
+    const formElement = event.currentTarget;
+    if (!formElement.checkValidity()) {
+      setFieldErrors(invalidFieldErrors(formElement));
+      focusFirstInvalid(formElement);
       return;
     }
+    setFieldErrors({});
     setError("");
     setSuccess("");
     setSaving(true);
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     try {
       const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), license: form.get("license"), isPublic: form.get("isPublic") === "on", rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
       if (!response.ok) {
@@ -42,11 +46,11 @@ export default function ProjectSettingsForm({ slug, title, description, license,
 
   return <details className="project-settings">
     <summary>프로젝트 설정</summary>
-    <form className="form" onSubmit={submit} aria-busy={saving}>
+    <form className="form" noValidate onSubmit={submit} aria-busy={saving}>
       <Stack gap={4}>
-        <Field id="settings-title" label="제목" required><Input name="title" defaultValue={title} required maxLength={120} /></Field>
-        <Field id="settings-description" label="설명"><Textarea name="description" defaultValue={description} maxLength={2000} /></Field>
-        <Field id="settings-license" label="라이선스" required><Input name="license" defaultValue={license} required maxLength={80} /></Field>
+        <Field error={fieldErrors.title} id="settings-title" invalid={Boolean(fieldErrors.title)} label="제목" required><Input name="title" defaultValue={title} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
+        <Field error={fieldErrors.description} id="settings-description" invalid={Boolean(fieldErrors.description)} label="설명"><Textarea name="description" defaultValue={description} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.description; return next; })} maxLength={2000} /></Field>
+        <Field error={fieldErrors.license} id="settings-license" invalid={Boolean(fieldErrors.license)} label="라이선스" required><Input name="license" defaultValue={license} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.license; return next; })} required maxLength={80} /></Field>
         <Checkbox defaultChecked={isPublic} label="공개 프로젝트" name="isPublic" />
         {!isPublic && <Checkbox label="공개 전 원본 공개 권리를 확인했습니다." name="rightsConfirmed" />}
         {error && <Banner tone="error" title="저장 실패">{error}</Banner>}

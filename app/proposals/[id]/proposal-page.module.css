@@ -1,10 +1,10 @@
-.page { display: grid; gap: var(--odr-space-5); width: 100%; padding: 0; }
+.page { display: grid; gap: var(--odr-space-5); max-width: var(--odr-layout-page); padding: 0; margin: 0 auto; }
 .breadcrumb, .meta { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .breadcrumb a { color: var(--odr-accent); text-decoration: underline; text-underline-offset: 0.15em; }
 .header { display: grid; gap: var(--odr-space-3); }
 .titleRow { display: flex; align-items: start; justify-content: space-between; gap: var(--odr-space-4); }
 .titleRow h1 { margin: 0; font-size: var(--odr-font-title); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-title); letter-spacing: -0.02em; }
-.summary { max-width: var(--odr-layout-reading-fallback); margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); white-space: pre-wrap; }
+.summary { max-width: var(--odr-layout-reading); margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); white-space: pre-wrap; }
 .capabilities { display: flex; flex-wrap: wrap; gap: var(--odr-space-2); }
 .privateNote { margin: 0; }
 

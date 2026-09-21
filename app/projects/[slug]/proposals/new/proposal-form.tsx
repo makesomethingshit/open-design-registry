@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
-import { focusFirstInvalid } from "@/src/components/ui/form";
+import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 
 type BundleFile = { id: string; name: string; kind?: string; mimeType: string; size: number };
 type SourceRevision = { id: string; number: number; title: string; projectTitle: string; projectSlug: string; files: BundleFile[] };
@@ -30,6 +30,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
   const [changes, setChanges] = useState<DraftChange[]>(() => initialChanges.map((change) => ({ ...change, key: crypto.randomUUID() })));
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const sourceRevision = useMemo(() => sourceRevisions.find((revision) => revision.id === sourceRevisionId) ?? sourceRevisions[0], [sourceRevisionId, sourceRevisions]);
   const canChooseUnits = Boolean(baseRevision.files.length);
@@ -45,6 +46,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     if (changes.length && !window.confirm("Changing From will clear the selected changes. Your text draft will be kept.")) return;
     setSourceRevisionId(nextId);
     setChanges([]);
+    setFieldErrors({});
     resetRequest();
   }
 
@@ -68,9 +70,11 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     event.preventDefault();
     const formElement = event.currentTarget;
     if (!formElement.checkValidity()) {
+      setFieldErrors(invalidFieldErrors(formElement));
       focusFirstInvalid(formElement);
       return;
     }
+    setFieldErrors({});
     if (canChooseUnits && !changes.length) {
       setError("Add at least one unit change to propose.");
       return;
@@ -114,12 +118,12 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     }
   }
 
-  return <form className="form proposal-form" onSubmit={submit} aria-busy={submitting}>
+  return <form className="form proposal-form" noValidate onSubmit={submit} aria-busy={submitting}>
     <p className="proposal-fixed"><span>Into</span>{slug} · Revision {baseRevision.number}</p>
     <Field id="proposal-source" label="From" required><Select name="sourceRevisionId" value={sourceRevisionId} onChange={(event) => selectSourceRevision(event.target.value)} required>{sourceRevisions.map((revision) => <option value={revision.id} key={revision.id}>{revision.projectSlug} · Revision {revision.number} — {revision.title}</option>)}</Select></Field>
-    <Field id="proposal-title" label="Title" required><Input name="title" required minLength={1} maxLength={200} placeholder="Improve mobile header typography" /></Field>
-    <Field id="proposal-what-changed" label="What changed?" required><Textarea name="whatChanged" required maxLength={4900} /></Field>
-    <Field id="proposal-why" label="Why?" required><Textarea name="why" required maxLength={4900} /></Field>
+    <Field error={fieldErrors.title} id="proposal-title" invalid={Boolean(fieldErrors.title)} label="Title" required><Input name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required minLength={1} maxLength={200} placeholder="Improve mobile header typography" /></Field>
+    <Field error={fieldErrors.whatChanged} id="proposal-what-changed" invalid={Boolean(fieldErrors.whatChanged)} label="What changed?" required><Textarea name="whatChanged" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.whatChanged; return next; })} required maxLength={4900} /></Field>
+    <Field error={fieldErrors.why} id="proposal-why" invalid={Boolean(fieldErrors.why)} label="Why?" required><Textarea name="why" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.why; return next; })} required maxLength={4900} /></Field>
     <Field id="proposal-related-issue" label="Related issue"><Select name="relatedIssueId" defaultValue={defaultRelatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option value={issue.id} key={issue.id}>{issue.title}</option>)}</Select></Field>
     <section className="file-input-list" aria-labelledby="units-to-propose-heading">
       <div className="section-heading"><h2 id="units-to-propose-heading">Units to propose</h2>{canChooseUnits && <button type="button" className="button secondary" onClick={addChange} disabled={changes.length >= maxProposalChanges}>Add change</button>}</div>

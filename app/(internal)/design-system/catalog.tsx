@@ -106,6 +106,16 @@ export default function DesignSystemCatalog() {
       </div>
     </section>
 
+    <section aria-labelledby="rights-fixtures-heading">
+      <SectionHeader id="rights-fixtures-heading" title="F1 source and rights fixtures" description="Read and Edit grouping keeps provenance, unknown rights, and restricted dependencies visible without relying on color alone." />
+      <div className={styles.statusGrid}>
+        <Panel><Stack gap={2}><h3>No source</h3><Badge>no-source</Badge><p>No editable source is recorded. The revision remains readable.</p></Stack></Panel>
+        <Panel><Stack gap={2}><h3>Unknown and unavailable</h3><Inline gap={2}><Badge tone="warning">UNKNOWN</Badge><Badge>SAME_AS_REVISION unavailable</Badge></Inline><p>The revision license is absent, so matching it is not selectable.</p></Stack></Panel>
+        <Panel><Stack gap={2}><h3>Separate and restricted</h3><Inline gap={2}><Badge tone="accent">SEPARATE</Badge><Badge tone="danger">RESTRICTED</Badge></Inline><p>Dependency access and redistribution restrictions remain explicit.</p></Stack></Panel>
+        <Panel><Stack gap={2}><h3>Provenance</h3><Inline gap={2}><Badge>source package</Badge><Badge>version 2</Badge></Inline><p>License, rights holder, declaration version, and source reference are grouped as read facts.</p></Stack></Panel>
+      </div>
+    </section>
+
     <section aria-labelledby="navigation-heading">
       <SectionHeader id="navigation-heading" title="Navigation choices" />
       <Stack gap={4}>

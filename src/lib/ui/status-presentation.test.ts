@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { changeReviewStatusPresentation, proposalStatusPresentation } from "./status-presentation";
+import { setRowBusy, setRowMessage } from "./task-state";
 
 describe("status presentation", () => {
   it("maps the display-only proposal and change states", () => {
@@ -10,5 +11,13 @@ describe("status presentation", () => {
 
   it("keeps an unknown server value readable", () => {
     expect(proposalStatusPresentation("FUTURE_STATUS")).toMatchObject({ label: "Unknown status", tone: "neutral" });
+  });
+
+  it("keeps task pending and error state scoped to each row", () => {
+    const pending = setRowBusy(setRowBusy({}, "a", true), "b", true);
+    const errors = setRowMessage(setRowMessage({}, "a", "A failed"), "b", "B failed");
+
+    expect(setRowBusy(pending, "a", false)).toEqual({ a: false, b: true });
+    expect(setRowMessage(errors, "b", "")).toEqual({ a: "A failed", b: "" });
   });
 });

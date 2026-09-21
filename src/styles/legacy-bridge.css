@@ -213,7 +213,7 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; paddin
   main { padding-inline: var(--odr-layout-page-margin-tablet); }
 }
 
-@media (max-width: 48rem) {
+@media (max-width: 47.999rem) {
   main { padding: var(--odr-space-6) var(--odr-layout-page-margin-mobile) var(--odr-space-7); }
   .site-header-inner { grid-template-columns: auto minmax(0, 1fr); min-height: var(--odr-header-height); padding: var(--odr-space-2) var(--odr-space-4); }
   .global-search { grid-column: 1 / -1; grid-row: 2; width: 100%; }

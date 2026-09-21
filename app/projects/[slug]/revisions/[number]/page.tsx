@@ -7,7 +7,7 @@ import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
 import { Tag } from "@/src/components/ui/badge";
-import { PageGrid, WideColumn } from "@/src/components/ui/layout";
+import { FormColumn, PageGrid, ReadingColumn, WideColumn } from "@/src/components/ui/layout";
 import CapabilityBadge from "@/app/capability-badge";
 import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
@@ -76,7 +76,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     items: declarationRecord.items.map((item) => ({ type: item.type, name: item.name, sourceFileId: item.sourceFileId, rightsHolder: item.rightsHolder, licenseName: item.licenseName, licenseUrl: item.licenseUrl, sourceUrl: item.sourceUrl, redistribution: item.redistribution, derivativeUse: item.derivativeUse, notes: item.notes })),
   } : null;
   return <PageGrid aria-labelledby="revision-heading">
-    <WideColumn>
+    <ReadingColumn>
       <article className="detail">
     <p className="meta"><Link href={`/projects/${project.slug}`}>{project.title}</Link> · Revision {revision.number}</p>
     <h1 id="revision-heading">{revision.title}</h1>
@@ -92,10 +92,19 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
       {appliedProposal && <div><dt>Applied from</dt><dd><Link href={`/proposals/${appliedProposal.id}`}>Proposal #{appliedProposal.proposalNumber} · {appliedProposal.title}</Link>{appliedProposal.author?.name && <span className="meta"> by {appliedProposal.author.name}</span>}</dd></div>}
       {appliedChanges.length > 0 && <div><dt>Applied changes</dt><dd><ul className="commit-previews" aria-label="Applied changes">{appliedChanges.map((change) => <li className="commit-chip" key={change.id}>{changeSummary(change)}{change.kind ? ` · ${change.kind}` : ""}</li>)}</ul></dd></div>}
     </dl></section>}
-    {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length)) && <RevisionDiff current={currentImagePreviews} previous={previousImagePreviews} currentNumber={revision.number} previousNumber={previous?.number} />}
-    {htmlPreviews.length > 0 && <section aria-labelledby="html-previews"><h2 id="html-previews">HTML previews</h2><div className="html-previews">{htmlPreviews.map((preview) => <figure className="preview-diff" key={preview.id}><figcaption>{preview.altText}</figcaption><iframe className="html-preview" src={preview.url} title={preview.altText} sandbox="" loading="lazy" /></figure>)}</div></section>}
-    {session?.user.id === project.ownerId && <RestoreForm slug={project.slug} number={revision.number} />}<ForkForm slug={project.slug} number={revision.number} license={revision.license ?? project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
       </article>
+    </ReadingColumn>
+    {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length) || htmlPreviews.length > 0) && <WideColumn>
+      <section className="detail" aria-label="Revision visual previews">
+        {(currentImagePreviews.length > 0 || Boolean(previousImagePreviews?.length)) && <RevisionDiff current={currentImagePreviews} previous={previousImagePreviews} currentNumber={revision.number} previousNumber={previous?.number} />}
+    {htmlPreviews.length > 0 && <section aria-labelledby="html-previews"><h2 id="html-previews">HTML previews</h2><div className="html-previews">{htmlPreviews.map((preview) => <figure className="preview-diff" key={preview.id}><figcaption>{preview.altText}</figcaption><iframe className="html-preview" src={preview.url} title={preview.altText} sandbox="" loading="lazy" /></figure>)}</div></section>}
+      </section>
     </WideColumn>
+    }
+    <FormColumn>
+      <div className="detail revision-actions">
+        {session?.user.id === project.ownerId && <RestoreForm slug={project.slug} number={revision.number} />}<ForkForm slug={project.slug} number={revision.number} license={revision.license ?? project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
+      </div>
+    </FormColumn>
   </PageGrid>;
 }

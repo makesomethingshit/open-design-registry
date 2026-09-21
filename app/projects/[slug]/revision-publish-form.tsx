@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import CapabilityBadge from "@/app/capability-badge";
 import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
-import { focusFirstInvalid } from "@/src/components/ui/form";
+import { Field, Input, Textarea } from "@/src/components/ui/field";
+import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 import { suggestFile, type AdapterSuggestion } from "@/src/lib/adapters";
 import { sourceLicenseFieldsForMode } from "@/src/lib/rights";
 
@@ -55,6 +56,7 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
   const [suggestions, setSuggestions] = useState<SuggestionState[]>([]);
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [rightsSourceMode, setRightsSourceMode] = useState<"SAME_AS_REVISION" | "SEPARATE" | "UNKNOWN">("UNKNOWN");
   const [rightsSourceLicenseName, setRightsSourceLicenseName] = useState("");
@@ -138,9 +140,11 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
     event.preventDefault();
     const formElement = event.currentTarget;
     if (!formElement.checkValidity()) {
+      setFieldErrors(invalidFieldErrors(formElement));
       focusFirstInvalid(formElement);
       return;
     }
+    setFieldErrors({});
     setError("");
     setSubmitting(true);
     try {
@@ -162,17 +166,17 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
     }
   }
 
-  return <form className="form revision-publish-form" onSubmit={submit} aria-busy={submitting}>
+  return <form className="form revision-publish-form" noValidate onSubmit={submit} aria-busy={submitting}>
     <h2>Publish a revision</h2>
-    <label>Revision title<input name="title" required maxLength={120} /></label>
-    <label>Change description<textarea name="changeDescription" required minLength={1} maxLength={500} /></label>
-    <label>Design tool<input name="tool" maxLength={80} placeholder="Figma, Penpot, or Photoshop" /></label>
-    <label>Tool version<input name="toolVersion" maxLength={80} placeholder="Optional" /></label>
-    <label>Tags<input name="tags" maxLength={800} placeholder="ui, landing-page, mobile" /></label>
-    <label>Source files (up to 10 original files)<input name="sources" type="file" multiple onChange={selectSources} /></label>
+    <Field error={fieldErrors.title} id="publish-title" invalid={Boolean(fieldErrors.title)} label="Revision title" required><Input name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
+    <Field error={fieldErrors.changeDescription} id="publish-description" invalid={Boolean(fieldErrors.changeDescription)} label="Change description" required><Textarea name="changeDescription" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.changeDescription; return next; })} required minLength={1} maxLength={500} /></Field>
+    <Field error={fieldErrors.tool} id="publish-tool" invalid={Boolean(fieldErrors.tool)} label="Design tool"><Input name="tool" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.tool; return next; })} maxLength={80} placeholder="Figma, Penpot, or Photoshop" /></Field>
+    <Field error={fieldErrors.toolVersion} id="publish-tool-version" invalid={Boolean(fieldErrors.toolVersion)} label="Tool version"><Input name="toolVersion" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.toolVersion; return next; })} maxLength={80} placeholder="Optional" /></Field>
+    <Field error={fieldErrors.tags} id="publish-tags" invalid={Boolean(fieldErrors.tags)} label="Tags"><Input name="tags" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.tags; return next; })} maxLength={800} placeholder="ui, landing-page, mobile" /></Field>
+    <Field error={fieldErrors.sources} id="publish-sources" invalid={Boolean(fieldErrors.sources)} label="Source files (up to 10 original files)"><Input name="sources" type="file" multiple onChange={selectSources} /></Field>
     <p className="meta">Use a source URL instead when no files are uploaded. ZIP contents are kept as one file.</p>
-    <label>Source URL<input name="sourceUrl" type="url" placeholder="https://example.com/design.zip" /></label>
-    <label>Source SHA-256 checksum<input name="sourceChecksum" inputMode="text" pattern="[a-fA-F0-9]{64}" maxLength={64} placeholder="Optional for one uploaded file" /></label>
+    <Field error={fieldErrors.sourceUrl} id="publish-source-url" invalid={Boolean(fieldErrors.sourceUrl)} label="Source URL"><Input name="sourceUrl" type="url" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.sourceUrl; return next; })} placeholder="https://example.com/design.zip" /></Field>
+    <Field error={fieldErrors.sourceChecksum} id="publish-source-checksum" invalid={Boolean(fieldErrors.sourceChecksum)} label="Source SHA-256 checksum"><Input name="sourceChecksum" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.sourceChecksum; return next; })} inputMode="text" pattern="[a-fA-F0-9]{64}" maxLength={64} placeholder="Optional for one uploaded file" /></Field>
     <fieldset className="rights-form"><legend>Source &amp; rights</legend>
       <p className="meta">Rights are contributor-supplied declarations. Unknown values do not block publication.</p>
       <label><input type="radio" name="rightsSourceMode" value="SAME_AS_REVISION" checked={rightsSourceMode === "SAME_AS_REVISION"} onChange={() => selectRightsSourceMode("SAME_AS_REVISION")} /> Same as Revision license</label>

@@ -5,18 +5,19 @@ import { Badge } from "@/src/components/ui/badge";
 import { Banner, EmptyState } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
 import { Panel, Stack } from "@/src/components/ui/layout";
+import { setRowBusy } from "@/src/lib/ui/task-state";
 
 type Report = { id: string; reason: string; details: string; status: string; project?: { title: string; slug: string } | null; revision?: { number: number; project: { title: string; slug: string } } | null; reporter: { name: string; email: string } };
 
 export default function ReportList({ reports }: { reports: Report[] }) {
   const [items, setItems] = useState(reports);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [successes, setSuccesses] = useState<Record<string, string>>({});
 
   async function resolve(id: string, hide: boolean) {
-    if (pendingId) return;
-    setPendingId(id);
+    if (pendingById[id]) return;
+    setPendingById((current) => setRowBusy(current, id, true));
     setErrors((current) => ({ ...current, [id]: "" }));
     setSuccesses((current) => ({ ...current, [id]: "" }));
     try {
@@ -31,7 +32,7 @@ export default function ReportList({ reports }: { reports: Report[] }) {
     } catch {
       setErrors((current) => ({ ...current, [id]: "신고를 처리하지 못했습니다. 다시 시도해 주세요." }));
     } finally {
-      setPendingId(null);
+      setPendingById((current) => setRowBusy(current, id, false));
     }
   }
 
@@ -44,8 +45,8 @@ export default function ReportList({ reports }: { reports: Report[] }) {
         <p><strong>{report.reason}</strong></p>
         <p>{report.details}</p>
         {report.status === "OPEN" && <div className="actions">
-          <Button disabled={Boolean(pendingId && pendingId !== report.id)} loading={pendingId === report.id} loadingLabel="처리 중" onClick={() => { void resolve(report.id, true); }} type="button">공개 노출 제거 후 해결</Button>
-          <Button disabled={Boolean(pendingId)} onClick={() => { void resolve(report.id, false); }} type="button" variant="secondary">검토 완료</Button>
+          <Button loading={Boolean(pendingById[report.id])} loadingLabel="처리 중" onClick={() => { void resolve(report.id, true); }} type="button">공개 노출 제거 후 해결</Button>
+          <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void resolve(report.id, false); }} type="button" variant="secondary">검토 완료</Button>
         </div>}
         {errors[report.id] && <Banner tone="error" title="신고 처리 실패">{errors[report.id]}</Banner>}
         {successes[report.id] && <Banner tone="success" title="처리 완료">{successes[report.id]}</Banner>}
