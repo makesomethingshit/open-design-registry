@@ -66,9 +66,13 @@ function textContent(value: unknown): string {
   return textContent((value as TestElement).props?.children);
 }
 
+function isNamedComponent(element: TestElement, name: string) {
+  return typeof element.type === "function" && element.type.name === name;
+}
+
 function findLabeledInput(root: unknown, label: string) {
-  const field = findElement(root, (element) => element.type === "label" && textContent(element).includes(label));
-  return findElement(field.props?.children, (element) => element.type === "input");
+  const field = findElement(root, (element) => (element.type === "label" && textContent(element).includes(label)) || (isNamedComponent(element, "Field") && textContent(element.props?.label).includes(label)));
+  return findElement(field.props?.children, (element) => element.type === "input" || isNamedComponent(element, "Input"));
 }
 
 const declaration = {
@@ -166,7 +170,7 @@ describe("revision source rights detail", () => {
       beginRender();
       root = SourceRights(componentProps);
       const form = findElement(root, (element) => element.type === "form");
-      await form.props?.onSubmit({ preventDefault: vi.fn() });
+      await form.props?.onSubmit({ preventDefault: vi.fn(), currentTarget: { checkValidity: () => true } });
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as Record<string, unknown>;
       expect(body).not.toHaveProperty("sourceLicenseName");
       expect(body).not.toHaveProperty("sourceLicenseUrl");

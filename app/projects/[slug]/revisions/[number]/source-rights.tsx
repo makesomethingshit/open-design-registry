@@ -145,11 +145,11 @@ export default function SourceRights({
     </Stack>
     {editing && isOwner && <form className="rights-form" onSubmit={submit} aria-busy={saving}>
       <h3>{declaration ? "Add a rights declaration version" : "Add rights information"}</h3>
-      <Field id="rights-source-mode" label="Source package rights"><fieldset><legend>Source package rights</legend>
+      <fieldset><legend>Source package rights</legend>
         <label><input type="radio" name="sourceRightsMode" value="SAME_AS_REVISION" checked={sourceRightsMode === "SAME_AS_REVISION"} disabled={sameAsRevisionUnavailable} onChange={() => selectSourceRightsMode("SAME_AS_REVISION")} /> Same as Revision license{sameAsRevisionUnavailable && <span className="meta">Unavailable because this revision has no recorded license.</span>}</label>
         <label><input type="radio" name="sourceRightsMode" value="SEPARATE" checked={sourceRightsMode === "SEPARATE"} onChange={() => selectSourceRightsMode("SEPARATE")} /> Different license</label>
         <label><input type="radio" name="sourceRightsMode" value="UNKNOWN" checked={sourceRightsMode === "UNKNOWN"} onChange={() => selectSourceRightsMode("UNKNOWN")} /> Unknown / not declared</label>
-      </fieldset></Field>
+      </fieldset>
       <div className="rights-form-grid">{sourceRightsMode === "SEPARATE" && <><Field id="rights-license-name" label="License name"><input value={sourceLicenseName} onChange={(event) => setSourceLicenseName(event.target.value)} required /></Field><Field id="rights-license-url" label="License/reference URL"><input type="url" value={sourceLicenseUrl} onChange={(event) => setSourceLicenseUrl(event.target.value)} /></Field></>}<Field id="rights-holder" label="Rights holder"><input value={sourceRightsHolder} onChange={(event) => setSourceRightsHolder(event.target.value)} /></Field></div>
       <Field id="rights-notes" label="Notes"><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} /></Field>
       <div className="rights-form-heading"><h4>Dependencies &amp; third-party assets</h4><Button size="sm" type="button" variant="secondary" onClick={() => setItems((current) => [...current, emptyItem()])}>Add dependency</Button></div>

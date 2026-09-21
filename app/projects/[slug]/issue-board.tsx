@@ -150,7 +150,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
           <Button loading={creating} loadingLabel="Opening issue" type="submit">Open issue</Button>
         </Stack>
       </form>
-    </Panel></FormColumn> : <p className="meta">Sign in to open issues or comment.</p>}
+    </Panel></FormColumn> : <FormColumn><p className="meta">Sign in to open issues or comment.</p></FormColumn>}
     </PageGrid>
   </section>;
 }
