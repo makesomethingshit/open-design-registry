@@ -1,5 +1,10 @@
 .catalog { padding-top: var(--odr-space-1); }
 .catalog > section { scroll-margin-top: calc(var(--odr-header-height) + var(--odr-space-4)); }
+.layoutFixture { align-items: stretch; }
+.layoutCell { display: grid; min-height: 7rem; gap: var(--odr-space-2); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); overflow-wrap: anywhere; }
+.layoutCell > span { color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }
+.layoutCell > strong { color: var(--odr-text-primary); font-size: var(--odr-font-section); }
+.layoutCell > p { margin: 0; color: var(--odr-text-secondary); }
 .matrix { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--odr-space-2); }
 .stateCell { display: grid; min-width: 0; gap: var(--odr-space-2); padding: var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-surface-panel); }
 .stateCell > span, .meta { color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }

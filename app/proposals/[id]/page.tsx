@@ -60,7 +60,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   return <article className={styles.page}>
     <header className={styles.header}>
       <p className={styles.breadcrumb}><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> - Proposal #{proposal.proposalNumber}</p>
-      <div className={styles.titleRow}><h1>{proposal.title}</h1><StatusBadge icon={proposalStatus.icon} tone={proposalStatus.tone}>{proposalStatus.label}</StatusBadge></div>
+      <div className={styles.titleRow}><h1 id="proposal-heading">{proposal.title}</h1><StatusBadge icon={proposalStatus.icon} tone={proposalStatus.tone}>{proposalStatus.label}</StatusBadge></div>
       <p className={styles.meta}>{proposal.author.name} proposes {proposal.sourceRevision.project.title} Revision {proposal.sourceRevision.number} to {proposal.project.title} Revision {proposal.baseRevision.number}</p>
       <div className={styles.capabilities}>
         <CapabilityBadge mode={proposal.baseRevision.capabilityMode} unitCount={proposal.baseRevision.capabilityUnitCount} label={`Base Revision ${proposal.baseRevision.number}`} adapterId={proposal.baseRevision.adapterId} adapterVersion={proposal.baseRevision.adapterVersion} adapterConfidence={proposal.baseRevision.adapterConfidence} adapterMaturity={proposal.baseRevision.adapterMaturity} />

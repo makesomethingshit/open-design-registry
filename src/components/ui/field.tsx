@@ -9,19 +9,21 @@ type FieldProps = {
   children: ReactNode;
   description?: ReactNode;
   error?: ReactNode;
+  invalid?: boolean;
   required?: boolean;
   className?: string;
 };
 
-export function Field({ children, className, description, error, id, label, required }: FieldProps) {
+export function Field({ children, className, description, error, id, invalid = false, label, required }: FieldProps) {
   const descriptionId = description ? `${id}-description` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [descriptionId, errorId].filter(Boolean).join(" ") || undefined;
+  const hasError = Boolean(error) || invalid;
   const control = isValidElement<ControlElementProps>(children)
     ? cloneElement(children as ReactElement<ControlElementProps>, {
       id: children.props.id ?? id,
       "aria-describedby": [children.props["aria-describedby"], describedBy].filter(Boolean).join(" ") || undefined,
-      "aria-invalid": error ? true : children.props["aria-invalid"],
+      "aria-invalid": hasError ? true : children.props["aria-invalid"],
     })
     : children;
 
@@ -36,17 +38,17 @@ export function Field({ children, className, description, error, id, label, requ
 type InputProps = ComponentPropsWithoutRef<"input"> & { invalid?: boolean };
 
 export function Input({ className, invalid, ...props }: InputProps) {
-  return <input {...props} aria-invalid={invalid || props["aria-invalid"]} className={`${styles.control}${className ? ` ${className}` : ""}`} />;
+  return <input {...props} aria-invalid={invalid || props["aria-invalid"] || undefined} className={`${styles.control}${className ? ` ${className}` : ""}`} />;
 }
 
 type TextareaProps = ComponentPropsWithoutRef<"textarea"> & { invalid?: boolean };
 
 export function Textarea({ className, invalid, ...props }: TextareaProps) {
-  return <textarea {...props} aria-invalid={invalid || props["aria-invalid"]} className={`${styles.control} ${styles.textarea}${className ? ` ${className}` : ""}`} />;
+  return <textarea {...props} aria-invalid={invalid || props["aria-invalid"] || undefined} className={`${styles.control} ${styles.textarea}${className ? ` ${className}` : ""}`} />;
 }
 
 type SelectProps = ComponentPropsWithoutRef<"select"> & { invalid?: boolean };
 
 export function Select({ children, className, invalid, ...props }: SelectProps) {
-  return <select {...props} aria-invalid={invalid || props["aria-invalid"]} className={`${styles.control} ${styles.select}${className ? ` ${className}` : ""}`}>{children}</select>;
+  return <select {...props} aria-invalid={invalid || props["aria-invalid"] || undefined} className={`${styles.control} ${styles.select}${className ? ` ${className}` : ""}`}>{children}</select>;
 }

@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -88,5 +89,26 @@ describe("Project issue proposal visibility", () => {
     expect(JSON.stringify(props)).not.toContain("secret-owner");
     expect(JSON.stringify(props)).not.toContain("Secret change");
     expect(JSON.stringify(props)).not.toContain("Unpublished change");
+  });
+
+  it("keeps Stage D geometry and responsive/F1 fixtures in the shared source", () => {
+    const layoutCss = readFileSync(new URL("../../../src/components/ui/layout.module.css", import.meta.url), "utf8");
+    const tokensCss = readFileSync(new URL("../../../src/styles/tokens.css", import.meta.url), "utf8");
+    const catalog = readFileSync(new URL("../../../app/(internal)/design-system/catalog.tsx", import.meta.url), "utf8");
+    const revisionPage = readFileSync(new URL("./revisions/[number]/page.tsx", import.meta.url), "utf8");
+    const legacyBridgeCss = readFileSync(new URL("../../../src/styles/legacy-bridge.css", import.meta.url), "utf8");
+    const proposalCss = readFileSync(new URL("../../../app/proposals/[id]/proposal-page.module.css", import.meta.url), "utf8");
+    const spanWidth = (span: number) => span * 100 + (span - 1) * 16;
+
+    expect([spanWidth(6), spanWidth(8), spanWidth(12)]).toEqual([680, 912, 1376]);
+    expect(tokensCss).toContain("--odr-layout-grid-columns: 12");
+    expect(layoutCss).toContain("@media (max-width: 47.999rem)");
+    expect(catalog).toContain("SAME_AS_REVISION unavailable");
+    expect(revisionPage).not.toContain("WideColumn");
+    expect(revisionPage).toContain("<ReadingColumn>\n      <section className=\"detail revision-visuals\" aria-label=\"Revision visual previews\">");
+    expect(legacyBridgeCss).toContain(".revision-visuals .diff-side-by-side { gap: var(--odr-layout-grid-gutter); }");
+    expect(legacyBridgeCss).toContain("@media (max-width: 47.999rem) { .revision-visuals .diff-side-by-side { grid-template-columns: 1fr; } }");
+    expect(proposalCss).toContain("var(--odr-layout-reading, 48rem)");
+    expect(catalog).toContain("Production Source Rights Read and Edit fixtures");
   });
 });

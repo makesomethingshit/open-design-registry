@@ -8,7 +8,7 @@ import { Checkbox } from "@/src/components/ui/checkbox";
 import { Dialog, Drawer } from "@/src/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
 import { Icon } from "@/src/components/ui/icon";
-import { Divider, Inline, PageHeader, Panel, SectionHeader, Stack } from "@/src/components/ui/layout";
+import { Divider, FormColumn, Inline, PageGrid, PageHeader, Panel, ReadingColumn, SectionHeader, Stack, WideColumn } from "@/src/components/ui/layout";
 import { RouteNav, SectionNav } from "@/src/components/ui/section-nav";
 import { SegmentedControl } from "@/src/components/ui/segmented-control";
 import { Tabs } from "@/src/components/ui/tabs";
@@ -19,6 +19,7 @@ import { RevisionItem } from "@/src/components/design/revision-item";
 import type { ReviewChange } from "@/src/components/design/review-types";
 import ProposalReview from "@/app/proposals/[id]/proposal-review";
 import ContributeDialog from "@/app/projects/[slug]/contribute-dialog";
+import SourceRights from "@/app/projects/[slug]/revisions/[number]/source-rights";
 import { proposalStatuses, type ChangeReviewStatusValue } from "@/src/lib/proposal-status";
 import { changeReviewStatusPresentation, proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import styles from "./catalog.module.css";
@@ -36,6 +37,17 @@ function fixturePreview(id: string, label: string, surface: string, width = 800,
 const fixtureBasePreviews = [fixturePreview("fixture-base", "BASE", "white")];
 const fixtureSourcePreviews = [fixturePreview("fixture-proposal", "PROPOSAL", "white")];
 const fixtureLatestPreviews = [fixturePreview("fixture-latest", "LATEST", "white", 600, 800)];
+const fixtureRightsDeclaration = {
+  id: "fixture-rights",
+  version: 2,
+  createdAt: "2026-09-13T00:00:00.000Z",
+  sourceRightsMode: "SEPARATE" as const,
+  sourceLicenseName: "Studio license",
+  sourceLicenseUrl: "https://example.com/source-license",
+  sourceRightsHolder: "Studio",
+  notes: "Provenance fixture for the F1 Read/Edit grouping.",
+  items: [{ type: "IMAGE" as const, name: "Hero image", rightsHolder: "Image Studio", licenseName: "Custom", licenseUrl: "https://example.com/hero-license", sourceUrl: "https://example.com/hero", redistribution: "RESTRICTED" as const, derivativeUse: "UNKNOWN" as const, notes: "Do not redistribute the original." }],
+} satisfies NonNullable<Parameters<typeof SourceRights>[0]["declaration"]>;
 
 const fixtureChanges: ReviewChange[] = [
   { id: "fixture-pending", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "A deliberately long pending poster name for responsive review verification", targetFileId: "pending", name: "A deliberately long pending poster name for responsive review verification", newName: null, kind: "artboard", mimeType: "image/png", size: 284000, reviewStatus: "PENDING", reviewComment: null, reviewedBy: null, appliedRevision: null, latestAvailable: true, latestName: "A deliberately long pending poster name for responsive review verification", conflictStatus: "NO_CONFLICT", conflictReason: "No upstream conflict.", checkedLatestRevisionId: "fixture-r13", reviewHistory: [], sourcePreviews: fixtureSourcePreviews, basePreviews: fixtureBasePreviews, latestPreviews: fixtureLatestPreviews },
@@ -61,6 +73,15 @@ export default function DesignSystemCatalog() {
 
   return <Stack className={styles.catalog} gap={7}>
     <PageHeader eyebrow="Foundation / Catalog" title="ODR design system" description="Development fixtures only. Theme is controlled from the global header; production requests return 404." />
+
+    <section aria-labelledby="layout-heading">
+      <SectionHeader id="layout-heading" title="Stage D layout grid" description="The shared page grid is the source of truth for form, reading, and wide surfaces." />
+      <PageGrid className={styles.layoutFixture}>
+        <FormColumn className={styles.layoutCell} data-layout-span="6"><span>Form · span 6</span><strong>680px target at 1440</strong><p>Default form composition for focused creation and edit flows.</p></FormColumn>
+        <ReadingColumn className={styles.layoutCell} data-layout-span="8"><span>Reading · span 8</span><strong>912px target at 1440</strong><p>Reading and metadata surfaces keep a comfortable line length.</p></ReadingColumn>
+        <WideColumn className={styles.layoutCell} data-layout-span="12"><span>Wide · span 12</span><strong>1376px target at 1440</strong><p>Visual diff and preview surfaces may use the full grid.</p></WideColumn>
+      </PageGrid>
+    </section>
 
     <section aria-labelledby="buttons-heading">
       <SectionHeader id="buttons-heading" title="Buttons and links" />
@@ -94,6 +115,20 @@ export default function DesignSystemCatalog() {
         <Panel><h3>Proposal status</h3><Stack gap={2}>{proposalStatuses.map((status) => { const presentation = proposalStatusPresentation(status, status === "PARTIALLY_ACCEPTED" ? 2 : undefined, status === "PARTIALLY_ACCEPTED" ? 5 : undefined); return <StatusBadge icon={presentation.icon} key={status} tone={presentation.tone}>{presentation.label}</StatusBadge>; })}</Stack></Panel>
         <Panel><h3>Change review status</h3><Stack gap={2}>{changeStatuses.map((status) => { const presentation = changeReviewStatusPresentation(status); return <StatusBadge icon={presentation.icon} key={status} tone={presentation.tone}>{presentation.label}</StatusBadge>; })}<StatusBadge icon="check" tone="accent">{changeReviewStatusPresentation("APPROVED", 14).label}</StatusBadge></Stack></Panel>
         <Panel><h3>Properties and tags</h3><Inline gap={2}><Badge>Public</Badge><Badge>Private</Badge><Tag>Typeface</Tag><TagLink href="#statuses-heading">Editorial</TagLink></Inline></Panel>
+      </div>
+    </section>
+
+    <section aria-labelledby="rights-fixtures-heading">
+      <SectionHeader id="rights-fixtures-heading" title="F1 source and rights fixtures" description="Read and Edit grouping keeps provenance, unknown rights, and restricted dependencies visible without relying on color alone." />
+      <PageGrid aria-label="Production Source Rights Read and Edit fixtures">
+        <ReadingColumn><SourceRights slug="fixture" number={1} revisionLicense={null} sourceHref={null} sourceFiles={[]} tool={null} toolVersion={null} sourceChecksum={null} declaration={null} isOwner={false} /></ReadingColumn>
+        <ReadingColumn><SourceRights slug="fixture" number={2} revisionLicense="MIT" sourceHref="/fixtures/source.zip" sourceFiles={[{ id: "fixture-source", name: "source.zip", mimeType: "application/zip", size: 1200, href: "/fixtures/source.zip" }]} tool="Penpot" toolVersion="2" sourceChecksum="fixture-checksum" declaration={fixtureRightsDeclaration} isOwner /></ReadingColumn>
+      </PageGrid>
+      <div className={styles.statusGrid}>
+        <Panel><Stack gap={2}><h3>No source</h3><Badge>no-source</Badge><p>No editable source is recorded. The revision remains readable.</p></Stack></Panel>
+        <Panel><Stack gap={2}><h3>Unknown and unavailable</h3><Inline gap={2}><Badge tone="warning">UNKNOWN</Badge><Badge>SAME_AS_REVISION unavailable</Badge></Inline><p>The revision license is absent, so matching it is not selectable.</p></Stack></Panel>
+        <Panel><Stack gap={2}><h3>Separate and restricted</h3><Inline gap={2}><Badge tone="accent">SEPARATE</Badge><Badge tone="danger">RESTRICTED</Badge></Inline><p>Dependency access and redistribution restrictions remain explicit.</p></Stack></Panel>
+        <Panel><Stack gap={2}><h3>Provenance</h3><Inline gap={2}><Badge>source package</Badge><Badge>version 2</Badge></Inline><p>License, rights holder, declaration version, and source reference are grouped as read facts.</p></Stack></Panel>
       </div>
     </section>
 

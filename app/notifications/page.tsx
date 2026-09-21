@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { PageGrid, PageHeader, ReadingColumn } from "@/src/components/ui/layout";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import NotificationList from "./notification-list";
@@ -27,5 +28,10 @@ export default async function NotificationsPage() {
     prisma.notification.count({ where: { recipientId: session.user.id, readAt: null } }),
   ]);
 
-  return <section><div className="page-heading"><div><p className="meta">ACTIVITY</p><h1>알림</h1><p className="lede">내 프로젝트에 새로 생긴 Issue와 Fork를 확인하세요.</p></div></div><NotificationList notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} unreadCount={unreadCount} /></section>;
+  return <PageGrid aria-labelledby="notifications-heading">
+    <ReadingColumn>
+      <PageHeader description="내 프로젝트에 새로 생긴 Issue와 Fork를 확인하세요." eyebrow="ACTIVITY" id="notifications-heading" title="알림" />
+      <NotificationList notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} unreadCount={unreadCount} />
+    </ReadingColumn>
+  </PageGrid>;
 }
