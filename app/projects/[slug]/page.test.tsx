@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   listProposals: vi.fn(),
   countProposals: vi.fn(),
-  contributors: vi.fn(),
+  attribution: vi.fn(),
   findProposal: vi.fn(),
   readBundle: vi.fn(),
   issueBoard: vi.fn(),
@@ -23,14 +23,18 @@ vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset
 vi.mock("@/src/lib/revision-bundle", () => ({ publicBundleFiles: () => [], readRevisionBundle: mocks.readBundle }));
 vi.mock("@/src/lib/proposal-handlers", async () => {
   const actual = await vi.importActual<typeof import("@/src/lib/proposal-handlers")>("@/src/lib/proposal-handlers");
-  return { ...actual, countVisibleProposals: mocks.countProposals, findVisibleProposal: mocks.findProposal, listVisibleProposalSummaries: mocks.listProposals, visibleProposalContributorIds: mocks.contributors };
+  return { ...actual, countVisibleProposals: mocks.countProposals, findVisibleProposal: mocks.findProposal, listVisibleProposalSummaries: mocks.listProposals };
+});
+vi.mock("@/src/lib/attribution", async () => {
+  const actual = await vi.importActual<typeof import("@/src/lib/attribution")>("@/src/lib/attribution");
+  return { ...actual, listProjectAttribution: mocks.attribution };
 });
 vi.mock("@/src/lib/ui/status-presentation", () => ({ proposalStatusPresentation: () => ({ label: "Open", tone: "neutral", icon: "clock" }) }));
 vi.mock("@/app/capability-badge", () => ({ default: () => null }));
 vi.mock("@/app/reports/report-form", () => ({ default: () => null }));
 vi.mock("@/src/components/design/project-header", () => ({ ProjectHeader: () => null }));
 vi.mock("@/src/components/design/revision-item", () => ({ RevisionItem: () => null }));
-vi.mock("@/src/components/ui/badge", () => ({ StatusBadge: () => null }));
+vi.mock("@/src/components/ui/badge", () => ({ Badge: ({ children }: { children: unknown }) => createElement("span", null, children as never), StatusBadge: () => null }));
 vi.mock("@/src/components/ui/section-nav", () => ({ SectionNav: () => null }));
 vi.mock("./contribute-dialog", () => ({ default: () => null }));
 vi.mock("./issue-board", () => ({ default: (props: unknown) => { mocks.issueBoard(props); return null; } }));
@@ -75,11 +79,14 @@ describe("Project issue proposal visibility", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "viewer" } });
     mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
     mocks.countProposals.mockResolvedValue(0);
-    mocks.contributors.mockResolvedValue([]);
+    mocks.attribution.mockResolvedValue([
+      { id: "owner", name: "Owner", roles: ["OWNER", "PUBLISHER"], appliedChanges: 0, appliedRevisions: 0, reviewedChanges: 0, publishedRevisions: 1 },
+      { id: "contributor", name: "Contributor", roles: ["CONTRIBUTOR"], appliedChanges: 2, appliedRevisions: 1, reviewedChanges: 0, publishedRevisions: 0 },
+    ]);
     mocks.findProposal.mockResolvedValue(null);
     mocks.readBundle.mockResolvedValue(null);
 
-    await renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
+    const markup = renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
 
     const props = mocks.issueBoard.mock.calls.at(-1)?.[0] as { issues: Array<{ proposals?: Array<Record<string, unknown>> }> };
     expect(props.issues[0].proposals).toHaveLength(1);
@@ -89,6 +96,9 @@ describe("Project issue proposal visibility", () => {
     expect(JSON.stringify(props)).not.toContain("secret-owner");
     expect(JSON.stringify(props)).not.toContain("Secret change");
     expect(JSON.stringify(props)).not.toContain("Unpublished change");
+    expect(markup).toContain("<dt>Contributors</dt><dd>2</dd>");
+    expect(markup).toContain("Owner");
+    expect(markup).toContain("Contributor");
   });
 
   it("keeps Stage D geometry and responsive/F1 fixtures in the shared source", () => {

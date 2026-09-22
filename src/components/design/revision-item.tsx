@@ -10,13 +10,13 @@ type RevisionItemProps = {
   href: string;
   id: string;
   number: number;
-  owner: string;
+  publisher?: string | null;
   tags: readonly string[];
   title: string;
   tool?: string | null;
 };
 
-export function RevisionItem({ capability, changeDescription, createdAt, href, id, number, owner, tags, title, tool }: RevisionItemProps) {
+export function RevisionItem({ capability, changeDescription, createdAt, href, id, number, publisher, tags, title, tool }: RevisionItemProps) {
   return <li className={styles.item}>
     <div aria-hidden="true" className={styles.marker}>r{number}</div>
     <div className={styles.content}>
@@ -24,7 +24,7 @@ export function RevisionItem({ capability, changeDescription, createdAt, href, i
       {changeDescription && changeDescription !== title && <p className={styles.description}>{changeDescription}</p>}
       {capability}
       <div className={styles.metadata}>
-        <span>{owner}</span><code>{id.slice(0, 8)}</code>{tool && <span>{tool}</span>}
+        <span>{publisher ? `Published by ${publisher}` : "Publisher not recorded"}</span><code>{id.slice(0, 8)}</code>{tool && <span>{tool}</span>}
         {tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
       </div>
     </div>

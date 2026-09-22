@@ -13,6 +13,7 @@ describe("public revision serialization", () => {
       changeDescription: "First release",
       sourceKey: "revisions/project-1/source.zip",
       sourceUrl: null,
+      publishedById: "publisher",
       isPublished: true,
       createdAt: new Date("2026-09-01T00:00:00Z"),
       previews: [{
@@ -30,6 +31,7 @@ describe("public revision serialization", () => {
 
     expect(revision).not.toHaveProperty("sourceKey");
     expect(revision).not.toHaveProperty("isPublished");
+    expect(revision).not.toHaveProperty("publishedById");
     expect(revision.sourceUrl).toBe("/api/assets?key=revisions%2Fproject-1%2Fsource.zip");
     expect(revision.previews[0].url).toBe("/api/assets?key=revisions%2Fproject-1%2Fpreview.png");
   });

@@ -4,10 +4,11 @@ import CapabilityBadge from "@/app/capability-badge";
 import ReportForm from "@/app/reports/report-form";
 import { ProjectHeader } from "@/src/components/design/project-header";
 import { RevisionItem } from "@/src/components/design/revision-item";
-import { StatusBadge } from "@/src/components/ui/badge";
+import { Badge, StatusBadge } from "@/src/components/ui/badge";
 import { FormColumn, PageGrid, WideColumn } from "@/src/components/ui/layout";
 import { SectionNav } from "@/src/components/ui/section-nav";
-import { changeSummary, countVisibleProposals, findVisibleProposal, isVisible, listVisibleProposalSummaries, visibleProposalContributorIds } from "@/src/lib/proposal-handlers";
+import { listProjectAttribution, type AttributionPerson, type AttributionRole } from "@/src/lib/attribution";
+import { changeSummary, countVisibleProposals, findVisibleProposal, isVisible, listVisibleProposalSummaries } from "@/src/lib/proposal-handlers";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
@@ -30,7 +31,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     where: { slug },
     include: {
       owner: { select: { name: true } },
-      revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
+      revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } }, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
       issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } },
       forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
       _count: { select: { forks: { where: { isPublic: true } } } },
@@ -44,11 +45,11 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
   const latestRevision = project.revisions.at(-1);
-  const [proposalPage, activeProposalPage, activeProposalCount, contributorIds, latestProposal] = await Promise.all([
+  const [proposalPage, activeProposalPage, activeProposalCount, attribution, latestProposal] = await Promise.all([
     listVisibleProposalSummaries(project.id, session?.user.id, { status: proposalFilter, take: 20 }),
     listVisibleProposalSummaries(project.id, session?.user.id, { status: "open", take: 3 }),
     countVisibleProposals(project.id, session?.user.id, "open"),
-    visibleProposalContributorIds(project.id, session?.user.id),
+    listProjectAttribution(project.id, session?.user.id),
     latestRevision?.appliedProposal ? findVisibleProposal(latestRevision.appliedProposal.id, session?.user.id) : Promise.resolve(null),
   ]);
   const activeProposals = activeProposalPage.items;
@@ -62,12 +63,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       .map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })),
   }));
   const openIssues = visibleIssues.filter((issue) => issue.status === "OPEN");
-  const contributors = new Set([project.ownerId, ...contributorIds]).size;
+  const contributors = attribution.length;
   const navigationItems = [
     { href: "#overview", label: "Overview" },
     { href: "#revisions", label: <>Revisions <span className={styles.navCount}>{project.revisions.length}</span></> },
     { href: "#issues", label: <>Issues <span className={styles.navCount}>{project.issues.length}</span></> },
     { href: "#proposals", label: <>Proposals <span className={styles.navCount}>{activeProposalCount}</span></> },
+    { href: "#contributors", label: <>Contributors <span className={styles.navCount}>{contributors}</span></> },
     { href: "#forks", label: <>Forks <span className={styles.navCount}>{project._count.forks}</span></> },
   ];
 
@@ -123,7 +125,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         </div>
         {latestRevision && <section className={styles.latestRevision}>
           <p className={styles.eyebrow}>Current work</p><h2>Latest revision</h2>
-          <ol className={styles.revisionList}><RevisionItem capability={<><CapabilityBadge adapterConfidence={latestRevision.adapterConfidence} adapterId={latestRevision.adapterId} adapterMaturity={latestRevision.adapterMaturity} adapterVersion={latestRevision.adapterVersion} mode={latestRevision.capabilityMode} unitCount={latestRevision.capabilityUnitCount} />{latestProposal ? <><p className={styles.revisionNote}>Applied {Math.max(1, latestRevision.appliedChanges.length)} changes from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> <span aria-hidden="true">·</span> Contributor {latestProposal.author.name}</p><p className={styles.revisionNote}>{latestProposal.changeSet?.changes.filter((change) => change.appliedRevisionId === latestRevision.id).slice(0, 2).map(changeSummary).join(" · ")}</p></> : undefined}</>} changeDescription={latestRevision.changeDescription} createdAt={latestRevision.createdAt} href={`/projects/${project.slug}/revisions/${latestRevision.number}`} id={latestRevision.id} key={latestRevision.id} number={latestRevision.number} owner={project.owner.name} tags={latestRevision.tags} title={latestRevision.title} tool={latestRevision.tool} /></ol>
+          <ol className={styles.revisionList}><RevisionItem capability={<><CapabilityBadge adapterConfidence={latestRevision.adapterConfidence} adapterId={latestRevision.adapterId} adapterMaturity={latestRevision.adapterMaturity} adapterVersion={latestRevision.adapterVersion} mode={latestRevision.capabilityMode} unitCount={latestRevision.capabilityUnitCount} />{latestProposal ? <><p className={styles.revisionNote}>Applied {Math.max(1, latestRevision.appliedChanges.length)} changes from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> <span aria-hidden="true">·</span> Contributor {latestProposal.author.name}</p><p className={styles.revisionNote}>{latestProposal.changeSet?.changes.filter((change) => change.appliedRevisionId === latestRevision.id).slice(0, 2).map(changeSummary).join(" · ")}</p></> : undefined}</>} changeDescription={latestRevision.changeDescription} createdAt={latestRevision.createdAt} href={`/projects/${project.slug}/revisions/${latestRevision.number}`} id={latestRevision.id} key={latestRevision.id} number={latestRevision.number} publisher={latestRevision.publishedBy?.name} tags={latestRevision.tags} title={latestRevision.title} tool={latestRevision.tool} /></ol>
         </section>}
       </div>
     </section>
@@ -132,13 +134,17 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>
-      {project.revisions.length ? <ol className={styles.revisionList}>{project.revisions.map((revision) => <RevisionItem capability={<CapabilityBadge adapterConfidence={revision.adapterConfidence} adapterId={revision.adapterId} adapterMaturity={revision.adapterMaturity} adapterVersion={revision.adapterVersion} mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} />} changeDescription={revision.changeDescription} createdAt={revision.createdAt} href={`/projects/${project.slug}/revisions/${revision.number}`} id={revision.id} key={revision.id} number={revision.number} owner={project.owner.name} tags={revision.tags} title={revision.title} tool={revision.tool ? `${revision.tool}${revision.toolVersion ? ` ${revision.toolVersion}` : ""}` : null} />)}</ol> : <p className={styles.muted}>No revisions published yet.</p>}
+      {project.revisions.length ? <ol className={styles.revisionList}>{project.revisions.map((revision) => <RevisionItem capability={<CapabilityBadge adapterConfidence={revision.adapterConfidence} adapterId={revision.adapterId} adapterMaturity={revision.adapterMaturity} adapterVersion={revision.adapterVersion} mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} />} changeDescription={revision.changeDescription} createdAt={revision.createdAt} href={`/projects/${project.slug}/revisions/${revision.number}`} id={revision.id} key={revision.id} number={revision.number} publisher={revision.publishedBy?.name} tags={revision.tags} title={revision.title} tool={revision.tool ? `${revision.tool}${revision.toolVersion ? ` ${revision.toolVersion}` : ""}` : null} />)}</ol> : <p className={styles.muted}>No revisions published yet.</p>}
     </section>
 
     <IssueBoard canManage={project.isPublic && session?.user.id === project.ownerId} issues={visibleIssues} revisions={project.revisions} signedIn={project.isPublic && Boolean(session)} slug={project.slug} />
     <section aria-labelledby="proposals-heading" className={styles.section} id="proposals">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Collaboration</p><h2 id="proposals-heading">Proposals</h2></div>{session && latestRevision && <Link className={styles.secondaryLink} href={`/projects/${project.slug}/proposals/new`}>New proposal</Link>}</header>
       <ProposalList initialCursor={proposalPage.nextCursor} initialFilter={proposalFilter} initialItems={proposalRows} slug={project.slug} />
+    </section>
+    <section aria-labelledby="contributors-heading" className={styles.section} id="contributors">
+      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Collaboration</p><h2 id="contributors-heading">Contributors</h2></div><span>{contributors} people</span></header>
+      <ul className={styles.contributorList}>{attribution.map((person) => <li key={person.id}><div><strong>{person.name}</strong><div className={styles.contributorRoles}>{person.roles.map((role) => <Badge key={role}>{roleLabel(role)}</Badge>)}</div></div><span>{attributionMetrics(person).join(" · ") || "Project owner"}</span></li>)}</ul>
     </section>
     <section aria-labelledby="forks-heading" className={styles.section} id="forks">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Lineage</p><h2 id="forks-heading">Forks</h2></div><span>Project descendants</span></header>
@@ -152,4 +158,17 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
 function formatDate(value: Date) {
   return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function roleLabel(role: AttributionRole) {
+  return role[0] + role.slice(1).toLowerCase();
+}
+
+function attributionMetrics(person: AttributionPerson) {
+  return [
+    person.appliedChanges && `${person.appliedChanges} applied ${person.appliedChanges === 1 ? "change" : "changes"}`,
+    person.appliedRevisions && `${person.appliedRevisions} applied ${person.appliedRevisions === 1 ? "revision" : "revisions"}`,
+    person.reviewedChanges && `${person.reviewedChanges} applied ${person.reviewedChanges === 1 ? "change" : "changes"} reviewed`,
+    person.publishedRevisions && `${person.publishedRevisions} ${person.publishedRevisions === 1 ? "revision" : "revisions"} published`,
+  ].filter(Boolean) as string[];
 }
