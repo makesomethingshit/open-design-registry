@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getObject: vi.fn(), putBytes: vi.fn() }));
 vi.mock("./storage", () => ({ getObject: mocks.getObject, putBytes: mocks.putBytes }));
 
-const { capabilityForBundle, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, readRevisionBundleStrict, revisionBundleChecksum } = await import("./revision-bundle");
+const { capabilityForBundle, dependencyClosure, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, readRevisionBundleStrict, revisionBundleChecksum } = await import("./revision-bundle");
 
 describe("revision bundle", () => {
   const bundle = { version: 1 as const, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 2400, assetKey: "private/source-a", previewKeys: ["preview-a"] }] };
@@ -28,6 +28,38 @@ describe("revision bundle", () => {
     expect(encodeRevisionBundle(v2).toString()).toContain('"version":2');
     expect((await readRevisionBundle("bundle-key"))?.files[0].kind).toBe("future-unit");
     expect(publicBundleFiles(v2)[0]).toMatchObject({ kind: "future-unit" });
+  });
+
+  it("validates v3 dependencies and exposes them publicly", async () => {
+    const v3 = { version: 3 as const, files: [
+      { ...bundle.files[0], id: "a", dependencies: ["b"] },
+      { ...bundle.files[0], id: "b", dependencies: [] },
+    ] };
+    mocks.getObject.mockResolvedValue({ ContentLength: 100, Body: { transformToString: async () => JSON.stringify(v3) } });
+    expect(encodeRevisionBundle(v3).toString()).toContain('"dependencies":["b"]');
+    expect(await readRevisionBundle("bundle-key")).toEqual(v3);
+    expect(publicBundleFiles(v3)[0]).toMatchObject({ id: "a", dependencies: ["b"] });
+  });
+
+  it.each([
+    ["dangling", ["missing"]],
+    ["self", ["a"]],
+    ["duplicate", ["b", "b"]],
+  ])("rejects %s v3 dependencies", (_case, dependencies) => {
+    const v3 = { version: 3 as const, files: [
+      { ...bundle.files[0], id: "a", dependencies },
+      { ...bundle.files[0], id: "b", dependencies: [] },
+    ] };
+    expect(() => encodeRevisionBundle(v3)).toThrow("Invalid revision bundle");
+  });
+
+  it("allows cycles and terminates dependency closure traversal", () => {
+    const v3 = { version: 3 as const, files: [
+      { ...bundle.files[0], id: "a", dependencies: ["b"] },
+      { ...bundle.files[0], id: "b", dependencies: ["a"] },
+    ] };
+    expect(() => encodeRevisionBundle(v3)).not.toThrow();
+    expect([...dependencyClosure(v3, ["a"])].sort()).toEqual(["a", "b"]);
   });
 
   it("keeps storage failures retryable for strict readers without changing legacy callers", async () => {
@@ -59,5 +91,13 @@ describe("revision bundle", () => {
       expect.objectContaining({ action: "REMOVE_UNIT", targetFileId: "removed" }),
       expect.objectContaining({ action: "ADD_UNIT", sourceFileId: "added" }),
     ]);
+  });
+
+  it("detects dependency set changes but ignores dependency order", () => {
+    const unit = { ...bundle.files[0], id: "a", name: "A", kind: "component", checksum: "a".repeat(64) };
+    expect(detectUnitChanges({ files: [{ ...unit, dependencies: ["b"] }] }, { files: [{ ...unit, dependencies: ["c"] }] })).toEqual([
+      expect.objectContaining({ action: "MODIFY_UNIT", targetFileId: "a", sourceFileId: "a" }),
+    ]);
+    expect(detectUnitChanges({ files: [{ ...unit, dependencies: ["b", "c"] }] }, { files: [{ ...unit, dependencies: ["c", "b"] }] })).toEqual([]);
   });
 });

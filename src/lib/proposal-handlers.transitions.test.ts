@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), tra
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: vi.fn() }));
-vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: vi.fn(), putRevisionBundle: vi.fn() }));
+vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: vi.fn(), putRevisionBundle: vi.fn(), sameDependencySet: (left: string[] = [], right: string[] = []) => left.length === right.length && left.every((id) => right.includes(id)) }));
 
 const { applyProposal, closeProposal, reviewProposalChange } = await import("./proposal-handlers");
 

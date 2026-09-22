@@ -5,7 +5,7 @@ import { prisma } from "./prisma";
 import { proposalApplySchema, proposalCloseSchema, proposalCreateSchema, proposalReviewSchema, issueCommentSchema } from "./project-validation";
 import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-status";
 import { deleteObject, publicAssetUrl } from "./storage";
-import { normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "./revision-bundle";
+import { normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
 
 const proposalDetails = {
@@ -282,6 +282,17 @@ export async function createProjectProposal(request: Request, scope: { slug: str
     const prepared = unitChanges(baseBundle!, sourceBundle, requestedUnitChanges as UnitChangeRequest[]);
     if ("error" in prepared) return error(prepared.error ?? "Selected unit is invalid");
     changes = prepared.changes;
+    try {
+      selectiveBundle(baseBundle!, sourceBundle, changes, changes);
+    } catch (cause) {
+      if (cause instanceof ProposalError) {
+        if (cause.details?.missingDependencyIds?.length) return error("Include required dependency units in this proposal.");
+        if (cause.message === "Selected changes contain invalid unit dependencies") return error("Selected unit dependencies are invalid.");
+        if (cause.message === "At least one unit must remain.") return error("At least one unit must remain.");
+        if (cause.message === "A source unit cannot map to multiple target units") return error("A source unit cannot map to multiple target units.");
+      }
+      throw cause;
+    }
   } else if (requestedFiles.length) {
     const targetFiles = new Map(baseBundle!.files.map((file) => [file.id, file]));
     const sourceFiles = new Map(sourceBundle!.files.map((file) => [file.id, file]));
@@ -423,7 +434,7 @@ export async function reviewProposalChange(request: Request, scope: { id: string
   }
 }
 
-type ProposalFailureDetails = { latestRevision?: { id: string; number: number }; conflictChangeIds?: string[] };
+type ProposalFailureDetails = { latestRevision?: { id: string; number: number }; conflictChangeIds?: string[]; requiredChangeIds?: string[]; missingDependencyIds?: string[] };
 class ProposalError extends Error {
   constructor(message: string, readonly status: number, readonly details?: ProposalFailureDetails) { super(message); }
 }
@@ -433,19 +444,45 @@ function sameIds(left: string[], right: string[]) {
 }
 
 type SelectedUnitChange = {
+  id?: string;
   type: string;
-  action: string | null;
-  targetFileId: string | null;
-  assetKey: string | null;
-  mimeType: string | null;
-  size: number | null;
-  name: string | null;
-  newName: string | null;
-  kind: string | null;
+  action?: string | null;
+  targetFileId?: string | null;
+  assetKey?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+  name?: string | null;
+  newName?: string | null;
+  kind?: string | null;
+  appliedRevisionId?: string | null;
 };
 
-function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, changes: SelectedUnitChange[]) {
+function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, changes: SelectedUnitChange[], allChanges: SelectedUnitChange[]) {
   const sourceFiles = new Map(source?.files.map((file) => [file.assetKey, file]) ?? []);
+  const sourceToTargetId = new Map<string, string>();
+  if (source?.version === 3) {
+    for (const change of allChanges) {
+      if (!change.assetKey || !change.targetFileId) continue;
+      const sourceFile = sourceFiles.get(change.assetKey);
+      if (!sourceFile) continue;
+      const existingTargetId = sourceToTargetId.get(sourceFile.id);
+      if (existingTargetId && existingTargetId !== change.targetFileId) {
+        throw new ProposalError(
+          "A source unit cannot map to multiple target units",
+          409,
+        );
+      }
+      sourceToTargetId.set(sourceFile.id, change.targetFileId);
+    }
+  } else {
+    for (const [sourceId, targetId] of allChanges.flatMap((change) => {
+      const sourceFile = change.assetKey ? sourceFiles.get(change.assetKey) : undefined;
+      return sourceFile && change.targetFileId ? [[sourceFile.id, change.targetFileId] as const] : [];
+    })) {
+      sourceToTargetId.set(sourceId, targetId);
+    }
+  }
+  const dependenciesFor = (file: RevisionBundleFile) => file.dependencies!.map((id) => sourceToTargetId.get(id) ?? id);
   const files = [...latest.files];
   const changedIds = new Set<string>();
   for (const change of changes) {
@@ -458,7 +495,7 @@ function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, 
       if (index >= 0 || !change.assetKey) throw new ProposalError("A selected unit is no longer available", 409);
       const sourceFile = sourceFiles.get(change.assetKey);
       if (!sourceFile) throw new ProposalError("A selected source unit is no longer available", 409);
-      files.push({ ...sourceFile, id: targetFileId, name: change.name ?? sourceFile.name, kind: change.kind ?? sourceFile.kind });
+      files.push({ ...sourceFile, id: targetFileId, name: change.name ?? sourceFile.name, kind: change.kind ?? sourceFile.kind, ...(source?.version === 3 ? { dependencies: dependenciesFor(sourceFile) } : {}) });
       continue;
     }
     if (index < 0) throw new ProposalError("A selected target file is no longer available", 409);
@@ -477,10 +514,23 @@ function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, 
     if (!change.assetKey || !change.mimeType || change.size == null) throw new ProposalError("Selected changes are not file replacements", 409);
     const sourceFile = sourceFiles.get(change.assetKey);
     if (!sourceFile) throw new ProposalError("A selected source unit is no longer available", 409);
-    files[index] = { ...current, mimeType: change.mimeType, size: change.size, assetKey: change.assetKey, previewKeys: sourceFile.previewKeys, checksum: sourceFile.checksum };
+    files[index] = { ...current, mimeType: change.mimeType, size: change.size, assetKey: change.assetKey, previewKeys: sourceFile.previewKeys, checksum: sourceFile.checksum, ...(action === "MODIFY_UNIT" && source?.version === 3 ? { dependencies: dependenciesFor(sourceFile) } : {}) };
   }
   if (!files.length) throw new ProposalError("At least one unit must remain.", 409);
-  return { version: 2 as const, files };
+  const version = latest.version === 3 || (source?.version === 3 && changes.some((change) => ["ADD_UNIT", "MODIFY_UNIT"].includes(change.action ?? change.type))) ? 3 : 2;
+  const result: RevisionBundle = { version, files: version === 3 ? files.map((file) => ({ ...file, dependencies: file.dependencies ?? [] })) : files };
+  if (version === 3) {
+    const ids = new Set(result.files.map((file) => file.id));
+    const malformed = result.files.some((file) => !file.dependencies || file.dependencies.some((id) => !id || id === file.id) || new Set(file.dependencies).size !== file.dependencies.length);
+    if (malformed) throw new ProposalError("Selected changes contain invalid unit dependencies", 409);
+    const missingDependencyIds = [...new Set(result.files.flatMap((file) => file.dependencies!).filter((id) => !ids.has(id)))].sort();
+    if (missingDependencyIds.length) {
+      const selectedIds = new Set(changes.map((change) => change.id).filter(Boolean));
+      const requiredChangeIds = allChanges.filter((change) => change.id && !selectedIds.has(change.id) && !change.appliedRevisionId && (change.action ?? change.type) === "ADD_UNIT" && missingDependencyIds.includes(change.targetFileId ?? "")).map((change) => change.id!);
+      throw new ProposalError(requiredChangeIds.length ? "Selected changes require additional dependency changes" : "Selected changes would leave unresolved unit dependencies", 409, { ...(requiredChangeIds.length ? { requiredChangeIds } : {}), missingDependencyIds });
+    }
+  }
+  return result;
 }
 
 async function invalidateUpstreamApprovals(tx: Prisma.TransactionClient, projectId: string, proposalId: string, before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null, revision: { id: string; number: number }) {
@@ -601,7 +651,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         const conflicts = selected.map((change) => ({ id: change.id, result: conflictForChange(change, baseBundle, latestBundle) })).filter((item) => item.result?.status !== "NO_CONFLICT");
         if (conflicts.length) throw new ProposalError("One or more selected changes need conflict review", 409, { latestRevision: latest, conflictChangeIds: conflicts.map((item) => item.id) });
       }
-      const bundle = selectiveBundle(latestBundle, sourceBundle, selected);
+      const bundle = selectiveBundle(latestBundle, sourceBundle, selected, proposal.changeSet.changes);
       const adapterRevision = needsSourceBundle && source.adapterId ? source : latestWithSource;
       const previewByKey = new Map([...latestWithSource.previews, ...source.previews].map((preview) => [preview.key, preview]));
       const previewKeys = [...new Set(bundle.files.flatMap((file) => file.previewKeys))];

@@ -131,6 +131,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return typeof value === "string" && value.trim() ? value.trim() : crypto.randomUUID();
   });
   if (new Set(requestedBundleFileIds).size !== requestedBundleFileIds.length) return error("Each source file must have a unique bundle file ID");
+  const sourceDependencies = form.getAll("sourceDependencies");
+  if (sourceDependencies.length && sourceDependencies.length !== sourceFiles.length) return error("Provide one dependency list for each uploaded source file");
+  const finalBundleFileIds = sourceFiles.map((_, index) => mappedSourceFileIds[index] ?? requestedBundleFileIds[index]);
+  let requestedDependencies: string[][] | undefined;
+  if (sourceDependencies.length) {
+    try {
+      requestedDependencies = sourceDependencies.map((value, index) => {
+        if (typeof value !== "string") throw new Error();
+        const dependencies = JSON.parse(value) as unknown;
+        if (!Array.isArray(dependencies) || dependencies.some((id) => typeof id !== "string" || !id || id === finalBundleFileIds[index]) || new Set(dependencies).size !== dependencies.length || dependencies.some((id) => !finalBundleFileIds.includes(id))) throw new Error();
+        return dependencies as string[];
+      });
+    } catch {
+      return error("Source dependencies are invalid");
+    }
+  }
   const sourceKinds = form.getAll("sourceKinds");
   if (sourceFiles.length && sourceKinds.length !== sourceFiles.length) return error("Select a kind for each source file");
   const requestedSourceKinds = sourceFiles.map((_, index) => typeof sourceKinds[index] === "string" ? normalizeUnitKind(sourceKinds[index] as string) : null);
@@ -218,7 +234,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         const latestBundle = preservedIds.length ? await readRevisionBundle(latest?.sourceKey) : null;
         if (preservedIds.length && (!latestBundle || preservedIds.some((id) => !latestBundle.files.some((file) => file.id === id)))) throw new PublishError("An existing file mapping is no longer available", 409);
         const bundle: RevisionBundle = {
-          version: 2,
+          version: requestedDependencies ? 3 : 2,
           files: sourceAssets.map(({ file, key, checksum }, index) => {
             const previous = mappedSourceFileIds[index] ? latestBundle?.files.find((candidate) => candidate.id === mappedSourceFileIds[index]) : undefined;
             const kind = previous?.kind ?? requestedSourceKinds[index];
@@ -232,6 +248,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
               assetKey: key,
               previewKeys: previewMappings[index].map((previewIndex) => uploadedPreviews[previewIndex].key),
               checksum,
+              ...(requestedDependencies ? { dependencies: requestedDependencies[index] } : {}),
             };
           }),
         };

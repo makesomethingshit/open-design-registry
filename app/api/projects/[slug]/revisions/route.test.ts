@@ -100,6 +100,33 @@ describe("revision publishing route", () => {
     expect(mocks.putObject).toHaveBeenCalledTimes(4);
   });
 
+  it("publishes v3 dependency metadata using final stable bundle IDs", async () => {
+    const response = await POST(request({
+      sources: [new File(["a"], "a.svg", { type: "image/svg+xml" }), new File(["b"], "b.svg", { type: "image/svg+xml" })],
+      sourceBundleFileIds: ["unit-a", "unit-b"],
+      sourceDependencies: [JSON.stringify(["unit-b"]), JSON.stringify([])],
+      sourcePreviewIndexes: ["0", "1"],
+      previews: [new File(["a"], "a.png", { type: "image/png" }), new File(["b"], "b.png", { type: "image/png" })],
+    }), { params: Promise.resolve({ slug: "demo" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1]).toMatchObject({ version: 3, files: [{ id: "unit-a", dependencies: ["unit-b"] }, { id: "unit-b", dependencies: [] }] });
+  });
+
+  it("rejects invalid dependency input before uploading", async () => {
+    const response = await POST(request({
+      source: new File(["a"], "a.svg", { type: "image/svg+xml" }),
+      sourceBundleFileIds: "unit-a",
+      sourceDependencies: JSON.stringify(["missing"]),
+      sourcePreviewIndexes: "0",
+      previews: new File(["a"], "a.png", { type: "image/png" }),
+    }), { params: Promise.resolve({ slug: "demo" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Source dependencies are invalid" });
+    expect(mocks.putObject).not.toHaveBeenCalled();
+  });
+
   it("stores a finalized SVG capability and adapter provenance for an Auto selection", async () => {
     const response = await POST(request({
       sources: new File(["<svg viewBox=\"0 0 10 10\"><g /></svg>"], "hero.svg", { type: "image/svg+xml" }),
