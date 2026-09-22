@@ -171,6 +171,29 @@ describe("proposal creation route", () => {
     expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
+  it("rejects one source unit mapped to multiple target units", async () => {
+    const base = { version: 2, files: [
+      { ...baseBundle.files[0], id: "target-a" },
+      { ...baseBundle.files[0], id: "target-b", assetKey: "target-b-key" },
+      { ...baseBundle.files[0], id: "target-c", assetKey: "target-c-key" },
+    ] };
+    const source = { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-parent", assetKey: "source-parent-key", kind: "component", dependencies: ["source-shared"] },
+      { ...sourceBundle.files[0], id: "source-shared", assetKey: "source-shared-key", kind: "asset", dependencies: [] },
+    ] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? base : source));
+
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Modify units", body: "Explain", changes: [
+      { action: "MODIFY_UNIT", targetFileId: "target-a", sourceFileId: "source-parent" },
+      { action: "MODIFY_UNIT", targetFileId: "target-b", sourceFileId: "source-shared" },
+      { action: "MODIFY_UNIT", targetFileId: "target-c", sourceFileId: "source-shared" },
+    ] }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "A source unit cannot map to multiple target units." });
+    expect(mocks.createProposal).not.toHaveBeenCalled();
+  });
+
   it("creates rename and non-last removal changes without a source bundle", async () => {
     const base = { version: 2, files: [
       { id: "card", name: "Card", kind: "component", mimeType: "image/png", size: 20, assetKey: "card-key", previewKeys: [] },

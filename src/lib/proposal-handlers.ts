@@ -289,6 +289,7 @@ export async function createProjectProposal(request: Request, scope: { slug: str
         if (cause.details?.missingDependencyIds?.length) return error("Include required dependency units in this proposal.");
         if (cause.message === "Selected changes contain invalid unit dependencies") return error("Selected unit dependencies are invalid.");
         if (cause.message === "At least one unit must remain.") return error("At least one unit must remain.");
+        if (cause.message === "A source unit cannot map to multiple target units") return error("A source unit cannot map to multiple target units.");
       }
       throw cause;
     }
@@ -458,10 +459,29 @@ type SelectedUnitChange = {
 
 function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, changes: SelectedUnitChange[], allChanges: SelectedUnitChange[]) {
   const sourceFiles = new Map(source?.files.map((file) => [file.assetKey, file]) ?? []);
-  const sourceToTargetId = new Map(allChanges.flatMap((change) => {
-    const sourceFile = change.assetKey ? sourceFiles.get(change.assetKey) : undefined;
-    return sourceFile && change.targetFileId ? [[sourceFile.id, change.targetFileId] as const] : [];
-  }));
+  const sourceToTargetId = new Map<string, string>();
+  if (source?.version === 3) {
+    for (const change of allChanges) {
+      if (!change.assetKey || !change.targetFileId) continue;
+      const sourceFile = sourceFiles.get(change.assetKey);
+      if (!sourceFile) continue;
+      const existingTargetId = sourceToTargetId.get(sourceFile.id);
+      if (existingTargetId && existingTargetId !== change.targetFileId) {
+        throw new ProposalError(
+          "A source unit cannot map to multiple target units",
+          409,
+        );
+      }
+      sourceToTargetId.set(sourceFile.id, change.targetFileId);
+    }
+  } else {
+    for (const [sourceId, targetId] of allChanges.flatMap((change) => {
+      const sourceFile = change.assetKey ? sourceFiles.get(change.assetKey) : undefined;
+      return sourceFile && change.targetFileId ? [[sourceFile.id, change.targetFileId] as const] : [];
+    })) {
+      sourceToTargetId.set(sourceId, targetId);
+    }
+  }
   const dependenciesFor = (file: RevisionBundleFile) => file.dependencies!.map((id) => sourceToTargetId.get(id) ?? id);
   const files = [...latest.files];
   const changedIds = new Set<string>();

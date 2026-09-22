@@ -381,6 +381,30 @@ describe("selective proposal apply route", () => {
     expect(mocks.createRevision).not.toHaveBeenCalled();
   });
 
+  it("rejects an ambiguous source mapping shared by multiple target units", async () => {
+    const ambiguousChanges = [
+      { id: "modify-parent", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: "source-parent-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+      { id: "modify-b", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "B", targetFileId: "target-b", name: "B", newName: null, kind: "asset", mimeType: "image/png", size: 10, assetKey: "source-shared-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+      { id: "modify-c", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "C", targetFileId: "target-c", name: "C", newName: null, kind: "asset", mimeType: "image/png", size: 10, assetKey: "source-shared-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+    ];
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: ambiguousChanges } }));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-parent", assetKey: "source-parent-key", kind: "component", dependencies: ["source-shared"] },
+      { ...sourceBundle.files[0], id: "source-shared", assetKey: "source-shared-key", kind: "asset", dependencies: [] },
+    ] } : { version: 3, files: [
+      { ...latestBundle.files[0], dependencies: [] },
+      { ...latestBundle.files[1], dependencies: [] },
+      { ...latestBundle.files[0], id: "target-c", assetKey: "target-c-key", dependencies: [] },
+    ] }));
+
+    const response = await POST(request({ changeIds: ["modify-parent", "modify-b", "modify-c"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "A source unit cannot map to multiple target units" });
+    expect(mocks.putBundle).not.toHaveBeenCalled();
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
   it("requires the unselected change that supplies a missing dependency", async () => {
     const dependencyChanges = [
       { id: "add-a", type: "ADD_UNIT", action: "ADD_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: "source-a-key", reviewStatus: "APPROVED", appliedRevisionId: null },
