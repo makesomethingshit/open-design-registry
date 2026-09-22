@@ -285,7 +285,11 @@ export async function createProjectProposal(request: Request, scope: { slug: str
     try {
       selectiveBundle(baseBundle!, sourceBundle, changes, changes);
     } catch (cause) {
-      if (cause instanceof ProposalError && cause.details?.missingDependencyIds?.length) return error("Include required dependency units in this proposal.");
+      if (cause instanceof ProposalError) {
+        if (cause.details?.missingDependencyIds?.length) return error("Include required dependency units in this proposal.");
+        if (cause.message === "Selected changes contain invalid unit dependencies") return error("Selected unit dependencies are invalid.");
+      }
+      throw cause;
     }
   } else if (requestedFiles.length) {
     const targetFiles = new Map(baseBundle!.files.map((file) => [file.id, file]));

@@ -134,6 +134,43 @@ describe("proposal creation route", () => {
     expect(mocks.createProposal).toHaveBeenCalledOnce();
   });
 
+  it("rejects a valid source graph that becomes self-dependent after MODIFY remapping", async () => {
+    const base = { version: 3, files: [{ ...baseBundle.files[0], id: "target-button", dependencies: [] }] };
+    const source = { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-card", assetKey: "source-card-key", kind: "component", dependencies: ["target-button"] },
+      { ...sourceBundle.files[0], id: "target-button", assetKey: "source-button-key", kind: "component", dependencies: [] },
+    ] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? base : source));
+
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Modify button", body: "Explain", changes: [{ action: "MODIFY_UNIT", targetFileId: "target-button", sourceFileId: "source-card" }] }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Selected unit dependencies are invalid." });
+    expect(mocks.createProposal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a valid source graph whose dependencies become duplicates after remapping", async () => {
+    const base = { version: 3, files: [
+      { ...baseBundle.files[0], id: "target-a", dependencies: [] },
+      { ...baseBundle.files[0], id: "target-b", assetKey: "target-b-key", dependencies: [] },
+    ] };
+    const source = { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-a", assetKey: "source-a-key", kind: "component", dependencies: ["source-b", "target-b"] },
+      { ...sourceBundle.files[0], id: "source-b", assetKey: "source-b-key", kind: "component", dependencies: [] },
+      { ...sourceBundle.files[0], id: "target-b", assetKey: "existing-b-key", kind: "component", dependencies: [] },
+    ] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? base : source));
+
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Modify units", body: "Explain", changes: [
+      { action: "MODIFY_UNIT", targetFileId: "target-a", sourceFileId: "source-a" },
+      { action: "MODIFY_UNIT", targetFileId: "target-b", sourceFileId: "source-b" },
+    ] }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Selected unit dependencies are invalid." });
+    expect(mocks.createProposal).not.toHaveBeenCalled();
+  });
+
   it("creates rename and non-last removal changes without a source bundle", async () => {
     const base = { version: 2, files: [
       { id: "card", name: "Card", kind: "component", mimeType: "image/png", size: 20, assetKey: "card-key", previewKeys: [] },
