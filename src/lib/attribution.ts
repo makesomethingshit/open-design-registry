@@ -89,8 +89,10 @@ type RevisionAttributionInput = {
 export function revisionAttribution(revision: RevisionAttributionInput, userId?: string) {
   const proposal = revision.appliedProposal && isVisible(revision.appliedProposal, userId) ? revision.appliedProposal : null;
   const reviewers = new Map<string, Person>();
-  for (const change of revision.appliedChanges) {
-    if (change.appliedRevisionId === revision.id && change.reviewedBy) reviewers.set(change.reviewedBy.id, change.reviewedBy);
+  if (proposal) {
+    for (const change of revision.appliedChanges) {
+      if (change.appliedRevisionId === revision.id && change.reviewedBy) reviewers.set(change.reviewedBy.id, change.reviewedBy);
+    }
   }
   return {
     publisher: revision.publishedBy,

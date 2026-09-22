@@ -151,13 +151,15 @@ describe("Revision provenance", () => {
         title: "Private Proposal",
         sourceRevision: { isPublished: true, project: { ownerId: "source-owner", isPublic: false } },
       },
-      appliedChanges: [change("secret", "Secret change", "r14")],
+      appliedChanges: [{ ...change("secret", "Secret change", "r14"), reviewedBy: { id: "secret-reviewer", name: "Secret reviewer" } }],
     });
 
     expect(markup).not.toContain("Private Proposal");
     expect(markup).not.toContain("Proposal #32");
     expect(markup).not.toContain("Secret change");
     expect(markup).not.toContain("Contributor</dd>");
+    expect(markup).not.toContain("Secret reviewer");
+    expect(markup).not.toContain("Reviewed by");
     expect(markup).toContain("Contribution provenance is not available to this viewer.");
   });
 

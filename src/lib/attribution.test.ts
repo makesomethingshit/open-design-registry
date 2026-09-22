@@ -80,11 +80,12 @@ describe("revision attribution", () => {
       id: "r5",
       publishedBy: null,
       appliedProposal: { ...visibleProposal, sourceRevision: { isPublished: true, project: { ownerId: "bob", isPublic: false } } },
-      appliedChanges: [],
+      appliedChanges: [{ id: "a", appliedRevisionId: "r5", reviewedBy: carol }],
     }, "viewer");
 
     expect(attribution.publisher).toBeNull();
     expect(attribution.contributor).toBeNull();
     expect(attribution.proposal).toBeNull();
+    expect(attribution.reviewers).toEqual([]);
   });
 });
