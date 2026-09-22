@@ -11,6 +11,13 @@ describe("proposal unit conflict checks", () => {
     expect(conflictForChange(change, { version: 2, files: [file("home", "a")] }, { version: 2, files: [file("home", "b")] })).toMatchObject({ status: "CONFLICT", reason: "Source content changed upstream." });
   });
 
+  it("treats dependency mutations as conflicts and upstream unit changes", () => {
+    const before = { version: 3 as const, files: [{ ...file("home", "a"), dependencies: ["token"] }, { ...file("token", "b"), dependencies: [] }] };
+    const after = { version: 3 as const, files: [{ ...file("home", "a"), dependencies: [] }, { ...file("token", "b"), dependencies: [] }] };
+    expect(conflictForChange(change, before, after)).toEqual({ status: "CONFLICT", reason: "Unit dependencies changed upstream." });
+    expect(changedUnitIds(before, after, null)).toEqual(["home"]);
+  });
+
   it("does not infer no-conflict for legacy units without checksums", () => {
     expect(conflictForChange(change, { version: 1, files: [file("home")] }, { version: 1, files: [file("home")] })).toMatchObject({ status: "CHECK_UNAVAILABLE" });
     expect(conflictForChange(change, { version: 1, files: [file("home")] }, { version: 1, files: [file("home", undefined, "Landing")] })).toMatchObject({ status: "CONFLICT", reason: "Unit metadata changed upstream." });

@@ -12,10 +12,12 @@ export type RevisionBundleFile = {
   previewKeys: string[];
   /** SHA-256 of the immutable source bytes. Absent on legacy bundles. */
   checksum?: string;
+  /** Stable unit IDs required by this unit. Defined only for v3 bundles. */
+  dependencies?: string[];
 };
 
-export type RevisionBundle = { version: 1 | 2; files: RevisionBundleFile[] };
-export type RevisionUnit = Pick<RevisionBundleFile, "id" | "name" | "kind" | "mimeType" | "size" | "checksum">;
+export type RevisionBundle = { version: 1 | 2 | 3; files: RevisionBundleFile[] };
+export type RevisionUnit = Pick<RevisionBundleFile, "id" | "name" | "kind" | "mimeType" | "size" | "checksum" | "dependencies">;
 export type DetectedUnitChange = {
   action: "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
   targetFileId?: string;
@@ -42,7 +44,7 @@ export function detectUnitChanges(base: { files: readonly RevisionUnit[] } | nul
     const sourceFile = sourceById.get(target.id);
     if (!sourceFile) {
       changes.push({ action: "REMOVE_UNIT", targetFileId: target.id, name: target.name, kind: target.kind });
-    } else if (target.checksum && sourceFile.checksum && target.checksum !== sourceFile.checksum) {
+    } else if (!sameDependencySet(target.dependencies, sourceFile.dependencies) || (target.checksum && sourceFile.checksum && target.checksum !== sourceFile.checksum)) {
       changes.push({ action: "MODIFY_UNIT", targetFileId: target.id, sourceFileId: sourceFile.id, name: target.name, kind: target.kind });
     } else if (target.name !== sourceFile.name) {
       changes.push({ action: "RENAME_UNIT", targetFileId: target.id, name: target.name, kind: target.kind, newName: sourceFile.name });
@@ -54,6 +56,28 @@ export function detectUnitChanges(base: { files: readonly RevisionUnit[] } | nul
     if (!targetIds.has(sourceFile.id) && sourceFile.kind) changes.push({ action: "ADD_UNIT", sourceFileId: sourceFile.id, name: sourceFile.name, kind: sourceFile.kind });
   }
   return changes;
+}
+
+export function sameDependencySet(left?: readonly string[], right?: readonly string[]) {
+  const a = new Set(left ?? []);
+  const b = new Set(right ?? []);
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
+export function dependencyClosure(bundle: RevisionBundle, rootIds: readonly string[]) {
+  const visited = new Set(rootIds);
+  if (bundle.version !== 3) return visited;
+  const files = new Map(bundle.files.map((file) => [file.id, file]));
+  const pending = [...rootIds];
+  while (pending.length) {
+    for (const id of files.get(pending.pop()!)?.dependencies ?? []) {
+      if (!visited.has(id)) {
+        visited.add(id);
+        pending.push(id);
+      }
+    }
+  }
+  return visited;
 }
 
 export function sanitizeUnitName(value: string) {
@@ -81,9 +105,14 @@ function isBundleFile(value: unknown): value is RevisionBundleFile {
 }
 
 function normalize(bundle: RevisionBundle): RevisionBundle | null {
-  if ((bundle.version !== 1 && bundle.version !== 2) || !Array.isArray(bundle.files) || !bundle.files.length || !bundle.files.every(isBundleFile)) return null;
+  if (![1, 2, 3].includes(bundle.version) || !Array.isArray(bundle.files) || !bundle.files.length || !bundle.files.every(isBundleFile)) return null;
   const ids = new Set(bundle.files.map((file) => file.id));
-  return ids.size === bundle.files.length ? bundle : null;
+  if (ids.size !== bundle.files.length) return null;
+  if (bundle.version !== 3) return bundle.files.every((file) => file.dependencies === undefined) ? bundle : null;
+  const validDependencies = bundle.files.every((file) => Array.isArray(file.dependencies)
+    && file.dependencies.every((id) => typeof id === "string" && Boolean(id) && id !== file.id && ids.has(id))
+    && new Set(file.dependencies).size === file.dependencies.length);
+  return validDependencies ? bundle : null;
 }
 
 export function encodeRevisionBundle(bundle: RevisionBundle) {
@@ -131,5 +160,8 @@ export async function putRevisionBundle(key: string, bundle: RevisionBundle) {
 }
 
 export function publicBundleFiles(bundle: RevisionBundle | null) {
-  return bundle?.files.map(({ id, name, kind, mimeType, size }) => kind === undefined ? { id, name, mimeType, size } : { id, name, kind, mimeType, size }) ?? [];
+  return bundle?.files.map(({ id, name, kind, mimeType, size, dependencies }) => ({
+    ...(kind === undefined ? { id, name, mimeType, size } : { id, name, kind, mimeType, size }),
+    ...(bundle.version === 3 ? { dependencies: dependencies! } : {}),
+  })) ?? [];
 }

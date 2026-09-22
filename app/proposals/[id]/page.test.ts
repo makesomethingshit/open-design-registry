@@ -9,7 +9,7 @@ vi.mock("@/src/lib/prisma", () => ({ prisma: { revision: { findFirst: mocks.find
 vi.mock("@/src/lib/proposal-handlers", () => ({ findVisibleProposal: mocks.findProposal }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
-vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle }));
+vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle, sameDependencySet: (left: string[] = [], right: string[] = []) => left.length === right.length && left.every((id) => right.includes(id)) }));
 vi.mock("@/src/lib/ui/status-presentation", () => ({ proposalStatusPresentation: mocks.proposalStatus }));
 vi.mock("./proposal-review", () => ({ default: mocks.review }));
 

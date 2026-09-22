@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), fin
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findFirst: mocks.findBase, findUnique: mocks.findSource }, issue: { findFirst: mocks.findIssue }, proposal: { create: mocks.createProposal, findMany: mocks.findMany, count: mocks.count }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
-vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle, normalizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() || null }));
+vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle, normalizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() || null, sameDependencySet: (left: string[] = [], right: string[] = []) => left.length === right.length && left.every((id) => right.includes(id)) }));
 
 const { GET, POST } = await import("./route");
 
@@ -97,6 +97,41 @@ describe("proposal creation route", () => {
     expect(created[0]).toMatchObject({ targetFileId: "card", newName: "Project Card", kind: "component" });
     expect(created[3]).toMatchObject({ name: "Hero", kind: "artboard" });
     expect(created[3].targetFileId).not.toBe("hero");
+  });
+
+  it("rejects a proposal whose requested units leave a dependency missing", async () => {
+    const base = { version: 2, files: [{ ...baseBundle.files[0], id: "existing" }] };
+    const source = { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-a", assetKey: "source-a-key", kind: "component", dependencies: ["source-b"] },
+      { ...sourceBundle.files[0], id: "source-b", assetKey: "source-b-key", kind: "asset", dependencies: [] },
+    ] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? base : source));
+
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Add A", body: "Explain", changes: [{ action: "ADD_UNIT", sourceFileId: "source-a" }] }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Include required dependency units in this proposal." });
+    expect(mocks.createProposal).not.toHaveBeenCalled();
+  });
+
+  it("accepts a dependency included in the proposal or already in the target", async () => {
+    const source = { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-a", assetKey: "source-a-key", kind: "component", dependencies: ["source-b"] },
+      { ...sourceBundle.files[0], id: "source-b", assetKey: "source-b-key", kind: "asset", dependencies: [] },
+    ] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? { version: 2, files: [{ ...baseBundle.files[0], id: "existing" }] } : source));
+    const included = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Add A and B", body: "Explain", changes: [{ action: "ADD_UNIT", sourceFileId: "source-a" }, { action: "ADD_UNIT", sourceFileId: "source-b" }] }), { params: Promise.resolve({ slug: "target" }) });
+    expect(included.status).toBe(201);
+
+    mocks.createProposal.mockClear();
+    const sourceWithExistingId = { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-a", assetKey: "source-a-key", kind: "component", dependencies: ["target-b"] },
+      { ...sourceBundle.files[0], id: "target-b", assetKey: "source-b-key", kind: "asset", dependencies: [] },
+    ] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? { version: 3, files: [{ ...baseBundle.files[0], id: "target-b", dependencies: [] }] } : sourceWithExistingId));
+    const existing = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Add A", body: "Explain", changes: [{ action: "ADD_UNIT", sourceFileId: "source-a" }] }), { params: Promise.resolve({ slug: "target" }) });
+    expect(existing.status).toBe(201);
+    expect(mocks.createProposal).toHaveBeenCalledOnce();
   });
 
   it("creates rename and non-last removal changes without a source bundle", async () => {

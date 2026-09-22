@@ -1,4 +1,4 @@
-import type { RevisionBundle, RevisionBundleFile } from "./revision-bundle";
+import { sameDependencySet, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 
 export type ConflictStatus = "NO_CONFLICT" | "CONFLICT" | "CHECK_UNAVAILABLE";
 
@@ -33,6 +33,7 @@ export function conflictForChange(change: ConflictChange, base: RevisionBundle |
   }
   if (!baseFile) return unavailable("Comparison data is unavailable.");
   if (!latestFile) return conflict("This unit was removed from the latest revision.");
+  if (!sameDependencySet(baseFile.dependencies, latestFile.dependencies)) return conflict("Unit dependencies changed upstream.");
   if (baseFile.checksum && latestFile.checksum) {
     return baseFile.checksum === latestFile.checksum
       ? noConflict()
@@ -52,6 +53,6 @@ export function changedUnitIds(before: RevisionBundle, after: RevisionBundle, ta
     const left = previous.get(id);
     const right = next.get(id);
     if (!left || !right) return Boolean(left || right);
-    return Boolean(left.checksum && right.checksum && left.checksum !== right.checksum);
+    return !sameDependencySet(left.dependencies, right.dependencies) || Boolean(left.checksum && right.checksum && left.checksum !== right.checksum);
   });
 }

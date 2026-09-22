@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), tra
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: mocks.deleteObject }));
-vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle, putRevisionBundle: mocks.putBundle, normalizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() || null }));
+vi.mock("@/src/lib/revision-bundle", () => ({ readRevisionBundle: mocks.readBundle, putRevisionBundle: mocks.putBundle, normalizeUnitName: (value: string) => value.trim().replace(/[\\/\"\u0000-\u001f\u007f]/g, "-").trim() || null, sameDependencySet: (left: string[] = [], right: string[] = []) => left.length === right.length && left.every((id) => right.includes(id)) }));
 
 const { POST } = await import("./route");
 
@@ -379,6 +379,110 @@ describe("selective proposal apply route", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: expect.stringMatching(/at least one unit/i) });
     expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("requires the unselected change that supplies a missing dependency", async () => {
+    const dependencyChanges = [
+      { id: "add-a", type: "ADD_UNIT", action: "ADD_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: "source-a-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+      { id: "add-b", type: "ADD_UNIT", action: "ADD_UNIT", target: "B", targetFileId: "target-b", name: "B", newName: null, kind: "asset", mimeType: "image/png", size: 10, assetKey: "source-b-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+    ];
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: dependencyChanges } }));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? { version: 3, files: [
+      { ...sourceBundle.files[0], kind: "component", dependencies: ["source-b"] },
+      { ...sourceBundle.files[1], kind: "asset", dependencies: [] },
+    ] } : { version: 2, files: [{ ...latestBundle.files[0], id: "existing" }] }));
+
+    const response = await POST(request({ changeIds: ["add-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "Selected changes require additional dependency changes", requiredChangeIds: ["add-b"], missingDependencyIds: ["target-b"] });
+    expect(mocks.putBundle).not.toHaveBeenCalled();
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("remaps source dependency IDs when dependent units are applied together", async () => {
+    const dependencyChanges = [
+      { id: "add-a", type: "ADD_UNIT", action: "ADD_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: "source-a-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+      { id: "add-b", type: "ADD_UNIT", action: "ADD_UNIT", target: "B", targetFileId: "target-b", name: "B", newName: null, kind: "asset", mimeType: "image/png", size: 10, assetKey: "source-b-key", reviewStatus: "APPROVED", appliedRevisionId: null },
+    ];
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: dependencyChanges } }));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? { version: 3, files: [
+      { ...sourceBundle.files[0], kind: "component", dependencies: ["source-b"] },
+      { ...sourceBundle.files[1], kind: "asset", dependencies: [] },
+    ] } : { version: 2, files: [{ ...latestBundle.files[0], id: "existing" }] }));
+
+    const response = await POST(request({ changeIds: ["add-a", "add-b"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(201);
+    const bundle = mocks.putBundle.mock.calls[0][1];
+    expect(bundle.version).toBe(3);
+    expect(bundle.files.find((file: { id: string }) => file.id === "target-a").dependencies).toEqual(["target-b"]);
+    expect(bundle.files.find((file: { id: string }) => file.id === "existing").dependencies).toEqual([]);
+  });
+
+  it("accepts a dependency already present under its final stable ID", async () => {
+    const addA = { id: "add-a", type: "ADD_UNIT", action: "ADD_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: "source-a-key", reviewStatus: "APPROVED", appliedRevisionId: null };
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: [addA] } }));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? { version: 3, files: [
+      { ...sourceBundle.files[0], kind: "component", dependencies: ["target-b"] },
+      { ...sourceBundle.files[1], id: "target-b", kind: "asset", dependencies: [] },
+    ] } : { version: 3, files: [{ ...latestBundle.files[1], dependencies: [] }] }));
+
+    const response = await POST(request({ changeIds: ["add-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1].files.find((file: { id: string }) => file.id === "target-a").dependencies).toEqual(["target-b"]);
+  });
+
+  it("reuses the reserved dependency ID after that dependency was applied earlier", async () => {
+    const addA = { id: "add-a", type: "ADD_UNIT", action: "ADD_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: "source-a-key", reviewStatus: "APPROVED", appliedRevisionId: null };
+    const appliedB = { id: "add-b", type: "ADD_UNIT", action: "ADD_UNIT", target: "B", targetFileId: "target-b", name: "B", newName: null, kind: "asset", mimeType: "image/png", size: 10, assetKey: "source-b-key", reviewStatus: "APPROVED", appliedRevisionId: "revision-10" };
+    mocks.findProposal.mockResolvedValue(proposal({ status: "PARTIALLY_ACCEPTED", changeSet: { id: "set", changes: [addA, appliedB] } }));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? { version: 3, files: [
+      { ...sourceBundle.files[0], kind: "component", dependencies: ["source-b"] },
+      { ...sourceBundle.files[1], kind: "asset", dependencies: [] },
+    ] } : { version: 3, files: [{ ...latestBundle.files[1], dependencies: [] }] }));
+
+    const response = await POST(request({ changeIds: ["add-a"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1].files.find((file: { id: string }) => file.id === "target-a").dependencies).toEqual(["target-b"]);
+  });
+
+  it("blocks removing a required dependency but allows removing its dependent too", async () => {
+    const removeA = { id: "remove-a", type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: "A", targetFileId: "target-a", name: "A", newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: null, reviewStatus: "APPROVED", appliedRevisionId: null };
+    const removeB = { id: "remove-b", type: "REMOVE_UNIT", action: "REMOVE_UNIT", target: "B", targetFileId: "target-b", name: "B", newName: null, kind: "asset", mimeType: "image/png", size: 10, assetKey: null, reviewStatus: "APPROVED", appliedRevisionId: null };
+    const current = { version: 3, files: [
+      { ...latestBundle.files[0], dependencies: ["target-b"] },
+      { ...latestBundle.files[1], dependencies: [] },
+      { ...latestBundle.files[0], id: "other", dependencies: [] },
+    ] };
+    mocks.findProposal.mockResolvedValue(proposal({ sourceRevision: { ...proposal().sourceRevision, sourceKey: null }, changeSet: { id: "set", changes: [removeA, removeB] } }));
+    mocks.readBundle.mockResolvedValue(current);
+
+    const blocked = await POST(request({ changeIds: ["remove-b"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({ missingDependencyIds: ["target-b"] });
+    expect(mocks.putBundle).not.toHaveBeenCalled();
+
+    const allowed = await POST(request({ changeIds: ["remove-a", "remove-b"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(allowed.status).toBe(201);
+    expect(mocks.putBundle.mock.calls[0][1].files.map((file: { id: string }) => file.id)).toEqual(["other"]);
+  });
+
+  it("follows transitive dependencies when reporting required changes", async () => {
+    const dependencyChanges = ["a", "b", "c"].map((id) => ({ id: `add-${id}`, type: "ADD_UNIT", action: "ADD_UNIT", target: id.toUpperCase(), targetFileId: `target-${id}`, name: id.toUpperCase(), newName: null, kind: "component", mimeType: "image/png", size: 10, assetKey: `source-${id}-key`, reviewStatus: "APPROVED", appliedRevisionId: null }));
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: dependencyChanges } }));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "source-bundle" ? { version: 3, files: [
+      { ...sourceBundle.files[0], id: "source-a", assetKey: "source-a-key", kind: "component", dependencies: ["source-b"] },
+      { ...sourceBundle.files[1], id: "source-b", assetKey: "source-b-key", kind: "component", dependencies: ["source-c"] },
+      { ...sourceBundle.files[0], id: "source-c", assetKey: "source-c-key", kind: "asset", dependencies: [] },
+    ] } : { version: 2, files: [{ ...latestBundle.files[0], id: "existing" }] }));
+
+    const response = await POST(request({ changeIds: ["add-a", "add-b"] }), { params: Promise.resolve({ id: "proposal" }) });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ requiredChangeIds: ["add-c"], missingDependencyIds: ["target-c"] });
   });
 
   it("returns an existing result instead of creating a duplicate revision", async () => {
