@@ -256,6 +256,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const stagedRevision = await tx.revision.create({
         data: {
           projectId: project.id, number: (latest?.number ?? 0) + 1, parentId, title,
+          publishedById: session.user.id,
           changeDescription,
           license: lockedProject.license,
           sourceKey: publishedSourceKey, sourceUrl,

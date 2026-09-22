@@ -33,6 +33,7 @@ describePostgres("Revision PostgreSQL constraints", () => {
     expect(revisions).toHaveLength(2);
     expect(revisions[0].parentId).toBeNull();
     expect(revisions[1].parentId).toBe(revisions[0].id);
+    expect(revisions.every((revision) => revision.publishedById === null)).toBe(true);
 
     await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "title", "changeDescription", "sourceKey", "sourceUrl") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 99, 'Invalid', 'Invalid', 'both-key', 'https://example.test/both')`).rejects.toThrow();
     await expect(prisma.$executeRaw`INSERT INTO "Revision" ("id", "projectId", "number", "title", "changeDescription") VALUES (${`revision-test-${crypto.randomUUID()}`}, ${projectId}, 100, 'Invalid', 'Invalid')`).rejects.toThrow();

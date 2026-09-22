@@ -102,6 +102,7 @@ describe("revision restore route", () => {
     expect(mocks.createRevision).toHaveBeenCalledWith({
       data: {
         projectId: "project",
+        publishedById: "owner",
         number: 3,
         parentId: "revision-2",
         title: "Restored: First design",

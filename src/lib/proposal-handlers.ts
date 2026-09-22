@@ -60,7 +60,7 @@ export function isVisible(proposal: ProposalVisibility, userId?: string) {
     && canReadProject(proposal.sourceRevision.project, userId);
 }
 
-function visibleProposalWhere(projectId: string, userId?: string): Prisma.ProposalWhereInput {
+export function visibleProposalWhere(projectId: string, userId?: string): Prisma.ProposalWhereInput {
   return {
     projectId,
     baseRevision: { projectId, isPublished: true },
@@ -556,6 +556,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         const stagedRevision = await tx.revision.create({
           data: {
             projectId: initial.projectId,
+            publishedById: session.user.id,
             number: latest.number + 1,
             parentId: latest.id,
             title: `Accepted: ${proposal.title}`.slice(0, 120),
@@ -611,6 +612,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       const stagedRevision = await tx.revision.create({
         data: {
           projectId: initial.projectId,
+          publishedById: session.user.id,
           number: latest.number + 1,
           parentId: latest.id,
           title: `Accepted: ${proposal.title}`.slice(0, 120),

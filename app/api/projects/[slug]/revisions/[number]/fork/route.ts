@@ -42,6 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const staged = await tx.revision.create({
         data: {
           projectId: project.id, number: 1, title: revision.title,
+          publishedById: session.user.id,
           changeDescription: `Forked from Revision ${revision.number} of ${source.slug}`.slice(0, 500),
           license, sourceKey: revision.sourceKey, sourceUrl: revision.sourceUrl,
           tool: revision.tool, toolVersion: revision.toolVersion, tags: revision.tags,

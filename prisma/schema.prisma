@@ -27,6 +27,7 @@ model User {
   proposalsAccepted Proposal[] @relation("ProposalAcceptor")
   changeReviews Change[] @relation("ChangeReviewer")
   changeReviewHistory ChangeReview[] @relation("ChangeReviewAuthor")
+  publishedRevisions Revision[] @relation("RevisionPublisher")
   proposalComments ProposalComment[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCreated Notification[] @relation("NotificationActor")
@@ -157,6 +158,8 @@ model Revision {
   adapterMaturity String?
   isPublished Boolean   @default(true)
   createdAt  DateTime  @default(now())
+  publishedById String?
+  publishedBy User? @relation("RevisionPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
   project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent     Revision? @relation("RevisionParent", fields: [parentId], references: [id], onDelete: Restrict)
   children   Revision[] @relation("RevisionParent")
@@ -178,6 +181,7 @@ model Revision {
   @@index([parentId])
   @@index([tool, createdAt])
   @@index([tags], type: Gin)
+  @@index([publishedById])
 }
 
 enum IssueStatus {

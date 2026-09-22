@@ -44,7 +44,7 @@ describe("revision fork route", () => {
     expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ revisions: expect.objectContaining({ where: { number: 2, isPublished: true } }) }) }));
     expect(mocks.createProject).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ license: "CC BY 4.0", forkedFromLicense: "CC BY 4.0", forkedFromRevisionId: "revision" }) }));
     expect(mocks.createRevision).toHaveBeenCalledWith({ data: {
-      projectId: "fork", number: 1, title: "Original", changeDescription: "Forked from Revision 2 of demo",
+      projectId: "fork", publishedById: "forker", number: 1, title: "Original", changeDescription: "Forked from Revision 2 of demo",
       license: "CC BY 4.0", sourceKey: revision.sourceKey, sourceUrl: null,
       tool: "penpot", toolVersion: "2", tags: ["poster"], sourceChecksum: revision.sourceChecksum,
       capabilityMode: "STRUCTURED", capabilityUnitCount: 2, adapterId: "svg", adapterVersion: "0.4", adapterConfidence: "LOW", adapterMaturity: "beta",

@@ -42,5 +42,10 @@
 .forkList li { display: grid; gap: var(--odr-space-1); padding: var(--odr-space-4) 0; border-bottom: var(--odr-border-width) solid var(--odr-border-subtle); }
 .forkList a { color: var(--odr-text-primary); font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); text-decoration: underline; text-underline-offset: 0.15em; }
 .forkList p, .forkList span { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); overflow-wrap: anywhere; }
+.contributorList { display: grid; padding: 0; margin: 0; list-style: none; border-top: var(--odr-border-width) solid var(--odr-border-subtle); }
+.contributorList li { display: flex; align-items: center; justify-content: space-between; gap: var(--odr-space-3); padding: var(--odr-space-4) 0; border-bottom: var(--odr-border-width) solid var(--odr-border-subtle); }
+.contributorList strong { display: block; color: var(--odr-text-primary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); }
+.contributorList li > span { color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); text-align: right; }
+.contributorRoles { display: flex; flex-wrap: wrap; gap: var(--odr-space-1); margin-top: var(--odr-space-2); }
 
-@media (max-width: 48rem) { .overviewGrid { grid-template-columns: 1fr; gap: var(--odr-space-5); } .artwork { min-height: 20rem; padding: var(--odr-space-4); } .artwork img { max-height: 32rem; } .activityGrid { grid-template-columns: 1fr; gap: var(--odr-space-5); } .sectionHeader, .activity header { align-items: start; flex-direction: column; } .secondaryLink { min-height: var(--odr-control-lg); } }
+@media (max-width: 48rem) { .overviewGrid { grid-template-columns: 1fr; gap: var(--odr-space-5); } .artwork { min-height: 20rem; padding: var(--odr-space-4); } .artwork img { max-height: 32rem; } .activityGrid { grid-template-columns: 1fr; gap: var(--odr-space-5); } .sectionHeader, .activity header, .contributorList li { align-items: start; flex-direction: column; } .contributorList li > span { text-align: left; } .secondaryLink { min-height: var(--odr-control-lg); } }

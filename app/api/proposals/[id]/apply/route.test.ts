@@ -86,7 +86,7 @@ describe("selective proposal apply route", () => {
   it("publishes one bundle revision for selected approved files and preserves unapplied review state", async () => {
     const response = await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) });
     expect(response.status).toBe(201);
-    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: "target", number: 11, parentId: "base", sourceUrl: null, sourceProposalId: "proposal", sourceChecksum: "b".repeat(64), isPublished: false }) }));
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: "target", publishedById: "owner", number: 11, parentId: "base", sourceUrl: null, sourceProposalId: "proposal", sourceChecksum: "b".repeat(64), isPublished: false }) }));
     expect(mocks.putBundle).toHaveBeenCalledOnce();
     expect(mocks.updateChanges).toHaveBeenCalledWith({ where: { id: { in: ["change-a"] } }, data: { appliedRevisionId: "revision-11" } });
     expect(mocks.updateChanges).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reviewStatus: "PENDING" }) }));
@@ -178,6 +178,7 @@ describe("selective proposal apply route", () => {
     mocks.findChangeSets.mockResolvedValue([{ proposalId: "other-proposal", changes: [{ reviewStatus: "PENDING", appliedRevisionId: null }] }]);
 
     const response = await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publishedById: "owner", sourceProposalId: "proposal" }) }));
 
     expect(response.status).toBe(201);
     expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ targetFileId: { in: ["changed", "removed"] } }) }));

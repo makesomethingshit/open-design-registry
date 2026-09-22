@@ -31,6 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const stagedRevision = await tx.revision.create({
         data: {
           projectId: project.id,
+          publishedById: session.user.id,
           number: (latest?.number ?? 0) + 1,
           parentId: latest?.id,
           title: `Restored: ${source.title}`.slice(0, 120),

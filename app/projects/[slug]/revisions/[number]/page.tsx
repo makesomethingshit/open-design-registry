@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/src/lib/prisma";
-import { changeSummary, isVisible } from "@/src/lib/proposal-handlers";
+import { revisionAttribution } from "@/src/lib/attribution";
+import { changeSummary } from "@/src/lib/proposal-handlers";
 import { revisionUrlSchema } from "@/src/lib/project-validation";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
 import { Tag } from "@/src/components/ui/badge";
-import { FormColumn, PageGrid, ReadingColumn } from "@/src/components/ui/layout";
+import { FormColumn, PageGrid, Panel, ReadingColumn } from "@/src/components/ui/layout";
 import CapabilityBadge from "@/app/capability-badge";
 import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
@@ -29,6 +30,7 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
     where: { projectId_number: { projectId: project.id, number: revisionNumber } },
     include: {
       previews: { orderBy: [{ position: "asc" }, { key: "asc" }] },
+      publishedBy: { select: { id: true, name: true } },
       parent: { include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } },
       appliedProposal: {
         select: {
@@ -38,19 +40,20 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
           project: { select: { id: true, ownerId: true, isPublic: true } },
           baseRevision: { select: { projectId: true, isPublished: true } },
           sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } },
-          author: { select: { name: true } },
+          author: { select: { id: true, name: true } },
         },
       },
       appliedChanges: {
         orderBy: { createdAt: "asc" },
-        select: { id: true, appliedRevisionId: true, type: true, action: true, target: true, name: true, newName: true, kind: true },
+        select: { id: true, appliedRevisionId: true, type: true, action: true, target: true, name: true, newName: true, kind: true, reviewedBy: { select: { id: true, name: true } } },
       },
       rightsDeclarations: { orderBy: { version: "desc" }, take: 1, include: { items: true } },
     },
   });
   if (!revision?.isPublished) notFound();
   const previous = revision.parent;
-  const appliedProposal = revision.appliedProposal && isVisible(revision.appliedProposal, session?.user.id) ? revision.appliedProposal : null;
+  const attribution = revisionAttribution(revision, session?.user.id);
+  const appliedProposal = attribution.proposal ? revision.appliedProposal : null;
   const appliedChanges = revision.sourceProposalId && !appliedProposal
     ? []
     : (revision.appliedChanges ?? []).filter((change) => change.appliedRevisionId === revision.id);
@@ -80,13 +83,18 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
       <article className="detail">
     <p className="meta"><Link href={`/projects/${project.slug}`}>{project.title}</Link> · Revision {revision.number}</p>
     <h1 id="revision-heading">{revision.title}</h1>
-    <p className="meta">Published by {project.owner.name} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
+    <p className="meta">{attribution.publisher ? `Published by ${attribution.publisher.name}` : "Publisher not recorded"} · <time dateTime={revision.createdAt.toISOString()}>{revision.createdAt.toLocaleString("ko-KR")}</time></p>
     <p>{revision.changeDescription}</p>
     <CapabilityBadge mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} label={`Revision ${revision.number}`} adapterId={revision.adapterId} adapterVersion={revision.adapterVersion} adapterConfidence={revision.adapterConfidence} adapterMaturity={revision.adapterMaturity} />
     {revision.tags.length > 0 && <div aria-label="Revision tags">{revision.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</div>}
     <p className="meta">Revision license: {revision.license ?? "Not recorded for this legacy revision"}</p>
     {!revision.license && <p className="meta">The original publication license is unknown. Forking uses the current project license ({project.license}); confirm your rights before continuing.</p>}
     <SourceRights slug={project.slug} number={revision.number} revisionLicense={revision.license} sourceHref={sourceHref} sourceFiles={sourceFiles} tool={revision.tool} toolVersion={revision.toolVersion} sourceChecksum={revision.sourceChecksum} declaration={declaration} isOwner={session?.user.id === project.ownerId} />
+    <Panel aria-labelledby="revision-attribution"><h2 id="revision-attribution">Attribution</h2><dl>
+      <div><dt>Published by</dt><dd>{attribution.publisher?.name ?? "Publisher not recorded"}</dd></div>
+      {revision.sourceProposalId && <div><dt>Contribution</dt><dd>{attribution.contributor && attribution.proposal ? <>{attribution.contributor.name} <span aria-hidden="true">·</span> <Link href={`/proposals/${attribution.proposal.id}`}>Proposal #{attribution.proposal.proposalNumber}</Link></> : "Contribution provenance is not available to this viewer."}</dd></div>}
+      {attribution.reviewers.length > 0 && <div><dt>Reviewed by</dt><dd>{attribution.reviewers.map((reviewer) => reviewer.name).join(", ")}</dd></div>}
+    </dl></Panel>
     {hasProvenance && <section aria-labelledby="revision-provenance"><h2 id="revision-provenance">Provenance</h2><dl>
       {previous && <div><dt>Created from</dt><dd><Link href={`/projects/${project.slug}/revisions/${previous.number}`}>Revision {previous.number}</Link></dd></div>}
       {appliedProposal && <div><dt>Applied from</dt><dd><Link href={`/proposals/${appliedProposal.id}`}>Proposal #{appliedProposal.proposalNumber} · {appliedProposal.title}</Link>{appliedProposal.author?.name && <span className="meta"> by {appliedProposal.author.name}</span>}</dd></div>}

@@ -60,6 +60,8 @@ function revision(overrides: Record<string, unknown> = {}) {
     adapterVersion: null,
     adapterConfidence: null,
     adapterMaturity: null,
+    publishedById: "publisher",
+    publishedBy: { id: "publisher", name: "Actual publisher" },
     isPublished: true,
     createdAt: new Date("2026-09-10T00:00:00Z"),
     previews: [],
@@ -71,9 +73,13 @@ function revision(overrides: Record<string, unknown> = {}) {
       project: { id: "project", ownerId: "owner", isPublic: true },
       baseRevision: { projectId: "project", isPublished: true },
       sourceRevision: { isPublished: true, project: { ownerId: "source-owner", isPublic: true } },
-      author: { name: "Contributor" },
+      author: { id: "contributor", name: "Contributor" },
     },
-    appliedChanges: [change("change-a", "A", "r14"), change("change-b", "B", "r14", "MODIFY_UNIT"), change("change-c", "C", "r13")],
+    appliedChanges: [
+      { ...change("change-a", "A", "r14"), reviewedBy: { id: "reviewer", name: "Reviewer" } },
+      { ...change("change-b", "B", "r14", "MODIFY_UNIT"), reviewedBy: { id: "reviewer", name: "Reviewer" } },
+      { ...change("change-c", "C", "r13"), reviewedBy: { id: "other-reviewer", name: "Other reviewer" } },
+    ],
     ...overrides,
   };
 }
@@ -88,6 +94,28 @@ async function renderRevision(session: unknown, overrides: Record<string, unknow
 
 describe("Revision provenance", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("attributes publication to the revision publisher instead of the project owner", async () => {
+    const markup = await renderRevision(null);
+
+    expect(markup).toContain("Published by Actual publisher");
+    expect(markup).not.toContain("Published by Project owner");
+  });
+
+  it("renders a legacy revision without inventing a publisher", async () => {
+    const markup = await renderRevision(null, { publishedById: null, publishedBy: null });
+
+    expect(markup).toContain("Publisher not recorded");
+    expect(markup).not.toContain("Published by Project owner");
+  });
+
+  it("deduplicates final reviewers applied to this revision", async () => {
+    const markup = await renderRevision(null);
+
+    expect(markup.match(/Reviewed by/g)).toHaveLength(1);
+    expect(markup).toContain("<dd>Reviewer</dd>");
+    expect(markup).not.toContain("Other reviewer");
+  });
 
   it("shows the parent and only changes applied to the current revision", async () => {
     const markup = await renderRevision(null);
@@ -129,6 +157,8 @@ describe("Revision provenance", () => {
     expect(markup).not.toContain("Private Proposal");
     expect(markup).not.toContain("Proposal #32");
     expect(markup).not.toContain("Secret change");
+    expect(markup).not.toContain("Contributor</dd>");
+    expect(markup).toContain("Contribution provenance is not available to this viewer.");
   });
 
   it("hides private source proposal metadata from an anonymous reader", async () => {
