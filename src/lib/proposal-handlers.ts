@@ -288,6 +288,7 @@ export async function createProjectProposal(request: Request, scope: { slug: str
       if (cause instanceof ProposalError) {
         if (cause.details?.missingDependencyIds?.length) return error("Include required dependency units in this proposal.");
         if (cause.message === "Selected changes contain invalid unit dependencies") return error("Selected unit dependencies are invalid.");
+        if (cause.message === "At least one unit must remain.") return error("At least one unit must remain.");
       }
       throw cause;
     }

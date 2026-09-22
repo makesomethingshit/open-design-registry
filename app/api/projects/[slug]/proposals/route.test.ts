@@ -192,6 +192,20 @@ describe("proposal creation route", () => {
     ]));
   });
 
+  it("rejects removing the last remaining unit without throwing", async () => {
+    const base = { version: 2, files: [
+      { id: "only-unit", name: "Only unit", kind: "component", mimeType: "image/png", size: 20, assetKey: "only-key", previewKeys: [] },
+    ] };
+    mocks.findSource.mockResolvedValue({ id: "source", isPublished: true, sourceKey: null, sourceUrl: "https://example.com/source", project: { id: "source-project", ownerId: "contributor" } });
+    mocks.readBundle.mockImplementation((key: string | null | undefined) => Promise.resolve(key === "base-bundle" ? base : null));
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Remove last unit", body: "Explain", changes: [
+      { action: "REMOVE_UNIT", targetFileId: "only-unit" },
+    ] }), { params: Promise.resolve({ slug: "target" }) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "At least one unit must remain." });
+    expect(mocks.createProposal).not.toHaveBeenCalled();
+  });
+
   it("blocks duplicate targets and unchanged rename values", async () => {
     const duplicate = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Duplicate", body: "Explain", changes: [{ action: "RENAME_UNIT", targetFileId: "target-file", newName: "Poster" }, { action: "REMOVE_UNIT", targetFileId: "target-file" }] }), { params: Promise.resolve({ slug: "target" }) });
     expect(duplicate.status).toBe(400);
