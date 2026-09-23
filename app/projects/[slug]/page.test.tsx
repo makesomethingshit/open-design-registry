@@ -60,7 +60,7 @@ function project() {
     id: "project", slug: "demo", title: "Demo", description: "A project", license: "MIT", coverUrl: "cover.png", ownerId: "owner", isPublic: true, owner: { name: "Owner" },
     revisions: [],
     issues: [{
-      id: "issue-14", title: "Fix navigation", body: "Improve it", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
+      id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
       author: { name: "Reporter" }, revision: null, comments: [],
       proposals: [
         visibleProposal,
@@ -99,6 +99,35 @@ describe("Project issue proposal visibility", () => {
     expect(markup).toContain("<dt>Contributors</dt><dd>2</dd>");
     expect(markup).toContain("Owner");
     expect(markup).toContain("Contributor");
+  });
+
+  it("counts open issues separately and shows only open design requests in the contribution section", async () => {
+    vi.clearAllMocks();
+    const value = project();
+    value.issues = [
+      { ...value.issues[0], id: "issue-1", title: "Issue one", kind: "ISSUE", status: "OPEN" },
+      { ...value.issues[0], id: "issue-2", title: "Issue two", kind: "ISSUE", status: "OPEN" },
+      { ...value.issues[0], id: "request-1", title: "Design request one", kind: "DESIGN_REQUEST", status: "OPEN" },
+      { ...value.issues[0], id: "request-2", title: "Design request two", kind: "DESIGN_REQUEST", status: "OPEN" },
+      { ...value.issues[0], id: "request-3", title: "Design request three", kind: "DESIGN_REQUEST", status: "OPEN" },
+      { ...value.issues[0], id: "closed-request", title: "Closed request", kind: "DESIGN_REQUEST", status: "CLOSED" },
+    ];
+    mocks.findProject.mockResolvedValue(value);
+    mocks.getSession.mockResolvedValue({ user: { id: "viewer" } });
+    mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.countProposals.mockResolvedValue(0);
+    mocks.attribution.mockResolvedValue([]);
+    mocks.findProposal.mockResolvedValue(null);
+    mocks.readBundle.mockResolvedValue(null);
+
+    const markup = renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
+
+    expect(markup).toContain("<dt>Open issues</dt><dd>2</dd>");
+    expect(markup).toContain("Design request one");
+    expect(markup).toContain("Design request two");
+    expect(markup).toContain("Design request three");
+    expect(markup).not.toContain("<strong>Closed request</strong>");
+    expect(markup).toContain("Looking for contributions");
   });
 
   it("keeps Stage D geometry and responsive/F1 fixtures in the shared source", () => {

@@ -8,6 +8,30 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 const { default: IssueBoard } = await import("./issue-board");
 
 describe("IssueBoard provenance links", () => {
+  it("shows kind badges and only gives the owner a kind selector", () => {
+    const ownerMarkup = renderToStaticMarkup(<IssueBoard
+      canManage
+      issues={[
+        { id: "issue", title: "Header overlap", body: "Fix it", kind: "ISSUE", status: "OPEN", revision: null, author: { name: "Reporter" }, comments: [] },
+        { id: "request", title: "Mobile empty state", body: "Create it", kind: "DESIGN_REQUEST", status: "OPEN", revision: null, author: { name: "Owner" }, comments: [] },
+      ]}
+      revisions={[]}
+      signedIn
+      slug="demo"
+    />);
+    expect(ownerMarkup).toContain("Design request");
+    expect(ownerMarkup).toContain('name="kind"');
+
+    const nonOwnerMarkup = renderToStaticMarkup(<IssueBoard
+      canManage={false}
+      issues={[]}
+      revisions={[]}
+      signedIn
+      slug="demo"
+    />);
+    expect(nonOwnerMarkup).not.toContain('name="kind"');
+  });
+
   it("links a related proposal to its applied revisions and keeps the issue anchor stable", () => {
     const markup = renderToStaticMarkup(<IssueBoard
       canManage={false}

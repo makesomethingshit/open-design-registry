@@ -28,6 +28,7 @@ describe("issue creation route", () => {
   it("notifies the project owner when another user opens an issue", async () => {
     const response = await POST(request({ title: "Broken component", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
+    expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "ISSUE" }) }));
     expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "owner", actorId: "reporter", type: "ISSUE_CREATED", projectId: "project", issueId: "issue" } });
   });
 
@@ -36,5 +37,27 @@ describe("issue creation route", () => {
     const response = await POST(request({ title: "Own issue", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
     expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("creates a design request for the project owner without an issue notification", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    const response = await POST(request({ title: "Improve mobile navigation", body: "Details", kind: "DESIGN_REQUEST" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "DESIGN_REQUEST" }) }));
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("rejects a design request from a non-owner", async () => {
+    const response = await POST(request({ title: "Improve mobile navigation", body: "Details", kind: "DESIGN_REQUEST" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "Only the project owner can create design requests" });
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown issue kind", async () => {
+    const response = await POST(request({ title: "Broken component", body: "Details", kind: "TASK" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(400);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 });

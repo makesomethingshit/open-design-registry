@@ -20,7 +20,7 @@ export const reportSchema = z.object({
   details: z.string().trim().max(2000).default(""),
 });
 
-export const issueSchema = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().max(10000).default(""), revisionId: z.string().trim().optional() });
+export const issueSchema = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().max(10000).default(""), kind: z.enum(["ISSUE", "DESIGN_REQUEST"]).default("ISSUE"), revisionId: z.string().trim().optional() });
 export const issueCommentSchema = z.object({ body: z.string().trim().min(1).max(10000) });
 export const issueStatusSchema = z.object({ status: z.enum(["OPEN", "CLOSED"]) });
 const recordId = z.string().trim().min(1).max(200);

@@ -62,7 +62,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       .filter((proposal) => isVisible(proposal, session?.user.id))
       .map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })),
   }));
-  const openIssues = visibleIssues.filter((issue) => issue.status === "OPEN");
+  const openIssues = visibleIssues.filter((issue) => issue.status === "OPEN" && issue.kind !== "DESIGN_REQUEST");
+  const openDesignRequests = visibleIssues.filter((issue) => issue.status === "OPEN" && issue.kind === "DESIGN_REQUEST");
   const contributors = attribution.length;
   const navigationItems = [
     { href: "#overview", label: "Overview" },
@@ -113,7 +114,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         <div className={styles.activityGrid}>
           <section className={styles.activity}>
             <header><h2>Looking for contributions</h2><Link href="#issues">View issues</Link></header>
-            {openIssues.length ? <div className={styles.activityList}>{openIssues.slice(0, 3).map((issue) => <article key={issue.id}><strong>{issue.title}</strong><span>Opened by {issue.author.name}</span></article>)}</div> : <p className={styles.muted}>No open issues you can help with.</p>}
+            {openDesignRequests.length ? <div className={styles.activityList}>{openDesignRequests.slice(0, 3).map((issue) => <article key={issue.id}><strong>{issue.title}</strong><span>Opened by {issue.author.name}</span></article>)}</div> : <p className={styles.muted}>No open design requests.</p>}
           </section>
           <section className={styles.activity}>
             <header><h2>Active proposals</h2><Link href="#proposals">View proposals</Link></header>

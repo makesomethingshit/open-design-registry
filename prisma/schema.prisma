@@ -189,6 +189,11 @@ enum IssueStatus {
   CLOSED
 }
 
+enum IssueKind {
+  ISSUE
+  DESIGN_REQUEST
+}
+
 enum RevisionCapabilityMode {
   STRUCTURED
   WHOLE_DOCUMENT
@@ -311,6 +316,7 @@ model Issue {
   revisionId String?
   title      String
   body       String       @default("")
+  kind       IssueKind    @default(ISSUE)
   status     IssueStatus  @default(OPEN)
   closedAt   DateTime?
   closedBy   String?

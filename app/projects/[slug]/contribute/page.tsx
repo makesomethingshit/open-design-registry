@@ -19,7 +19,7 @@ export default async function ContributionPage({ params }: { params: Promise<{ s
       title: true,
       owner: { select: { name: true } },
       revisions: { where: { isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true } },
-      issues: { where: { status: "OPEN" }, orderBy: { createdAt: "desc" }, select: { id: true, title: true } },
+      issues: { where: { status: "OPEN" }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, kind: true } },
     },
   });
   if (!project || (!project.isPublic && project.ownerId !== session?.user.id)) notFound();

@@ -9,7 +9,7 @@ import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form"
 
 type BundleFile = { id: string; name: string; kind?: string; mimeType: string; size: number };
 type SourceRevision = { id: string; number: number; title: string; projectTitle: string; projectSlug: string; files: BundleFile[] };
-type RelatedIssue = { id: string; title: string };
+type RelatedIssue = { id: string; title: string; kind?: "ISSUE" | "DESIGN_REQUEST" };
 type UnitAction = "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
 export type ProposalDraftChange = { action: UnitAction; targetFileId?: string; sourceFileId?: string; newName?: string };
 type DraftChange = ProposalDraftChange & { key: string };
@@ -124,7 +124,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     <Field error={fieldErrors.title} id="proposal-title" invalid={Boolean(fieldErrors.title)} label="Title" required><Input name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required minLength={1} maxLength={200} placeholder="Improve mobile header typography" /></Field>
     <Field error={fieldErrors.whatChanged} id="proposal-what-changed" invalid={Boolean(fieldErrors.whatChanged)} label="What changed?" required><Textarea name="whatChanged" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.whatChanged; return next; })} required maxLength={4900} /></Field>
     <Field error={fieldErrors.why} id="proposal-why" invalid={Boolean(fieldErrors.why)} label="Why?" required><Textarea name="why" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.why; return next; })} required maxLength={4900} /></Field>
-    <Field id="proposal-related-issue" label="Related issue"><Select name="relatedIssueId" defaultValue={defaultRelatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option value={issue.id} key={issue.id}>{issue.title}</option>)}</Select></Field>
+    <Field id="proposal-related-issue" label="Related issue"><Select name="relatedIssueId" defaultValue={defaultRelatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option value={issue.id} key={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
     <section className="file-input-list" aria-labelledby="units-to-propose-heading">
       <div className="section-heading"><h2 id="units-to-propose-heading">Units to propose</h2>{canChooseUnits && <button type="button" className="button secondary" onClick={addChange} disabled={changes.length >= maxProposalChanges}>Add change</button>}</div>
       {!canChooseUnits ? <p className="empty-state">Whole-document only. This format does not expose independently changeable units.</p> : changes.map((change) => {
