@@ -19,7 +19,8 @@ describe("IssueBoard provenance links", () => {
       signedIn
       slug="demo"
     />);
-    expect(ownerMarkup).toContain("Design request");
+    const requestCard = ownerMarkup.match(/<article class="issue" id="issue-request"[\s\S]*?<\/article>/)?.[0] ?? "";
+    expect(requestCard).toMatch(/<span class="[^"]+" data-tone="neutral">Design request<\/span>/);
     expect(ownerMarkup).toContain('name="kind"');
 
     const nonOwnerMarkup = renderToStaticMarkup(<IssueBoard

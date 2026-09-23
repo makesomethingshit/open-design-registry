@@ -15,7 +15,7 @@ describe("issue creation route", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "reporter" } });
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
-    mocks.createIssue.mockResolvedValue({ id: "issue", title: "Broken component", body: "Details", author: { id: "reporter", name: "Reporter" }, revision: null });
+    mocks.createIssue.mockResolvedValue({ id: "issue", title: "Broken component", body: "Details", kind: "ISSUE", author: { id: "reporter", name: "Reporter" }, revision: null });
   });
 
   it("requires authentication before creating an issue", async () => {
@@ -28,6 +28,7 @@ describe("issue creation route", () => {
   it("notifies the project owner when another user opens an issue", async () => {
     const response = await POST(request({ title: "Broken component", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ kind: "ISSUE" });
     expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "ISSUE" }) }));
     expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "owner", actorId: "reporter", type: "ISSUE_CREATED", projectId: "project", issueId: "issue" } });
   });
@@ -41,8 +42,10 @@ describe("issue creation route", () => {
 
   it("creates a design request for the project owner without an issue notification", async () => {
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.createIssue.mockResolvedValue({ id: "issue", title: "Improve mobile navigation", body: "Details", kind: "DESIGN_REQUEST", author: { id: "owner", name: "Owner" }, revision: null });
     const response = await POST(request({ title: "Improve mobile navigation", body: "Details", kind: "DESIGN_REQUEST" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ kind: "DESIGN_REQUEST" });
     expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "DESIGN_REQUEST" }) }));
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
