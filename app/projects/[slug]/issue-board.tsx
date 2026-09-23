@@ -14,7 +14,7 @@ import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 
 type Revision = { id: string; number: number; title?: string };
 type Proposal = { id: string; proposalNumber: number; title: string; status: string; appliedRevisions: Revision[] };
-type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; revision: { number: number } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
+type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; revision: { number: number } | null; sourceDiscussion?: { id: string; title: string } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
 
 export default function IssueBoard({ slug, issues, revisions, canManage, signedIn }: { slug: string; issues: Issue[]; revisions: Revision[]; canManage: boolean; signedIn: boolean }) {
   const router = useRouter();
@@ -121,6 +121,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         <div className="issue-heading"><h3>{issue.title}</h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></span></div>
         <p>{issue.body}</p>
         <p className="meta">Opened by {issue.author.name}{issue.revision ? ` · Revision ${issue.revision.number}` : ""}</p>
+        {issue.sourceDiscussion && <p className="meta"><Link href={`/projects/${slug}/discussions/${issue.sourceDiscussion.id}`}>From discussion: {issue.sourceDiscussion.title}</Link></p>}
         {issue.proposals?.length ? <section aria-labelledby={`issue-${issue.id}-proposals`}><p className="meta" id={`issue-${issue.id}-proposals`}>Related proposals</p><ul className="issue-proposals">{issue.proposals.map((proposal) => {
           const presentation = proposalStatusPresentation(proposal.status);
           return <li key={proposal.id}><Link href={`/proposals/${proposal.id}`}>#{proposal.proposalNumber} · {proposal.title}</Link> <StatusBadge tone={presentation.tone}>{presentation.label}</StatusBadge>{proposal.appliedRevisions.length > 0 && <span className="meta"> · Applied in {proposal.appliedRevisions.map((revision, index) => <span key={revision.id}>{index > 0 ? ", " : ""}<Link href={`/projects/${slug}/revisions/${revision.number}`}>Revision {revision.number}</Link></span>)}</span>}</li>;

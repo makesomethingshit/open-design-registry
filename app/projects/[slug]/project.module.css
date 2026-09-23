@@ -63,6 +63,19 @@
 .discussionCancel { display: inline-flex; min-height: var(--odr-control-lg); align-items: center; justify-content: center; padding: var(--odr-space-2) var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-control-border); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); text-decoration: none; }
 .discussionBodyPanel { border-left: 4px solid var(--odr-accent); }
 .discussionBody { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); white-space: pre-wrap; overflow-wrap: anywhere; }
+.discussionWorkList { display: grid; padding: 0; margin: 0; list-style: none; }
+.discussionWorkItem + .discussionWorkItem { border-top: var(--odr-border-width) solid var(--odr-border-subtle); }
+.discussionWorkLink { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr) auto; align-items: center; gap: var(--odr-space-3); min-height: 4rem; padding: var(--odr-space-3); color: var(--odr-text-primary); text-decoration: none; }
+.discussionWorkLink:focus-visible { outline: 2px solid var(--odr-accent); outline-offset: 2px; }
+.discussionWorkKind, .discussionWorkStatus { color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
+.discussionWorkTitle { min-width: 0; font-size: var(--odr-font-body); line-height: var(--odr-line-body); overflow-wrap: anywhere; }
+.discussionWorkStatus { color: var(--odr-accent); }
+.discussionWorkCreate { display: grid; gap: var(--odr-space-3); }
+.discussionWorkCreate h2, .discussionWorkFormPanel h3 { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-section); line-height: var(--odr-line-section); }
+.discussionWorkActions, .discussionWorkFormActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--odr-space-2); }
+.discussionWorkFormPanel { min-width: 0; }
+.discussionWorkFormPanel form > div { display: grid; gap: var(--odr-space-4); }
+.discussionWorkFormPanel p { margin: 0; }
 .discussionComments { display: grid; gap: var(--odr-space-2); padding: 0; margin: 0; list-style: none; }
 .discussionComments li { display: grid; gap: var(--odr-space-2); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
 .discussionCommentBody { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -83,6 +96,12 @@
 @media (max-width: 48rem) { .overviewGrid { grid-template-columns: 1fr; gap: var(--odr-space-5); } .artwork { min-height: 20rem; padding: var(--odr-space-4); } .artwork img { max-height: 32rem; } .activityGrid { grid-template-columns: 1fr; gap: var(--odr-space-5); } .sectionHeader, .activity header, .contributorList li { align-items: start; flex-direction: column; } .contributorList li > span { text-align: left; } .secondaryLink { min-height: var(--odr-control-lg); } }
 
 @media (max-width: 40rem) {
+  .discussionWorkLink { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--odr-space-1); }
+  .discussionWorkKind { grid-column: 1; grid-row: 1; }
+  .discussionWorkStatus { grid-column: 2; grid-row: 1; }
+  .discussionWorkTitle { grid-column: 1 / -1; grid-row: 2; }
+  .discussionWorkActions, .discussionWorkFormActions { display: grid; }
+  .discussionWorkActions button, .discussionWorkFormActions button { width: 100%; }
   .discussionStartLink { width: 100%; }
   .discussionRowLink { min-height: 5.5rem; padding: var(--odr-space-4); }
   .discussionCreateFields { gap: var(--odr-space-4); }

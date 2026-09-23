@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (!project) return notFound();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!project.isPublic && session?.user.id !== project.ownerId) return notFound();
-  const issues = await prisma.issue.findMany({ where: { projectId: project.id }, orderBy: { createdAt: "desc" }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } } } });
+  const issues = await prisma.issue.findMany({ where: { projectId: project.id }, orderBy: { createdAt: "desc" }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } } } });
   return NextResponse.json(issues);
 }
 
@@ -29,7 +29,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const revision = await prisma.revision.findFirst({ where: { id: revisionId, projectId: project.id }, select: { id: true } });
     if (!revision) return NextResponse.json({ error: "Revision not found" }, { status: 400 });
   }
-  const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, kind: parsed.data.kind, revisionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
+  const sourceDiscussionId = parsed.data.sourceDiscussionId;
+  if (sourceDiscussionId) {
+    const discussion = await prisma.discussion.findFirst({ where: { id: sourceDiscussionId, projectId: project.id }, select: { id: true } });
+    if (!discussion) return NextResponse.json({ error: "Discussion not found in this project" }, { status: 400 });
+  }
+  const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, kind: parsed.data.kind, revisionId, sourceDiscussionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
   if (project.ownerId !== session.user.id) {
     await prisma.notification.create({ data: { recipientId: project.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: issue.id } });
   }

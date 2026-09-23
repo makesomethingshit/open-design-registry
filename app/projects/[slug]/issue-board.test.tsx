@@ -86,4 +86,33 @@ describe("IssueBoard provenance links", () => {
     expect(markup).not.toContain("Private proposal");
     expect(markup).not.toContain("Secret change");
   });
+
+  it("links both issues and design requests back to their source Discussion", () => {
+    const markup = renderToStaticMarkup(<IssueBoard
+      canManage={false}
+      issues={[
+        { id: "issue", title: "Fix navigation", body: "Details", kind: "ISSUE", status: "OPEN", revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, author: { name: "Reporter" }, comments: [] },
+        { id: "request", title: "Compact header", body: "Details", kind: "DESIGN_REQUEST", status: "OPEN", revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, author: { name: "Owner" }, comments: [] },
+      ]}
+      revisions={[]}
+      signedIn={false}
+      slug="demo"
+    />);
+
+    expect(markup.match(/From discussion: Mobile navigation/g)).toHaveLength(2);
+    expect(markup.match(/href="\/projects\/demo\/discussions\/discussion-1"/g)).toHaveLength(2);
+  });
+
+  it("keeps the existing card metadata when no source Discussion exists", () => {
+    const markup = renderToStaticMarkup(<IssueBoard
+      canManage={false}
+      issues={[{ id: "legacy", title: "Old issue", body: "Details", kind: "ISSUE", status: "OPEN", revision: null, sourceDiscussion: null, author: { name: "Reporter" }, comments: [] }]}
+      revisions={[]}
+      signedIn={false}
+      slug="demo"
+    />);
+
+    expect(markup).toContain("Opened by Reporter");
+    expect(markup).not.toContain("From discussion");
+  });
 });
