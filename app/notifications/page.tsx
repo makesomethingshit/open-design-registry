@@ -22,6 +22,7 @@ export default async function NotificationsPage() {
         actor: { select: { name: true } },
         project: { select: { slug: true, title: true } },
         issue: { select: { id: true, title: true } },
+        discussion: { select: { id: true, title: true } },
         forkedProject: { select: { slug: true, title: true } },
       },
     }),

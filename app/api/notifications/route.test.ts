@@ -10,7 +10,7 @@ describe("notification list route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
-    mocks.findMany.mockResolvedValue([{ id: "notification", type: "ISSUE_CREATED", readAt: null, createdAt: new Date("2026-09-01T00:00:00Z"), actor: { name: "Reporter" }, project: { slug: "demo", title: "Design" }, issue: { id: "issue", title: "Broken component" }, forkedProject: null }]);
+    mocks.findMany.mockResolvedValue([{ id: "notification", type: "ISSUE_CREATED", readAt: null, createdAt: new Date("2026-09-01T00:00:00Z"), actor: { name: "Reporter" }, project: { slug: "demo", title: "Design" }, issue: { id: "issue", title: "Broken component" }, discussion: null, forkedProject: null }]);
     mocks.count.mockResolvedValue(1);
   });
 
@@ -26,6 +26,7 @@ describe("notification list route", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ unreadCount: 1, notifications: [{ id: "notification", type: "ISSUE_CREATED" }] });
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { recipientId: "owner" }, orderBy: { createdAt: "desc" }, take: 50 }));
+    expect(mocks.findMany.mock.calls[0][0].select).toHaveProperty("discussion");
     expect(mocks.count).toHaveBeenCalledWith({ where: { recipientId: "owner", readAt: null } });
   });
 });

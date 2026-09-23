@@ -10,12 +10,13 @@ import { setRowBusy, setRowMessage } from "@/src/lib/ui/task-state";
 
 type Notification = {
   id: string;
-  type: "ISSUE_CREATED" | "FORK_CREATED";
+  type: "ISSUE_CREATED" | "DISCUSSION_CREATED" | "FORK_CREATED";
   readAt: string | null;
   createdAt: string;
   actor: { name: string };
   project: { slug: string; title: string };
   issue: { id: string; title: string } | null;
+  discussion: { id: string; title: string } | null;
   forkedProject: { slug: string; title: string } | null;
 };
 
@@ -54,8 +55,9 @@ export default function NotificationList({ notifications: initialNotifications, 
     <p className="meta" aria-live="polite">미확인 알림 <Badge tone={unreadCount ? "warning" : "success"}>{unreadCount}</Badge>개</p>
     <ul className="notifications">{notifications.map((notification) => {
       const issue = notification.type === "ISSUE_CREATED";
-      const href = issue ? `/projects/${notification.project.slug}#issues` : `/projects/${notification.forkedProject?.slug ?? notification.project.slug}`;
-      const message = issue ? `${notification.actor.name}님이 ${notification.project.title}에 Issue${notification.issue ? ` “${notification.issue.title}”` : ""}를 만들었습니다.` : `${notification.actor.name}님이 ${notification.project.title}을 Fork했습니다.`;
+      const discussion = notification.type === "DISCUSSION_CREATED";
+      const href = issue ? `/projects/${notification.project.slug}#issues` : discussion ? notification.discussion ? `/projects/${notification.project.slug}/discussions/${notification.discussion.id}` : `/projects/${notification.project.slug}#discussions` : `/projects/${notification.forkedProject?.slug ?? notification.project.slug}`;
+      const message = issue ? `${notification.actor.name}님이 ${notification.project.title}에 Issue${notification.issue ? ` “${notification.issue.title}”` : ""}를 만들었습니다.` : discussion ? `${notification.actor.name}님이 ${notification.project.title}에서 토론${notification.discussion ? ` “${notification.discussion.title}”` : ""}을 시작했습니다.` : `${notification.actor.name}님이 ${notification.project.title}을 Fork했습니다.`;
       const id = notification.id;
       return <li aria-busy={Boolean(pendingById[id])} className={`notification ${notification.readAt ? "read" : "unread"}`} key={id}><div><Link href={href}>{message}</Link><time className="meta" dateTime={notification.createdAt}>{new Date(notification.createdAt).toLocaleString("ko-KR")}</time></div>{!notification.readAt && <Button loading={Boolean(pendingById[id])} loadingLabel="처리 중" onClick={() => { void markRead(id); }} size="sm" type="button" variant="secondary">읽음 처리</Button>}{errorsById[id] && <Banner tone="error" title="읽음 처리 실패">{errorsById[id]}</Banner>}{successesById[id] && <Banner tone="success" title="처리 완료">{successesById[id]}</Banner>}</li>;
     })}</ul>
