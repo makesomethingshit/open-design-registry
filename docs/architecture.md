@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Proposal 협업](proposals.md) · [개발과 운영](operations.md)
 
-기준: 2026-09-07, main `074a2401b46dc1143703c8afe0bd274251e9f821`. 이 문서는 해당 코드의 동작을 설명합니다. 배포 환경의 현재 상태를 확인한 문서는 아닙니다.
+이 문서는 저장소 코드의 동작을 설명합니다. 배포 환경의 현재 상태를 확인한 문서는 아닙니다.
 
 ## 전체 구조
 
@@ -55,7 +55,7 @@ flowchart LR
 | Issue / IssueComment | 프로젝트 또는 Revision에 대한 논의 |
 | Report / Notification | 신고 검토, Issue 생성·Fork 생성 알림 |
 
-**별도 `ChangeUnit` 테이블이나 Dependency 모델은 없습니다.** 현재 유닛은 S3에 저장된 Revision 번들의 `files[]` 항목입니다. Change의 `targetFileId`가 이 stable ID를 가리킵니다.
+**별도 `ChangeUnit` 테이블이나 Dependency 테이블은 없습니다.** 현재 유닛과 유닛 간 의존성은 S3에 저장된 Revision 번들의 `files[]` 항목에 기록합니다. Change의 `targetFileId`가 유닛의 stable ID를 가리킵니다.
 
 Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 작성자·리뷰어·채택자를 통해 연결합니다. Fork 출처는 프로젝트의 `forkedFromProjectId`·`forkedFromRevisionId`·`forkedFromLicense`로 보존합니다.
 
@@ -74,11 +74,12 @@ Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 �
 
 ## 번들과 capability
 
-번들은 `{ version: 1 | 2, files: [...] }` 형태입니다. 각 파일은 `id`, `name`, `mimeType`, `size`, `assetKey`, `previewKeys`를 가지며 `kind`와 `checksum`은 이전 데이터 호환을 위해 선택 필드입니다. 새 파일 발행은 v2를 만듭니다.
+번들은 `{ version: 1 | 2 | 3, files: [...] }` 형태입니다. 각 파일은 `id`, `name`, `mimeType`, `size`, `assetKey`, `previewKeys`를 가지며 `kind`와 `checksum`은 이전 데이터 호환을 위해 선택 필드입니다. 새 파일 발행은 유닛별 `sourceDependencies`가 제출되면 v3, 없으면 v2를 만듭니다. v3의 모든 파일은 의존하는 유닛의 stable ID 목록인 `dependencies` 배열을 가지며, 의존성이 없으면 빈 배열입니다. v1/v2에는 이 필드가 없습니다.
 
 - 새 유닛 ID는 서버가 생성합니다. 다음 발행에서 기존 파일을 `sourceFileIds`로 연결하면 stable ID를 유지합니다. 파일명만 같다고 같은 유닛으로 판단하지 않습니다.
 - 새 유닛의 kind는 `artboard`, `component`, `asset`, `token` 중 선택합니다. 기존 유닛을 연결하면 기존 kind를 유지합니다.
 - 각 파일 checksum은 서버가 원본 바이트로 계산한 SHA-256입니다. `Revision.sourceChecksum`은 번들 발행에서 **번들 JSON 전체의 해시**이므로 파일 내용 해시와 구분합니다.
+- v3 발행은 각 의존 ID가 같은 번들에 존재하는지, 자기 자신을 가리키거나 중복되지 않는지 검사합니다. `dependencyClosure()` 헬퍼는 선택한 유닛에서 연결된 의존 유닛 전체를 구합니다. 유닛 변경 Proposal 생성·선택 적용은 결과 번들에 필요한 유닛이 모두 남는지 검사합니다.
 - `STRUCTURED`는 유효한 번들의 파일·유닛을 다룰 수 있음을 뜻합니다. 외부 링크·번들 없는 데이터는 전체 문서 방식이며, 과거 capability `null`은 기록 없음입니다.
 - SVG 어댑터는 최대 앞 8 KiB로 SVG 형태를 확인하고 `artboard`를 제안합니다. 현재 신뢰도는 `low`, 성숙도는 `beta`입니다. 사용자 확인을 돕는 제안이며 충돌 검사·승인 결과가 아닙니다.
 
@@ -94,6 +95,6 @@ HTML 미리보기에는 스크립트 실행을 제한하는 CSP가 적용됩니�
 
 ## 구현과 로드맵을 구별하기
 
-현재는 파일·유닛 식별, 변경별 리뷰, 선택 적용, upstream 충돌 판정까지 구현되어 있습니다. 유닛 간 의존성 추적·closure, Penpot 어댑터, 파일 내부 레이어 분해, 제작 도구 자동 동기화는 후속 범위입니다. `DRAFT` 상태는 스키마에 있지만 현재 생성 API는 `OPEN`으로 생성하며 초안 저장·재오픈·Proposal 내용 수정 API는 제공하지 않습니다.
+현재는 파일·유닛 식별, v3 유닛 의존성·closure, 변경별 리뷰, 의존성을 확인하는 선택 적용, upstream 충돌 판정까지 구현되어 있습니다. Penpot 어댑터, 파일 내부 레이어 분해, 제작 도구 자동 동기화는 후속 범위입니다. `DRAFT` 상태는 스키마에 있지만 현재 생성 API는 `OPEN`으로 생성하며 초안 저장·재오픈·Proposal 내용 수정 API는 제공하지 않습니다.
 
-기준 코드: [저장소 스냅샷](https://github.com/makesomethingshit/open-design-registry/tree/074a2401b46dc1143703c8afe0bd274251e9f821).
+관련 코드: [번들 형식·의존성 검사](../src/lib/revision-bundle.ts), [발행 API](../app/api/projects/[slug]/revisions/route.ts), [Proposal 적용](../src/lib/proposal-handlers.ts).

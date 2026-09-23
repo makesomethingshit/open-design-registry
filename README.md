@@ -2,16 +2,18 @@
 
 **디자인계의 GitHub — 다 같이 만드는 디자인 프로젝트.**
 
-Open Design Registry는 디자인 프로젝트를 중심으로 사람들이 작업을 공개하고, 문제를 논의하고, 변경안을 제출·리뷰·반영하며 기여 이력을 쌓는 협업 플랫폼을 지향합니다. 서로 다른 제작 도구를 쓰는 사람들이 하나의 디자인 프로젝트를 함께 발전시키는 것이 목표입니다. 원본·미리보기·변경 이력·출처 보존은 공동 제작을 신뢰할 수 있게 하는 기반입니다.
+Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계속 해석하고 발전시키는 협업 플랫폼을 지향합니다. 개인 디자이너와 오픈소스 디자인 참여자가 프로젝트를 중심으로 만나고, 원본·미리보기·변경 이력·출처를 보존하며 기여합니다. [제품 방향](docs/product-direction.md)에서 협업·발견·커뮤니티의 원칙을 설명합니다.
 
 현재는 로그인, 공개·비공개 프로젝트, Revision 발행·비교·복원, Issue·댓글, Fork, 알림·신고 검토에 더해 **Proposal → 변경별 리뷰 → 선택 적용 → 새 Revision** 흐름을 제공합니다. 원본 파일을 ODR 번들로 발행하면 파일·유닛 단위 변경을 제안할 수 있고, 전체 문서 교체도 지원합니다.
 
-문서 기준: 2026-09-07, main 커밋 [`074a240`](https://github.com/makesomethingshit/open-design-registry/commit/074a2401b46dc1143703c8afe0bd274251e9f821), [PR #27](https://github.com/makesomethingshit/open-design-registry/pull/27) 병합 상태. 아래 v0.1~v0.5는 협업 기능의 개발 단계명이며, `package.json` 버전은 여전히 `0.1.0`입니다. 코드 병합 여부와 실제 서비스 배포 여부는 별개입니다.
+아래 현재 지원 범위는 저장소 코드 기준이며 실제 서비스 배포 여부와는 별개입니다. `package.json` 버전은 `0.1.0`입니다.
 
 ## 문서 안내
 
 | 문서 | 읽는 목적 |
 | --- | --- |
+| [제품 방향](docs/product-direction.md) | 프로젝트 중심 협업, 발견과 커뮤니티의 제품 원칙 이해 |
+| [로드맵](ROADMAP.md) | 구현된 기능과 다음 제품 단계 구분 |
 | [구조와 데이터 모델](docs/architecture.md) | 코드 위치, Revision·번들·권한·저장소 경계 이해 |
 | [Proposal 협업 가이드](docs/proposals.md) | 기여·리뷰·선택 적용, API 입력, 충돌·승인 해제 이해 |
 | [개발과 운영](docs/operations.md) | 로컬 실행, 환경 변수, 테스트, 마이그레이션·배포 전 확인 |
@@ -24,9 +26,11 @@ Open Design Registry는 디자인 프로젝트를 중심으로 사람들이 작�
 | 전체 문서 Proposal | `REPLACE_DOCUMENT` 리뷰·채택, 새 Revision 발행 |
 | 선택 적용 | 승인된 파일·유닛만 적용, 부분 채택과 잔여 변경 재검토 |
 | Design Manifest | 번들 v2의 stable ID·이름·kind, 추가·수정·제거·이름 변경 |
+| 선택 적용 의존성 | 번들 v3의 유닛 의존성 기록, 제안·적용 시 누락 의존성 확인 |
 | Capability·어댑터 | 구조화/전체 문서 표시, SVG 파일 종류 제안과 신뢰도 표시 |
 | 충돌·승인 해제 | 최신 Revision과 checksum 비교, 확인 불가 시 차단, Proposal 적용에 따른 승인 해제 이력 |
-| 미구현 | 의존성 모델·closure, Penpot 내부 객체 분해, 편집기 자동 동기화, 범용 Git식 merge |
+| 향후 제품 방향 | 프로젝트 Discussion·Design Request, 활동 상태, Release, 프로젝트 Watch·Star, 변화 중심 Feed |
+| 미구현 기술 범위 | Penpot 내부 객체 분해, 편집기 자동 동기화, 범용 Git식 merge |
 
 `STRUCTURED`는 ODR이 번들의 파일·유닛을 선택할 수 있다는 뜻입니다. PSD·SVG·Penpot 파일 내부의 레이어나 객체를 모두 이해한다는 뜻은 아닙니다.
 
