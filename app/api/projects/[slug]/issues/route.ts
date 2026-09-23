@@ -23,12 +23,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!project?.isPublic) return notFound();
   const parsed = issueSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Title and body are invalid" }, { status: 400 });
+  if (parsed.data.kind === "DESIGN_REQUEST" && project.ownerId !== session.user.id) return NextResponse.json({ error: "Only the project owner can create design requests" }, { status: 403 });
   const revisionId = parsed.data.revisionId || undefined;
   if (revisionId) {
     const revision = await prisma.revision.findFirst({ where: { id: revisionId, projectId: project.id }, select: { id: true } });
     if (!revision) return NextResponse.json({ error: "Revision not found" }, { status: 400 });
   }
-  const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, revisionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
+  const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, kind: parsed.data.kind, revisionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
   if (project.ownerId !== session.user.id) {
     await prisma.notification.create({ data: { recipientId: project.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: issue.id } });
   }

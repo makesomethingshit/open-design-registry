@@ -52,6 +52,14 @@ describe("proposal creation route", () => {
     expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
+  it("creates a proposal related to a design request in the same project", async () => {
+    mocks.findIssue.mockResolvedValue({ id: "request", kind: "DESIGN_REQUEST" });
+    const response = await POST(request({ ...createBody(), relatedIssueId: "request" }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.createProposal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ relatedIssueId: "request" }) }));
+  });
+
   it("derives REPLACE_ASSET metadata from the published source bundle", async () => {
     const response = await POST(request(createBody()), { params: Promise.resolve({ slug: "target" }) });
     expect(response.status).toBe(201);

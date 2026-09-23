@@ -14,7 +14,7 @@ import type { DetectedUnitChange } from "@/src/lib/revision-bundle";
 
 type BaseRevision = { id: string; number: number; title: string };
 type SourceRevision = { id: string; number: number; title: string; projectSlug: string; projectTitle: string; owner: string; sourceUrl: string | null; tool: string | null };
-type RelatedIssue = { id: string; title: string };
+type RelatedIssue = { id: string; title: string; kind?: "ISSUE" | "DESIGN_REQUEST" };
 type WorkspaceDraft = { baseRevisionId?: string; sourceRevisionId?: string; selectedChangeKeys?: string[]; relatedIssueId?: string };
 export const maxProposalChanges = 10;
 
@@ -176,7 +176,7 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
       <Panel aria-busy={loading} aria-labelledby="changes-to-propose-heading">
         <Stack gap={3}>
           <SectionHeader id="changes-to-propose-heading" title="Changes to propose" />
-          <Field id="related-issue" label="Related issue"><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.title}</option>)}</Select></Field>
+          <Field id="related-issue" label="Related issue"><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
           {loading && <p className="meta" role="status">Loading changes…</p>}
           {loadError && <Banner action={<Button onClick={() => { invalidateLoadedChanges(); setRetry((current) => current + 1); }} size="sm" variant="secondary">Retry</Button>} title="Could not load available changes." tone="error" />}
           {!loading && !loadError && changes.length > 0 && <ul className="history" aria-label="Available changes">{changes.map((change) => {

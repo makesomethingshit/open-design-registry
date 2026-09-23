@@ -13,7 +13,7 @@ export default async function NewProposalPage({ params, searchParams }: { params
   const query = await searchParams;
   const session = await getSession();
   if (!session) redirect(`/login?next=${encodeURIComponent(`/projects/${slug}/proposals/new`)}`);
-  const project = await prisma.project.findUnique({ where: { slug }, include: { revisions: { where: { isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, sourceKey: true } }, issues: { where: { status: "OPEN" }, orderBy: { createdAt: "desc" }, select: { id: true, title: true } } } });
+  const project = await prisma.project.findUnique({ where: { slug }, include: { revisions: { where: { isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, sourceKey: true } }, issues: { where: { status: "OPEN" }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, kind: true } } } });
   if (!project || (!project.isPublic && project.ownerId !== session.user.id)) notFound();
   const requestedBase = Number(query.baseRevision);
   const baseRevision = Number.isInteger(requestedBase) && requestedBase > 0 ? project.revisions.find((revision) => revision.number === requestedBase) : project.revisions[0];

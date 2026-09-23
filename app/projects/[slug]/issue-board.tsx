@@ -14,7 +14,7 @@ import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 
 type Revision = { id: string; number: number; title?: string };
 type Proposal = { id: string; proposalNumber: number; title: string; status: string; appliedRevisions: Revision[] };
-type Issue = { id: string; title: string; body: string; status: "OPEN" | "CLOSED"; revision: { number: number } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
+type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; revision: { number: number } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
 
 export default function IssueBoard({ slug, issues, revisions, canManage, signedIn }: { slug: string; issues: Issue[]; revisions: Revision[]; canManage: boolean; signedIn: boolean }) {
   const router = useRouter();
@@ -45,7 +45,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     setCreating(true);
     const form = new FormData(formElement);
     try {
-      const response = await fetch(`/api/projects/${slug}/issues`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.get("title"), body: form.get("body"), revisionId: form.get("revisionId") || undefined }) });
+      const response = await fetch(`/api/projects/${slug}/issues`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.get("title"), body: form.get("body"), kind: canManage ? form.get("kind") || "ISSUE" : "ISSUE", revisionId: form.get("revisionId") || undefined }) });
       if (!response.ok) {
         setCreateError((await response.json().catch(() => null))?.error ?? "Could not create issue");
         return;
@@ -118,7 +118,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     <div className="section-heading"><h2 id="issues-heading">Issues</h2><Badge>{issues.length}</Badge></div>
     {issues.length ? <div className="issues">{issues.map((issue) => <article className="issue" id={`issue-${issue.id}`} key={issue.id}>
       <Stack gap={3}>
-        <div className="issue-heading"><h3>{issue.title}</h3><StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></div>
+        <div className="issue-heading"><h3>{issue.title}</h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></span></div>
         <p>{issue.body}</p>
         <p className="meta">Opened by {issue.author.name}{issue.revision ? ` · Revision ${issue.revision.number}` : ""}</p>
         {issue.proposals?.length ? <section aria-labelledby={`issue-${issue.id}-proposals`}><p className="meta" id={`issue-${issue.id}-proposals`}>Related proposals</p><ul className="issue-proposals">{issue.proposals.map((proposal) => {
@@ -144,6 +144,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
           <h3>Open an issue</h3>
           <Field error={createFieldErrors.title} id="issue-title" invalid={Boolean(createFieldErrors.title)} label="Issue title" required><Input name="title" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={200} /></Field>
           <Field error={createFieldErrors.body} id="issue-body" invalid={Boolean(createFieldErrors.body)} label="Issue description"><Textarea name="body" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} maxLength={10000} /></Field>
+          {canManage && <Field id="issue-kind" label="Type"><Select name="kind" defaultValue="ISSUE"><option value="ISSUE">Issue</option><option value="DESIGN_REQUEST">Design request</option></Select></Field>}
           {revisions.length > 0 && <Field id="issue-revision" label="Related revision"><Select name="revisionId" defaultValue=""><option value="">No related revision</option>{revisions.map((revision) => <option value={revision.id} key={revision.id}>Revision {revision.number}</option>)}</Select></Field>}
           {createError && <Banner tone="error" title="Issue creation failed">{createError}</Banner>}
           {createSuccess && <Banner tone="success" title="Issue opened">{createSuccess}</Banner>}
