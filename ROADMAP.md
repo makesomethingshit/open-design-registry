@@ -1,8 +1,8 @@
 # Open Design Registry 로드맵
 
-[제품 방향](docs/product-direction.md) · [현재 지원 범위](README.md#현재-지원-범위)
+[Vision](VISION.md) · [Philosophy](PHILOSOPHY.md) · [제품 방향](docs/product-direction.md) · [현재 지원 범위](README.md#현재-지원-범위)
 
-ODR의 목표는 공개된 디자인 프로젝트가 계속 해석되고 변경되고 기여받는 것이다. 아래는 저장소에 구현된 기능과 앞으로 검증할 제품 방향을 구분한다. 항목의 순서는 출시 일정이나 배포 약속이 아니다.
+ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)을 참고한다. 아래는 저장소에 구현된 기능과 앞으로 검증할 제품 방향을 구분한다. 항목의 순서는 출시 일정이나 배포 약속이 아니다.
 
 ## 현재 코드의 기준선
 

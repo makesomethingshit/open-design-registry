@@ -2,7 +2,7 @@
 
 **디자인계의 GitHub — 다 같이 만드는 디자인 프로젝트.**
 
-Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계속 해석하고 발전시키는 협업 플랫폼을 지향합니다. 개인 디자이너와 오픈소스 디자인 참여자가 프로젝트를 중심으로 만나고, 원본·미리보기·변경 이력·출처를 보존하며 기여합니다. [제품 방향](docs/product-direction.md)에서 협업·발견·커뮤니티의 원칙을 설명합니다.
+Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계속 해석하고 발전시키는 협업 플랫폼을 지향합니다. 개인 디자이너와 오픈소스 디자인 참여자가 프로젝트를 중심으로 만나고, 원본·미리보기·변경 이력·출처를 보존하며 기여합니다. 장기적으로 무엇을 만들려 하는지는 [Vision](VISION.md), 그 방향의 철학적 배경은 [Philosophy](PHILOSOPHY.md), 구체적인 제품 원칙은 [제품 방향](docs/product-direction.md)에서 설명합니다.
 
 현재는 로그인, 공개·비공개 프로젝트, Revision 발행·비교·복원, Issue·댓글, Fork, 알림·신고 검토에 더해 **Proposal → 변경별 리뷰 → 선택 적용 → 새 Revision** 흐름을 제공합니다. 원본 파일을 ODR 번들로 발행하면 파일·유닛 단위 변경을 제안할 수 있고, 전체 문서 교체도 지원합니다.
 
@@ -12,7 +12,9 @@ Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계
 
 | 문서 | 읽는 목적 |
 | --- | --- |
-| [제품 방향](docs/product-direction.md) | 프로젝트 중심 협업, 발견과 커뮤니티의 제품 원칙 이해 |
+| [Vision](VISION.md) | ODR이 장기적으로 만들려는 디자인 생태계 이해 |
+| [Philosophy](PHILOSOPHY.md) | 출처·저자성·공개·fork를 중요하게 보는 이유 이해 |
+| [제품 방향](docs/product-direction.md) | 비전을 실제 제품 원칙으로 번역한 기준 이해 |
 | [로드맵](ROADMAP.md) | 구현된 기능과 다음 제품 단계 구분 |
 | [구조와 데이터 모델](docs/architecture.md) | 코드 위치, Revision·번들·권한·저장소 경계 이해 |
 | [Proposal 협업 가이드](docs/proposals.md) | 기여·리뷰·선택 적용, API 입력, 충돌·승인 해제 이해 |

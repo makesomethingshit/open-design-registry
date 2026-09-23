@@ -1,6 +1,6 @@
 # 구조와 데이터 모델
 
-[README](../README.md) · [Proposal 협업](proposals.md) · [개발과 운영](operations.md)
+[README](../README.md) · [제품 방향](product-direction.md) · [Proposal 협업](proposals.md) · [개발과 운영](operations.md)
 
 이 문서는 저장소 코드의 동작을 설명합니다. 배포 환경의 현재 상태를 확인한 문서는 아닙니다.
 
