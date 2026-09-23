@@ -96,3 +96,49 @@ describe("proposal review data", () => {
     expect(markup).toContain("Fix navigation");
   });
 });
+
+describe("proposal origin", () => {
+  const baseProposal = (relatedIssue: unknown) => ({
+    id: "proposal", project: { id: "project", slug: "project", title: "Project", ownerId: "owner" }, baseRevisionId: "base", authorId: "author", relatedIssue, appliedRevisions: [],
+    baseRevision: { id: "base", number: 1, title: "Base", sourceKey: null, previews: [] },
+    sourceRevision: { id: "source", number: 2, title: "Source", sourceKey: null, project: { slug: "source", title: "Source", isPublic: true }, previews: [] },
+    changeSet: { changes: [] }, comments: [], proposalNumber: 32, title: "Navigation proposal", body: "Connect it", status: "OPEN", author: { name: "Author" }, sourceRevisionId: "source",
+  });
+
+  async function renderOrigin(relatedIssue: unknown) {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.findProposal.mockResolvedValue(baseProposal(relatedIssue));
+    mocks.findLatest.mockResolvedValue(null);
+    mocks.readBundle.mockResolvedValue(null);
+    return renderToStaticMarkup(await ProposalPage({ params: Promise.resolve({ id: "proposal" }) }));
+  }
+
+  it("shows the discussion and issue chain for a discussion-sourced issue", async () => {
+    const markup = await renderOrigin({ id: "issue-14", title: "Fix mobile navigation", kind: "ISSUE", sourceDiscussion: { id: "discussion-7", title: "Mobile navigation" } });
+
+    expect(markup).toContain("Mobile navigation");
+    expect(markup).toContain('href="/projects/project/discussions/discussion-7"');
+    expect(markup).toContain("Fix mobile navigation");
+    expect(markup).toContain('href="/projects/project#issue-issue-14"');
+  });
+
+  it("labels a design request work item", async () => {
+    const markup = await renderOrigin({ id: "issue-15", title: "Explore compact header", kind: "DESIGN_REQUEST", sourceDiscussion: { id: "discussion-7", title: "Mobile navigation" } });
+
+    expect(markup).toContain("Design request");
+    expect(markup).toContain('href="/projects/project#issue-issue-15"');
+  });
+
+  it("shows a legacy issue without inventing a discussion link", async () => {
+    const markup = await renderOrigin({ id: "issue-16", title: "Legacy issue", kind: "ISSUE", sourceDiscussion: null });
+
+    expect(markup).toContain("Legacy issue");
+    expect(markup).not.toContain("/discussions/");
+  });
+
+  it("shows no origin section without a related issue", async () => {
+    const markup = await renderOrigin(null);
+
+    expect(markup).not.toContain("Origin");
+  });
+});
