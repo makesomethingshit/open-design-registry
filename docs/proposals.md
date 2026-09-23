@@ -2,7 +2,7 @@
 
 [README](../README.md) · [구조와 데이터 모델](architecture.md) · [개발과 운영](operations.md)
 
-기준: 2026-09-07, main `074a2401b46dc1143703c8afe0bd274251e9f821`.
+이 문서는 저장소 코드의 Proposal 흐름을 설명합니다. 실제 서비스 배포 여부는 별도로 확인해야 합니다.
 
 ## 사용 흐름
 
@@ -42,6 +42,8 @@ flowchart LR
 
 현재 `artboard`·`component`·`asset`·`token`은 파일에 붙이는 유닛 분류입니다. 단일 디자인 파일 내부의 객체를 자동 분해하지 않습니다. 전체 문서 교체와 선택 적용은 서로 다른 적용 방식입니다.
 
+v3 번들의 유닛은 다른 유닛의 stable ID를 `dependencies`로 기록합니다. 유닛 변경 Proposal을 만들 때 필요한 의존 유닛이 제안 결과에 없으면 생성이 거절됩니다(`400`). 선택 적용에서도 의존 ID를 최종 target ID로 연결하고, 적용 결과에 필요한 유닛이 빠지면 `409`와 `missingDependencyIds`를 반환합니다. 함께 선택할 수 있는 미적용 `ADD_UNIT` Change가 있으면 `requiredChangeIds`도 반환합니다. 필요한 변경을 함께 선택하거나 제안을 다시 구성해야 하며, 서버가 의존 변경을 자동으로 선택하지는 않습니다.
+
 ## 권한과 상태
 
 | 행동 | 담당자 |
@@ -63,14 +65,15 @@ base 이후 대상 프로젝트에 새 Revision이 생기면 Proposal은 stale �
 | base ↔ latest 조건 | 판정 |
 | --- | --- |
 | 필요한 번들·대상 비교 자료 없음 | `CHECK_UNAVAILABLE` |
-| 기존 유닛이 latest에서 제거됨 | `CONFLICT` |
-| 양쪽 checksum 존재·동일 | `NO_CONFLICT` — 현재 구현에서는 메타데이터 차이보다 checksum을 우선 |
-| 양쪽 checksum 존재·다름 | `CONFLICT` |
-| 한쪽만 checksum 존재 | `CONFLICT` |
-| 양쪽 checksum 없음·이름/kind/크기/MIME 다름 | `CONFLICT` |
-| 양쪽 checksum 없음·위 메타데이터 같음 | `CHECK_UNAVAILABLE` — 동일 내용으로 추정하지 않음 |
 | ADD 대상 ID가 base·latest 어디에도 없음 | `NO_CONFLICT` |
 | ADD 대상 ID가 latest에 이미 존재 | `CONFLICT` |
+| 기존 유닛이 latest에서 제거됨 | `CONFLICT` |
+| 기존 유닛의 `dependencies` 집합이 달라짐 | `CONFLICT` — checksum이 같아도 의존성 변경을 먼저 검사 |
+| 의존성 집합 동일·양쪽 checksum 존재·동일 | `NO_CONFLICT` — 내용 비교에서는 이름/kind/크기/MIME보다 checksum을 우선 |
+| 의존성 집합 동일·양쪽 checksum 존재·다름 | `CONFLICT` |
+| 의존성 집합 동일·한쪽만 checksum 존재 | `CONFLICT` |
+| 의존성 집합 동일·양쪽 checksum 없음·이름/kind/크기/MIME 다름 | `CONFLICT` |
+| 의존성 집합 동일·양쪽 checksum 없음·위 메타데이터 같음 | `CHECK_UNAVAILABLE` — 동일 내용으로 추정하지 않음 |
 
 `CHECK_UNAVAILABLE`도 자동 승인·선택 적용을 허용하는 판정이 아닙니다. 현재 base와 latest가 같은 경우에는 upstream 변경이 없으므로 이 비교가 필요하지 않습니다.
 
@@ -78,14 +81,13 @@ base 이후 대상 프로젝트에 새 Revision이 생기면 Proposal은 stale �
 
 ## 적용 이후의 승인 해제
 
-서로 다른 두 경우를 구별합니다.
+같은 Proposal에서 일부 변경을 적용해도 남은 미적용 Change의 승인 상태와 리뷰 정보는 유지됩니다. 다만 다음 적용 시 최신 Revision을 기준으로 충돌과 의존성을 다시 검사합니다.
 
-- **Re-review required**: 같은 Proposal에서 일부 변경을 적용하면 남은 미적용 변경들을 `PENDING`으로 돌리고 `PARTIAL_APPLICATION_RESET` 이력을 남깁니다. 잔여 변경은 새 상태를 보고 다시 리뷰합니다.
-- **Approval dismissed**: Proposal 적용으로 upstream 유닛이 바뀌면, 다른 열려 있는 Proposal에서 그 유닛을 대상으로 승인된 미적용 Change를 `PENDING`으로 돌리고 `INVALIDATED_UPSTREAM` 이력을 남깁니다.
+Proposal 적용으로 upstream 유닛의 내용이나 의존성 집합이 바뀌면, **다른** 열려 있는 Proposal에서 그 유닛을 대상으로 승인된 미적용 Change를 `PENDING`으로 돌리고 `INVALIDATED_UPSTREAM` 이력을 남깁니다.
 
-전체 문서 적용도 전후 유효 번들이 있으면 이 무효화 경로를 사용합니다. stable ID의 추가·제거 또는 양쪽 checksum이 확인된 내용 변경을 계산합니다. 동일 checksum, 이미 적용된 Change, 비교가 확정되지 않은 legacy 데이터는 무조건 해제하지 않습니다.
+전체 문서 적용도 전후 유효 번들이 있으면 이 무효화 경로를 사용합니다. stable ID의 추가·제거, 의존성 집합 변경 또는 양쪽 checksum이 확인된 내용 변경을 계산합니다. checksum이 같고 의존성도 같은 유닛, 이미 적용된 Change, 비교가 확정되지 않은 legacy 데이터는 무조건 해제하지 않습니다.
 
-**자동 이력 생성은 현재 `applyProposal` 경로에 구현되어 있습니다.** 일반 Revision 발행·복원에도 항상 같은 이력이 생성된다고 가정하면 안 됩니다. 최신 Revision이 달라졌을 때의 승인·적용 전 충돌 재판정은 별도로 수행됩니다. 의존성 자동 검사도 아직 없습니다.
+**자동 승인 해제 이력 생성은 현재 `applyProposal` 경로에 구현되어 있습니다.** 일반 Revision 발행·복원에도 항상 같은 이력이 생성된다고 가정하면 안 됩니다. 최신 Revision이 달라졌을 때의 승인·적용 전 충돌 재판정과 v3 의존성 검사는 별도로 수행됩니다.
 
 ## 핵심 API
 
@@ -137,13 +139,13 @@ base 이후 대상 프로젝트에 새 Revision이 생기면 Proposal은 stale �
 
 | 응답 | 확인할 내용 |
 | --- | --- |
-| `400` | 필수 입력·실제 ID·배열 중복·source 소유권·변경 스키마 |
+| `400` | 필수 입력·실제 ID·배열 중복·source 소유권·변경 스키마·Proposal 생성 시 누락된 의존 유닛 |
 | `401` | 로그인 세션 |
 | `403` | 대상 프로젝트 소유자 등 필요한 행동 권한 |
 | `404` | 실제 존재와 가시성 모두 확인. 비공개 여부를 추정해 노출하지 않음 |
-| `409` | 최신 Revision 변경, 충돌/확인 불가, 승인 상태, 이미 적용, 제거된 대상, 마지막 유닛 제거 등 |
+| `409` | 최신 Revision 변경, 충돌/확인 불가, 승인 상태, 이미 적용, 제거된 대상, 마지막 유닛 제거, 선택 적용 후 누락된 의존 유닛 등 |
 | `500` | 서버 로그·DB·스토리지 오류. 결과 저장 여부를 확인한 뒤 재시도 판단 |
 
 Apply·Approve가 `409`이면 UI는 최신 상태를 다시 조회하고 비교 확인·모달을 초기화합니다. 응답에 유효한 `conflictChangeIds`가 있으면 그 선택을 해제합니다. payload가 없거나 잘못되었다고 무조건 전체 선택을 없애거나 자동 재적용하지 않습니다. API 소비자도 최신 데이터와 승인·선택 가능 여부를 다시 확인해야 합니다.
 
-기준 코드: [Proposal 처리](https://github.com/makesomethingshit/open-design-registry/blob/074a2401b46dc1143703c8afe0bd274251e9f821/src/lib/proposal-handlers.ts), [충돌 판정](https://github.com/makesomethingshit/open-design-registry/blob/074a2401b46dc1143703c8afe0bd274251e9f821/src/lib/proposal-conflicts.ts), [입력 스키마](https://github.com/makesomethingshit/open-design-registry/blob/074a2401b46dc1143703c8afe0bd274251e9f821/src/lib/project-validation.ts).
+관련 코드: [Proposal 처리](../src/lib/proposal-handlers.ts), [충돌 판정](../src/lib/proposal-conflicts.ts), [번들·의존성](../src/lib/revision-bundle.ts), [입력 스키마](../src/lib/project-validation.ts).
