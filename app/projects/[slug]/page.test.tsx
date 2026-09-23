@@ -12,9 +12,10 @@ const mocks = vi.hoisted(() => ({
   findProposal: vi.fn(),
   readBundle: vi.fn(),
   issueBoard: vi.fn(),
+  sectionNav: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
+vi.mock("next/navigation", () => ({ notFound: vi.fn(), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
@@ -35,7 +36,7 @@ vi.mock("@/app/reports/report-form", () => ({ default: () => null }));
 vi.mock("@/src/components/design/project-header", () => ({ ProjectHeader: () => null }));
 vi.mock("@/src/components/design/revision-item", () => ({ RevisionItem: () => null }));
 vi.mock("@/src/components/ui/badge", () => ({ Badge: ({ children }: { children: unknown }) => createElement("span", null, children as never), StatusBadge: () => null }));
-vi.mock("@/src/components/ui/section-nav", () => ({ SectionNav: () => null }));
+vi.mock("@/src/components/ui/section-nav", () => ({ SectionNav: (props: unknown) => { mocks.sectionNav(props); return null; } }));
 vi.mock("./contribute-dialog", () => ({ default: () => null }));
 vi.mock("./issue-board", () => ({ default: (props: unknown) => { mocks.issueBoard(props); return null; } }));
 vi.mock("./project-settings-form", () => ({ default: () => null }));
@@ -59,6 +60,10 @@ function project() {
   return {
     id: "project", slug: "demo", title: "Demo", description: "A project", license: "MIT", coverUrl: "cover.png", ownerId: "owner", isPublic: true, owner: { name: "Owner" },
     revisions: [],
+    discussions: [
+      { id: "new-discussion", title: "Mobile navigation", body: "Discussion body must stay private to the detail view", createdAt: new Date("2026-09-12T00:00:00Z"), author: { name: "Jisoo" }, _count: { comments: 4 } },
+      { id: "old-discussion", title: "Color direction", createdAt: new Date("2026-09-10T00:00:00Z"), author: { name: "Min" }, _count: { comments: 1 } },
+    ],
     issues: [{
       id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
       author: { name: "Reporter" }, revision: null, comments: [],
@@ -149,5 +154,53 @@ describe("Project issue proposal visibility", () => {
     expect(legacyBridgeCss).toContain("@media (max-width: 47.999rem) { .revision-visuals .diff-side-by-side { grid-template-columns: 1fr; } }");
     expect(proposalCss).toContain("var(--odr-layout-reading, 48rem)");
     expect(catalog).toContain("Production Source Rights Read and Edit fixtures");
+  });
+});
+
+async function renderProjectPage(session: { user: { id: string } } | null) {
+  vi.clearAllMocks();
+  mocks.findProject.mockResolvedValue(project());
+  mocks.getSession.mockResolvedValue(session);
+  mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
+  mocks.countProposals.mockResolvedValue(0);
+  mocks.attribution.mockResolvedValue([]);
+  mocks.findProposal.mockResolvedValue(null);
+  mocks.readBundle.mockResolvedValue(null);
+  return renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
+}
+
+describe("Project Discussions section", () => {
+  it("places Discussions between Revisions and Issues in project navigation", async () => {
+    await renderProjectPage(null);
+    const props = mocks.sectionNav.mock.calls.at(-1)?.[0] as { items: Array<{ href: string }> };
+    expect(props.items.map((item) => item.href).slice(0, 4)).toEqual(["#overview", "#revisions", "#discussions", "#issues"]);
+  });
+
+  it("shows summary rows with title, author, created time, and comment count", async () => {
+    const markup = await renderProjectPage(null);
+    expect(markup).toContain("Mobile navigation");
+    expect(markup).toContain("Jisoo");
+    expect(markup).toContain("4 comments");
+    expect(markup).toContain('dateTime="2026-09-12T00:00:00.000Z"');
+    expect(markup).not.toContain("Discussion body must stay private to the detail view");
+  });
+
+  it("links discussion titles to their standalone detail pages", async () => {
+    const markup = await renderProjectPage(null);
+    expect(markup).toContain('href="/projects/demo/discussions/new-discussion"');
+  });
+
+  it("hides the anonymous create form and provides a login path", async () => {
+    const markup = await renderProjectPage(null);
+    expect(markup).not.toContain("<form");
+    expect(markup).toContain("Sign in to start a discussion");
+    expect(markup).toContain("/login?next=%2Fprojects%2Fdemo%2Fdiscussions%2Fnew");
+  });
+
+  it("shows signed-in users a link to the discussion form", async () => {
+    const markup = await renderProjectPage({ user: { id: "viewer" } });
+    expect(markup).toContain("Start a discussion");
+    expect(markup).toContain('href="/projects/demo/discussions/new"');
+    expect(markup).not.toContain("<form");
   });
 });

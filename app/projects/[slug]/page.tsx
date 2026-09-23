@@ -33,6 +33,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       owner: { select: { name: true } },
       revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } }, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
       issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } },
+      discussions: { orderBy: { createdAt: "desc" }, select: { id: true, title: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } },
       forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
       _count: { select: { forks: { where: { isPublic: true } } } },
       forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } },
@@ -68,6 +69,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const navigationItems = [
     { href: "#overview", label: "Overview" },
     { href: "#revisions", label: <>Revisions <span className={styles.navCount}>{project.revisions.length}</span></> },
+    { href: "#discussions", label: <>Discussions <span className={styles.navCount}>{project.discussions.length}</span></> },
     { href: "#issues", label: <>Issues <span className={styles.navCount}>{project.issues.length}</span></> },
     { href: "#proposals", label: <>Proposals <span className={styles.navCount}>{activeProposalCount}</span></> },
     { href: "#contributors", label: <>Contributors <span className={styles.navCount}>{contributors}</span></> },
@@ -136,6 +138,22 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>
       {project.revisions.length ? <ol className={styles.revisionList}>{project.revisions.map((revision) => <RevisionItem capability={<CapabilityBadge adapterConfidence={revision.adapterConfidence} adapterId={revision.adapterId} adapterMaturity={revision.adapterMaturity} adapterVersion={revision.adapterVersion} mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} />} changeDescription={revision.changeDescription} createdAt={revision.createdAt} href={`/projects/${project.slug}/revisions/${revision.number}`} id={revision.id} key={revision.id} number={revision.number} publisher={revision.publishedBy?.name} tags={revision.tags} title={revision.title} tool={revision.tool ? `${revision.tool}${revision.toolVersion ? ` ${revision.toolVersion}` : ""}` : null} />)}</ol> : <p className={styles.muted}>No revisions published yet.</p>}
+    </section>
+
+    <section aria-labelledby="discussions-heading" className={`${styles.section} ${styles.discussionSection}`} id="discussions">
+      <header className={styles.sectionHeader}>
+        <div><p className={styles.eyebrow}>Collaboration</p><h2 id="discussions-heading">Discussions</h2><p className={styles.discussionIntro}>Ideas, questions and design direction for this project.</p></div>
+        {project.isPublic && (session
+          ? <Link className={styles.discussionStartLink} href={`/projects/${project.slug}/discussions/new`}>Start a discussion</Link>
+          : <Link className={styles.discussionStartLink} href={`/login?next=${encodeURIComponent(`/projects/${project.slug}/discussions/new`)}`}>Sign in to start a discussion</Link>)}
+      </header>
+      {project.discussions.length ? <ul className={styles.discussionList}>{project.discussions.map((discussion) => <li key={discussion.id}>
+        <Link className={styles.discussionRowLink} href={`/projects/${project.slug}/discussions/${discussion.id}`}>
+          <strong>{discussion.title}</strong>
+          <span>{discussion.author.name} <span aria-hidden="true">·</span> <time dateTime={discussion.createdAt.toISOString()}>{discussion.createdAt.toLocaleDateString("en-US", { dateStyle: "medium" })}</time> <span aria-hidden="true">·</span> {discussion._count.comments} {discussion._count.comments === 1 ? "comment" : "comments"}</span>
+        </Link>
+      </li>)}</ul> : <p className={styles.muted}>No discussions yet.</p>}
+      <p className={styles.discussionSort}>Newest discussions first</p>
     </section>
 
     <IssueBoard canManage={project.isPublic && session?.user.id === project.ownerId} issues={visibleIssues} revisions={project.revisions} signedIn={project.isPublic && Boolean(session)} slug={project.slug} />
