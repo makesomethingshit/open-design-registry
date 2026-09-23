@@ -66,7 +66,7 @@ function project() {
     ],
     issues: [{
       id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
-      author: { name: "Reporter" }, revision: null, comments: [],
+      author: { name: "Reporter" }, revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, comments: [],
       proposals: [
         visibleProposal,
         { ...visibleProposal, id: "private-proposal", title: "Private proposal", changeNames: ["Secret change"], sourceRevision: { isPublished: true, project: { ownerId: "secret-owner", isPublic: false } } },
@@ -101,6 +101,8 @@ describe("Project issue proposal visibility", () => {
     expect(JSON.stringify(props)).not.toContain("secret-owner");
     expect(JSON.stringify(props)).not.toContain("Secret change");
     expect(JSON.stringify(props)).not.toContain("Unpublished change");
+    expect((props.issues[0] as { sourceDiscussion?: { id: string; title: string } }).sourceDiscussion).toEqual({ id: "discussion-1", title: "Mobile navigation" });
+    expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ issues: expect.objectContaining({ include: expect.objectContaining({ sourceDiscussion: { select: { id: true, title: true } } }) }) }) }));
     expect(markup).toContain("<dt>Contributors</dt><dd>2</dd>");
     expect(markup).toContain("Owner");
     expect(markup).toContain("Contributor");
@@ -139,7 +141,7 @@ describe("Project issue proposal visibility", () => {
     const layoutCss = readFileSync(new URL("../../../src/components/ui/layout.module.css", import.meta.url), "utf8");
     const tokensCss = readFileSync(new URL("../../../src/styles/tokens.css", import.meta.url), "utf8");
     const catalog = readFileSync(new URL("../../../app/(internal)/design-system/catalog.tsx", import.meta.url), "utf8");
-    const revisionPage = readFileSync(new URL("./revisions/[number]/page.tsx", import.meta.url), "utf8");
+    const revisionPage = readFileSync(new URL("./revisions/[number]/page.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
     const legacyBridgeCss = readFileSync(new URL("../../../src/styles/legacy-bridge.css", import.meta.url), "utf8");
     const proposalCss = readFileSync(new URL("../../../app/proposals/[id]/proposal-page.module.css", import.meta.url), "utf8");
     const spanWidth = (span: number) => span * 100 + (span - 1) * 16;

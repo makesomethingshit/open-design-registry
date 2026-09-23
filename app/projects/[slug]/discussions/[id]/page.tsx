@@ -4,7 +4,7 @@ import { Banner } from "@/src/components/ui/banner";
 import { PageGrid, PageHeader, Panel, Stack, WideColumn } from "@/src/components/ui/layout";
 import { getSession } from "@/src/lib/session";
 import { prisma } from "@/src/lib/prisma";
-import { DiscussionCommentForm } from "../../discussion-forms";
+import { DiscussionCommentForm, DiscussionWorkForm } from "../../discussion-forms";
 import styles from "../../project.module.css";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ export default async function DiscussionPage({ params }: { params: Promise<{ slu
       project: { select: { slug: true, title: true, ownerId: true, isPublic: true } },
       author: { select: { name: true } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } },
+      issues: { orderBy: { createdAt: "asc" }, select: { id: true, title: true, kind: true, status: true, createdAt: true } },
     },
   });
   if (!discussion || (!discussion.project.isPublic && discussion.project.ownerId !== session?.user.id)) notFound();
@@ -30,6 +31,22 @@ export default async function DiscussionPage({ params }: { params: Promise<{ slu
         <PageHeader eyebrow="DISCUSSION" id="discussion-heading" title={discussion.title} />
         <p className={styles.discussionMeta}>{discussion.author.name} <span aria-hidden="true">·</span> <time dateTime={discussion.createdAt.toISOString()}>{formatDate(discussion.createdAt)}</time></p>
         {discussion.body && <Panel className={styles.discussionBodyPanel}><p className={styles.discussionBody}>{discussion.body}</p></Panel>}
+        <Panel>
+          <Stack gap={3}>
+            <header className={styles.sectionHeader}><h2 id="resulting-work-heading">Resulting work</h2></header>
+            {discussion.issues.length ? <ul aria-labelledby="resulting-work-heading" className={styles.discussionWorkList}>{discussion.issues.map((issue) => {
+              const kindLabel = issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue";
+              return <li className={styles.discussionWorkItem} key={issue.id}>
+                <Link aria-label={`${kindLabel}: ${issue.title}, ${issue.status}`} className={styles.discussionWorkLink} href={`/projects/${slug}#issue-${issue.id}`}>
+                  <span className={styles.discussionWorkKind}>{kindLabel}</span>
+                  <strong className={styles.discussionWorkTitle}>{issue.title} <span aria-hidden="true">→</span></strong>
+                  <span className={styles.discussionWorkStatus}>{issue.status}</span>
+                </Link>
+              </li>;
+            })}</ul> : <p className="meta">No work has been created from this discussion yet.</p>}
+          </Stack>
+        </Panel>
+        {discussion.project.isPublic && session && <DiscussionWorkForm canCreateDesignRequest={session.user.id === discussion.project.ownerId} discussionBody={discussion.body} discussionId={discussion.id} discussionTitle={discussion.title} slug={slug} />}
         <Panel>
           <Stack gap={4}>
             <header className={styles.sectionHeader}><h2 id="comments-heading">Comments</h2><span>{discussion.comments.length} {discussion.comments.length === 1 ? "comment" : "comments"} · oldest first</span></header>
