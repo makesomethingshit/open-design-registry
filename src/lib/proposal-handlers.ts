@@ -13,7 +13,7 @@ const proposalDetails = {
   baseRevision: { select: { id: true, projectId: true, number: true, title: true, isPublished: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } },
   sourceRevision: { select: { id: true, projectId: true, number: true, title: true, isPublished: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } }, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { id: true, position: true, key: true, url: true, mimeType: true, altText: true } } } },
   author: { select: { id: true, name: true } },
-  relatedIssue: { select: { id: true, title: true, status: true } },
+  relatedIssue: { select: { id: true, title: true, kind: true, status: true, sourceDiscussion: { select: { id: true, title: true } } } },
   reviewer: { select: { id: true, name: true } },
   acceptedBy: { select: { id: true, name: true } },
   changeSet: { include: { changes: { orderBy: { createdAt: "asc" }, include: { reviewedBy: { select: { id: true, name: true } }, appliedRevision: { select: { id: true, number: true, title: true } }, reviewHistory: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } }, causedByRevision: { select: { id: true, number: true } } } } } } } },

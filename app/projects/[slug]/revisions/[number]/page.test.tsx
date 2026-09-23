@@ -206,3 +206,54 @@ describe("Revision provenance", () => {
     expect(markup).not.toContain("Unpublished change");
   });
 });
+
+describe("Revision upstream work chain", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function chainProposal(overrides: Record<string, unknown> = {}) {
+    return {
+      ...revision().appliedProposal,
+      relatedIssue: { id: "issue-14", title: "Fix mobile navigation", kind: "ISSUE", sourceDiscussion: { id: "discussion-7", title: "Mobile navigation" } },
+      ...overrides,
+    };
+  }
+
+  it("links the discussion, work item, and proposal chain", async () => {
+    const markup = await renderRevision(null, { appliedProposal: chainProposal() });
+
+    expect(markup).toContain("Mobile navigation");
+    expect(markup).toContain('href="/projects/demo/discussions/discussion-7"');
+    expect(markup).toContain("Fix mobile navigation");
+    expect(markup).toContain('href="/projects/demo#issue-issue-14"');
+    expect(markup).toContain('href="/proposals/proposal-32"');
+    expect(markup).toContain("Proposal #32");
+  });
+
+  it("labels a design request work item", async () => {
+    const markup = await renderRevision(null, { appliedProposal: chainProposal({ relatedIssue: { id: "issue-15", title: "Explore compact header", kind: "DESIGN_REQUEST", sourceDiscussion: { id: "discussion-7", title: "Mobile navigation" } } }) });
+
+    expect(markup).toContain("Design request");
+    expect(markup).toContain("Explore compact header");
+  });
+
+  it("shows a work item without inventing a discussion link", async () => {
+    const markup = await renderRevision(null, { appliedProposal: chainProposal({ relatedIssue: { id: "issue-16", title: "Legacy issue", kind: "ISSUE", sourceDiscussion: null } }) });
+
+    expect(markup).toContain("Legacy issue");
+    expect(markup).not.toContain("Origin discussion");
+  });
+
+  it("hides the whole work chain when proposal provenance is hidden", async () => {
+    const markup = await renderRevision({ user: { id: "viewer" } }, {
+      appliedProposal: {
+        ...chainProposal({ title: "Private Proposal" }),
+        sourceRevision: { isPublished: true, project: { ownerId: "source-owner", isPublic: false } },
+      },
+      appliedChanges: [{ ...change("secret", "Secret change", "r14"), reviewedBy: { id: "secret-reviewer", name: "Secret reviewer" } }],
+    });
+
+    expect(markup).not.toContain("Private Proposal");
+    expect(markup).not.toContain("Fix mobile navigation");
+    expect(markup).not.toContain("Mobile navigation");
+  });
+});
