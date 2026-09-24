@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const projectActivityStatuses = ["ACTIVE", "PAUSED", "ARCHIVED"] as const;
+export type ProjectActivityStatusValue = (typeof projectActivityStatuses)[number];
+
 export const projectSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(2000).default(""),
@@ -12,6 +15,7 @@ export const projectUpdateSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   license: z.string().trim().min(1).max(80).optional(),
   isPublic: z.boolean().optional(),
+  activityStatus: z.enum(projectActivityStatuses).optional(),
   rightsConfirmed: z.boolean().optional(),
 }).strict();
 

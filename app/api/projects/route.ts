@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     where,
     ...(isPaginated ? { cursor: cursor ? { slug: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
     orderBy,
-    select: { slug: true, title: true, description: true, license: true, isPublic: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
+    select: { slug: true, title: true, description: true, license: true, isPublic: true, activityStatus: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
   });
   const hasMore = projects.length > limit;
   const page = projects.slice(0, limit).map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }));

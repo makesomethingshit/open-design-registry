@@ -91,6 +91,7 @@ model Project {
   publicationConfirmedBy String?
   coverUrl    String
   ownerId     String
+  activityStatus ProjectActivityStatus @default(ACTIVE)
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   revisions   Revision[]
   releases    Release[]
@@ -112,6 +113,12 @@ model Project {
   @@index([isPublic, createdAt])
   @@index([forkedFromProjectId])
   @@index([forkedFromRevisionId])
+}
+
+enum ProjectActivityStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
 }
 
 enum ReportStatus {
