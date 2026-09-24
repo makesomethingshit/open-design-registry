@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   findRevisions: vi.fn(),
   findLatestRelease: vi.fn(),
   createRelease: vi.fn(),
+  lockProject: vi.fn(),
   transaction: vi.fn(),
 }));
 
@@ -39,7 +40,8 @@ describe("project releases route", () => {
     ]);
     mocks.findLatestRelease.mockResolvedValue({ number: 2 });
     mocks.createRelease.mockResolvedValue({ id: "release-3", number: 3 });
-    mocks.transaction.mockImplementation(async (callback) => callback({ release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease } } as never));
+    mocks.lockProject.mockResolvedValue([{ id: "project" }]);
+    mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease } } as never));
   });
 
   it("returns 404 for a missing project before checking session", async () => {
@@ -110,10 +112,64 @@ describe("project releases route", () => {
       },
       select: { id: true, number: true },
     });
+    expect(mocks.lockProject).toHaveBeenCalledTimes(1);
+    const [lockSql, lockedProjectId] = mocks.lockProject.mock.calls[0] as [TemplateStringsArray, string];
+    expect(lockSql.join("")).toContain('SELECT id FROM "Project" WHERE id = ');
+    expect(lockSql.join("")).toContain("FOR UPDATE");
+    expect(lockedProjectId).toBe("project");
+    expect(mocks.lockProject.mock.invocationCallOrder[0]).toBeLessThan(mocks.findLatestRelease.mock.invocationCallOrder[0]);
+    expect(mocks.findLatestRelease.mock.invocationCallOrder[0]).toBeLessThan(mocks.createRelease.mock.invocationCallOrder[0]);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it("returns 409 on a concurrent project release-number conflict", async () => {
+  it("returns 404 if the project is missing when the transaction locks it", async () => {
+    mocks.lockProject.mockResolvedValue([]);
+    const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(404);
+    expect(mocks.findLatestRelease).not.toHaveBeenCalled();
+    expect(mocks.createRelease).not.toHaveBeenCalled();
+  });
+
+  it("serializes concurrent release-number allocation on the Project row", async () => {
+    let latestNumber = 2;
+    let lockHeld = false;
+    const waiting: Array<() => void> = [];
+    mocks.lockProject.mockImplementation(async () => {
+      if (lockHeld) await new Promise<void>((resolve) => waiting.push(resolve));
+      else lockHeld = true;
+      return [{ id: "project" }];
+    });
+    mocks.findLatestRelease.mockImplementation(async () => ({ number: latestNumber }));
+    mocks.createRelease.mockImplementation(async ({ data }: { data: { number: number } }) => {
+      latestNumber = data.number;
+      return { id: `release-${data.number}`, number: data.number };
+    });
+    mocks.transaction.mockImplementation(async (callback) => {
+      try {
+        return await callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease } } as never);
+      } finally {
+        const next = waiting.shift();
+        if (next) next();
+        else lockHeld = false;
+      }
+    });
+
+    const responses = await Promise.all([
+      POST(request(), { params: Promise.resolve({ slug: "demo" }) }),
+      POST(request(), { params: Promise.resolve({ slug: "demo" }) }),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    expect(await Promise.all(responses.map((response) => response.json()))).toEqual([
+      { id: "release-3", number: 3 },
+      { id: "release-4", number: 4 },
+    ]);
+    expect(mocks.lockProject).toHaveBeenCalledTimes(2);
+    expect(mocks.findLatestRelease).toHaveBeenCalledTimes(2);
+    expect(mocks.createRelease).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the unique-constraint 409 mapping as a defensive fallback", async () => {
     const conflict = Object.assign(new Error("unique"), { code: "P2002", meta: { target: ["projectId", "number"] } });
     Object.setPrototypeOf(conflict, Prisma.PrismaClientKnownRequestError.prototype);
     mocks.transaction.mockRejectedValue(conflict);

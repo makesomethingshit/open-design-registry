@@ -33,6 +33,8 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
 
   try {
     const release = await prisma.$transaction(async (tx) => {
+      const [lockedProject] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+      if (!lockedProject) return null;
       const latest = await tx.release.findFirst({ where: { projectId: project.id }, orderBy: { number: "desc" }, select: { number: true } });
       return tx.release.create({
         data: {
@@ -46,6 +48,7 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
         select: { id: true, number: true },
       });
     });
+    if (!release) return error("Project not found", 404);
     return NextResponse.json(release, { status: 201 });
   } catch (cause) {
     if (cause instanceof Prisma.PrismaClientKnownRequestError && cause.code === "P2002") {
