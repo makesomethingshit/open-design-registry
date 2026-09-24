@@ -85,8 +85,7 @@ describe("Project issue proposal visibility", () => {
     mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
     mocks.countProposals.mockResolvedValue(0);
     mocks.attribution.mockResolvedValue([
-      { id: "owner", name: "Owner", roles: ["OWNER", "PUBLISHER"], appliedChanges: 0, appliedRevisions: 0, reviewedChanges: 0, publishedRevisions: 1 },
-      { id: "contributor", name: "Contributor", roles: ["CONTRIBUTOR"], appliedChanges: 2, appliedRevisions: 1, reviewedChanges: 0, publishedRevisions: 0 },
+      { id: "contributor", name: "Contributor", roles: ["CONTRIBUTOR"], appliedChanges: 2, appliedRevisions: 1, reviewedChanges: 0 },
     ]);
     mocks.findProposal.mockResolvedValue(null);
     mocks.readBundle.mockResolvedValue(null);
@@ -103,7 +102,7 @@ describe("Project issue proposal visibility", () => {
     expect(JSON.stringify(props)).not.toContain("Unpublished change");
     expect((props.issues[0] as { sourceDiscussion?: { id: string; title: string } }).sourceDiscussion).toEqual({ id: "discussion-1", title: "Mobile navigation" });
     expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ issues: expect.objectContaining({ include: expect.objectContaining({ sourceDiscussion: { select: { id: true, title: true } } }) }) }) }));
-    expect(markup).toContain("<dt>Contributors</dt><dd>2</dd>");
+    expect(markup).toContain("<dt>Contributors</dt><dd>1</dd>");
     expect(markup).toContain("Owner");
     expect(markup).toContain("Contributor");
   });

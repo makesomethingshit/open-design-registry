@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { isVisible, visibleProposalWhere } from "./proposal-handlers";
 
-export type AttributionRole = "OWNER" | "PUBLISHER" | "CONTRIBUTOR" | "REVIEWER";
+export type AttributionRole = "CONTRIBUTOR" | "REVIEWER";
 
 export type AttributionPerson = {
   id: string;
@@ -10,25 +10,20 @@ export type AttributionPerson = {
   appliedChanges: number;
   appliedRevisions: number;
   reviewedChanges: number;
-  publishedRevisions: number;
 };
 
 type Person = { id: string; name: string };
 type AppliedChange = { appliedRevisionId: string | null; reviewedBy: Person | null };
-type ProjectAttributionData = {
-  owner: Person;
-  revisions: Array<{ publishedBy: Person | null }>;
-  proposals: Array<{ author: Person; changeSet: { changes: AppliedChange[] } | null }>;
-};
+type ProjectAttributionData = { proposals: Array<{ author: Person; changeSet: { changes: AppliedChange[] } | null }> };
 
-const roleOrder: AttributionRole[] = ["OWNER", "PUBLISHER", "CONTRIBUTOR", "REVIEWER"];
+const roleOrder: AttributionRole[] = ["CONTRIBUTOR", "REVIEWER"];
 
-export function aggregateProjectAttribution({ owner, revisions, proposals }: ProjectAttributionData): AttributionPerson[] {
+export function aggregateProjectAttribution({ proposals }: ProjectAttributionData): AttributionPerson[] {
   const people = new Map<string, AttributionPerson & { revisionIds: Set<string> }>();
   const person = (actor: Person) => {
     let value = people.get(actor.id);
     if (!value) {
-      value = { ...actor, roles: [], appliedChanges: 0, appliedRevisions: 0, reviewedChanges: 0, publishedRevisions: 0, revisionIds: new Set() };
+      value = { ...actor, roles: [], appliedChanges: 0, appliedRevisions: 0, reviewedChanges: 0, revisionIds: new Set() };
       people.set(actor.id, value);
     }
     return value;
@@ -39,12 +34,8 @@ export function aggregateProjectAttribution({ owner, revisions, proposals }: Pro
     return value;
   };
 
-  addRole(owner, "OWNER");
-  for (const revision of revisions) {
-    if (revision.publishedBy) addRole(revision.publishedBy, "PUBLISHER").publishedRevisions += 1;
-  }
   for (const proposal of proposals) {
-    const changes = proposal.changeSet?.changes.filter((change) => change.appliedRevisionId) ?? [];
+    const changes = proposal.changeSet?.changes.filter((change) => change.appliedRevisionId !== null) ?? [];
     if (!changes.length) continue;
     const contributor = addRole(proposal.author, "CONTRIBUTOR");
     contributor.appliedChanges += changes.length;
@@ -56,27 +47,18 @@ export function aggregateProjectAttribution({ owner, revisions, proposals }: Pro
 
   return [...people.values()]
     .map(({ revisionIds, ...value }) => ({ ...value, appliedRevisions: revisionIds.size, roles: roleOrder.filter((role) => value.roles.includes(role)) }))
-    .sort((left, right) => Number(right.roles.includes("OWNER")) - Number(left.roles.includes("OWNER")) || left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+    .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
 }
 
 export async function listProjectAttribution(projectId: string, userId?: string) {
-  const [project, proposals] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
-      select: {
-        owner: { select: { id: true, name: true } },
-        revisions: { where: { isPublished: true }, select: { publishedBy: { select: { id: true, name: true } } } },
-      },
-    }),
-    prisma.proposal.findMany({
-      where: { ...visibleProposalWhere(projectId, userId), changeSet: { changes: { some: { appliedRevisionId: { not: null } } } } },
-      select: {
-        author: { select: { id: true, name: true } },
-        changeSet: { select: { changes: { where: { appliedRevisionId: { not: null } }, select: { appliedRevisionId: true, reviewedBy: { select: { id: true, name: true } } } } } },
-      },
-    }),
-  ]);
-  return project ? aggregateProjectAttribution({ owner: project.owner, revisions: project.revisions, proposals }) : [];
+  const proposals = await prisma.proposal.findMany({
+    where: { ...visibleProposalWhere(projectId, userId), changeSet: { changes: { some: { appliedRevisionId: { not: null } } } } },
+    select: {
+      author: { select: { id: true, name: true } },
+      changeSet: { select: { changes: { where: { appliedRevisionId: { not: null } }, select: { appliedRevisionId: true, reviewedBy: { select: { id: true, name: true } } } } } },
+    },
+  });
+  return aggregateProjectAttribution({ proposals });
 }
 
 type RevisionAttributionInput = {
