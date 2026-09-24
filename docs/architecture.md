@@ -28,8 +28,10 @@ flowchart LR
 
 | 위치 | 책임 |
 | --- | --- |
-| `app/projects/[slug]/page.tsx` | Overview와 프로젝트별 Revision·Issue·Proposal·Fork 표시 |
+| `app/projects/[slug]/page.tsx` | Overview와 프로젝트별 Revision·Release·Issue·Proposal·Fork 표시 |
 | `app/projects/[slug]/revision-publish-form.tsx` | 원본·미리보기·유닛 정보 발행 입력 |
+| `app/projects/[slug]/releases/` | Release 발행 입력과 변경 불가 상세 조회 |
+| `src/lib/release-handlers.ts` | Release 소유권·Revision 검증, 번호 산정·원자 발행 |
 | `app/proposals/[id]/page.tsx`, `proposal-review.tsx` | 비교 데이터 구성, 리뷰·선택 적용 UI |
 | `app/api/` | HTTP 입력, 세션·권한 확인, 응답 |
 | `src/lib/proposal-handlers.ts` | Proposal 생성·종료·댓글·리뷰·적용과 트랜잭션 |
@@ -48,6 +50,7 @@ flowchart LR
 | --- | --- |
 | Project | 소유자·공개 여부·라이선스·설명·Fork 출처를 가진 협업 공간 |
 | Revision | `(projectId, number)`로 구별하는 발행 기록. 이전 Revision, 원본, 라이선스, capability를 보존 |
+| Release / ReleaseRevision | 프로젝트 번호를 가진 판본과 기존 Revision 참조. join row가 상세 표시 순서를 보존 |
 | Preview | Revision에 속한 순서 있는 PNG/JPG/HTML 미리보기와 대체 텍스트 |
 | Proposal | 대상 프로젝트의 `baseRevisionId`, 제안자의 `sourceRevisionId`, 제목·설명·상태 |
 | ChangeSet / Change | Proposal의 변경 묶음과 실제 리뷰·적용 단위. `appliedRevisionId`로 채택 결과 추적 |
@@ -71,6 +74,10 @@ Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 �
 발행 시 프로젝트 라이선스를 Revision에 고정합니다. 과거 라이선스·checksum이 기록되지 않은 데이터는 추정해서 채우지 않습니다. 외부 URL 방식은 링크를 보존하지만 외부 파일 자체의 불변성까지 보장하지 않습니다.
 
 발행 API는 `POST /api/projects/{slug}/revisions`의 multipart 입력을 사용합니다. 제목·변경 설명·각 미리보기의 대체 텍스트가 필요합니다. 원본 파일의 합계는 100 MiB, 미리보기는 1~10개·각 10 MiB·합계 50 MiB까지입니다. 미리보기 형식은 PNG/JPG/HTML이며, 대표 이미지는 PNG/JPG만 허용합니다. 직접 `sourceKey`를 지정하는 입력은 받지 않습니다.
+
+## Release v0
+
+`Project → Release → ReleaseRevision → Revision`은 불변 Revision 위에 조회 전용 역사 기록을 둡니다. Release는 같은 Project의 published Revision 1–50개를 참조하며 payload를 복사하지 않습니다. `ReleaseRevision.position`이 Revision 번호 순서를 보존합니다. `(projectId, number)`는 유일하고, 다음 번호 조회와 Release·join row 생성은 한 transaction에서 처리합니다. 동시 번호 충돌은 재시도 없이 409로 반환합니다. 프로젝트 소유자만 발행할 수 있으며 공개 여부는 Project를 따릅니다. v0에는 초안, 수정·삭제, 자산, 완료·안정 상태가 없습니다.
 
 ## 번들과 capability
 

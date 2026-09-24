@@ -46,13 +46,14 @@
 .discussionIntro { margin: var(--odr-space-2) 0 0; color: var(--odr-text-muted); font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); }
 .discussionStartLink { display: inline-flex; min-height: var(--odr-control-lg); align-items: center; justify-content: center; padding: var(--odr-space-2) var(--odr-space-4); border: var(--odr-border-width) solid transparent; border-radius: var(--odr-radius-control); background: var(--odr-button-primary-bg); color: var(--odr-button-primary-fg); font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); text-align: center; text-decoration: none; }
 .discussionStartLink:hover { background: var(--odr-action-primary-hover); }
-.discussionStartLink:focus-visible, .discussionRowLink:focus-visible, .discussionCancel:focus-visible { outline: 2px solid var(--odr-accent); outline-offset: 2px; }
-.discussionList { display: grid; gap: var(--odr-space-2); padding: 0; margin: 0; list-style: none; }
-.discussionList li { min-width: 0; border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
-.discussionRowLink { display: grid; min-height: 7.5rem; align-content: center; gap: var(--odr-space-2); padding: var(--odr-space-5); color: var(--odr-text-primary); text-decoration: none; }
-.discussionRowLink:hover { background: var(--odr-surface-subtle); }
-.discussionRowLink strong { font-size: var(--odr-font-body); line-height: var(--odr-line-body); overflow-wrap: anywhere; }
-.discussionRowLink span, .discussionMeta { color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); overflow-wrap: anywhere; }
+.discussionStartLink:focus-visible, .discussionRowLink:focus-visible, .releaseRowLink:focus-visible, .discussionCancel:focus-visible { outline: 2px solid var(--odr-accent); outline-offset: 2px; }
+.discussionList, .releaseList { display: grid; gap: var(--odr-space-2); padding: 0; margin: 0; list-style: none; }
+.discussionList li, .releaseList li { min-width: 0; border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
+.discussionRowLink, .releaseRowLink { display: grid; min-height: 7.5rem; align-content: center; gap: var(--odr-space-2); padding: var(--odr-space-5); color: var(--odr-text-primary); text-decoration: none; }
+.discussionRowLink:hover, .releaseRowLink:hover { background: var(--odr-surface-subtle); }
+.discussionRowLink strong, .releaseRowLink strong { font-size: var(--odr-font-body); line-height: var(--odr-line-body); overflow-wrap: anywhere; }
+.discussionRowLink span, .releaseRowLink span, .discussionMeta { color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); overflow-wrap: anywhere; }
+.releaseMeta { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .discussionSort { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .discussionCreatePage, .discussionDetailPage { grid-column: 1 / -1; justify-self: center; width: min(100%, 70rem); }
 .discussionCreatePage { max-width: 45rem; }
@@ -103,7 +104,7 @@
   .discussionWorkActions, .discussionWorkFormActions { display: grid; }
   .discussionWorkActions button, .discussionWorkFormActions button { width: 100%; }
   .discussionStartLink { width: 100%; }
-  .discussionRowLink { min-height: 5.5rem; padding: var(--odr-space-4); }
+  .discussionRowLink, .releaseRowLink { min-height: 5.5rem; padding: var(--odr-space-4); }
   .discussionCreateFields { gap: var(--odr-space-4); }
   .discussionActions { display: grid; }
   .discussionCancel { display: none; }

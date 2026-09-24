@@ -10,8 +10,9 @@ ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)�
 - 작성자 소유 프로젝트의 개선 Revision을 바탕으로 한 Proposal, 변경별 Review, 승인된 변경의 일부 또는 전체 적용과 새 Revision 발행
 - 번들 파일·유닛 단위 변경, 유닛 의존성 기록과 누락 의존성 검사, 기준 Revision 변경 시 충돌 확인
 - Revision 발행자와 Proposal 작성자·Reviewer·적용 결과의 출처 연결, 라이선스와 원본 자산 보존
+- Release v0: 프로젝트 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호가 있는 기록으로 묶어 발행·조회; 수정·삭제는 미지원
 
-이 기준선은 코드 기능을 뜻한다. 실제 서비스의 배포·운영 상태는 별도로 확인해야 한다. Discussion은 현재 Proposal 안의 댓글과 다르고, 아래의 프로젝트 Discussion·Release·Watch 등은 아직 제품 방향이다.
+이 기준선은 코드 기능을 뜻한다. 실제 서비스의 배포·운영 상태는 별도로 확인해야 한다. Discussion은 현재 Proposal 안의 댓글과 다르고, 아래의 프로젝트 Discussion·Watch 등은 아직 제품 방향이다.
 
 ## 다음 제품 단계 — 프로젝트의 대화와 기여 요청
 
@@ -25,7 +26,6 @@ ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)�
 ## 다음 제품 단계 — 변화의 기록과 발견
 
 - 프로젝트 상태는 완료도가 아닌 활동 상태로 표현한다(예: Active, Paused, Archived). `Completed`·`Final`·`Stable`을 중심 상태로 삼지 않는다.
-- 여러 Revision의 의미 있는 변화를 한 시점의 디자인 방향으로 묶는 **Release**를 제공한다. Release는 완료 선언이 아니다.
 - 사람 Follow 대신 프로젝트 Follow/Watch로 Revision·Release·Proposal 등의 변화를 따라가게 한다. Star는 관심·응원·다시 보기의 표현으로 다루고 인기·품질 점수로 삼지 않는다.
 - 전역 Feed는 Revision·Release 같은 실제 변화를 중심으로 조용하게 유지한다. 프로젝트 안에서는 Discussion·Issue·Design Request·Proposal·Review까지 과정과 맥락을 보여 준다.
 - 태그·도구·라이선스 검색에 기여 가능한 작업 발견을 연결하고, 원본·라이선스·출처를 확인할 수 있게 한다.
