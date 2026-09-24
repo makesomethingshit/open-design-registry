@@ -1,0 +1,11 @@
+.revisions { display: grid; gap: var(--odr-space-3); margin: 0; padding: 0; border: 0; }
+.revisions legend { color: var(--odr-text-primary); font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); }
+.revisions > p { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
+.revisionOptions { display: grid; gap: var(--odr-space-2); padding: 0; margin: 0; list-style: none; }
+.revisionOptions li { min-width: 0; border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); }
+.revisionOptions label { display: flex; min-height: var(--odr-control-lg); align-items: center; gap: var(--odr-space-3); padding: var(--odr-space-3) var(--odr-space-4); color: var(--odr-text-primary); cursor: pointer; overflow-wrap: anywhere; }
+.revisionOptions input { width: 1.125rem; height: 1.125rem; flex: none; accent-color: var(--odr-accent); }
+.revisionOptions label:focus-within { outline: 2px solid var(--odr-accent); outline-offset: 2px; }
+.revisions:focus-visible { outline: 2px solid var(--odr-accent); outline-offset: 2px; }
+.fieldError { color: var(--odr-action-danger, #b42318) !important; }
+.actions { align-items: center; }

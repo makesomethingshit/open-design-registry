@@ -56,10 +56,11 @@ const visibleProposal = {
   appliedRevisions: [{ id: "r14", number: 14, title: "Revision 14" }],
 };
 
-function project() {
+function project(withRelease = false) {
   return {
     id: "project", slug: "demo", title: "Demo", description: "A project", license: "MIT", coverUrl: "cover.png", ownerId: "owner", isPublic: true, owner: { name: "Owner" },
     revisions: [],
+    releases: withRelease ? [{ id: "release-3", number: 3, title: "Navigation rethink", description: "A focused change.", createdAt: new Date("2026-09-24T00:00:00Z"), publishedBy: { name: "Owner" }, _count: { revisions: 3 } }] : [],
     discussions: [
       { id: "new-discussion", title: "Mobile navigation", body: "Discussion body must stay private to the detail view", createdAt: new Date("2026-09-12T00:00:00Z"), author: { name: "Jisoo" }, _count: { comments: 4 } },
       { id: "old-discussion", title: "Color direction", createdAt: new Date("2026-09-10T00:00:00Z"), author: { name: "Min" }, _count: { comments: 1 } },
@@ -158,9 +159,9 @@ describe("Project issue proposal visibility", () => {
   });
 });
 
-async function renderProjectPage(session: { user: { id: string } } | null) {
+async function renderProjectPage(session: { user: { id: string } } | null, value = project()) {
   vi.clearAllMocks();
-  mocks.findProject.mockResolvedValue(project());
+  mocks.findProject.mockResolvedValue(value);
   mocks.getSession.mockResolvedValue(session);
   mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
   mocks.countProposals.mockResolvedValue(0);
@@ -170,12 +171,36 @@ async function renderProjectPage(session: { user: { id: string } } | null) {
   return renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
 }
 
-describe("Project Discussions section", () => {
-  it("places Discussions between Revisions and Issues in project navigation", async () => {
+describe("Project Releases section", () => {
+  it("places Releases between Revisions and Discussions", async () => {
     await renderProjectPage(null);
     const props = mocks.sectionNav.mock.calls.at(-1)?.[0] as { items: Array<{ href: string }> };
-    expect(props.items.map((item) => item.href).slice(0, 4)).toEqual(["#overview", "#revisions", "#discussions", "#issues"]);
+    expect(props.items.map((item) => item.href).slice(1, 4)).toEqual(["#revisions", "#releases", "#discussions"]);
+    expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ releases: expect.objectContaining({ orderBy: { number: "desc" }, select: expect.objectContaining({ _count: { select: { revisions: true } } }) }) }) }));
   });
+
+  it("shows release rows and the publish link only to the owner", async () => {
+    const releases = project(true);
+    const ownerMarkup = await renderProjectPage({ user: { id: "owner" } }, releases);
+    expect(ownerMarkup).toContain("Release 3");
+    expect(ownerMarkup).toContain("Navigation rethink");
+    expect(ownerMarkup).toContain("3 revisions");
+    expect(ownerMarkup).toContain('href="/projects/demo/releases/3"');
+    expect(ownerMarkup).toContain('href="/projects/demo/releases/new"');
+
+    const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } }, releases);
+    expect(visitorMarkup).toContain('href="/projects/demo/releases/3"');
+    expect(visitorMarkup).not.toContain('href="/projects/demo/releases/new"');
+  });
+
+  it("keeps the owner publish link in the empty state", async () => {
+    const markup = await renderProjectPage({ user: { id: "owner" } });
+    expect(markup).toContain("No releases yet.");
+    expect(markup).toContain('href="/projects/demo/releases/new"');
+  });
+});
+
+describe("Project Discussions section", () => {
 
   it("shows summary rows with title, author, created time, and comment count", async () => {
     const markup = await renderProjectPage(null);
