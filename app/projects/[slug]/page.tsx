@@ -163,7 +163,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     </section>
     <section aria-labelledby="contributors-heading" className={styles.section} id="contributors">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Collaboration</p><h2 id="contributors-heading">Contributors</h2></div><span>{contributors} people</span></header>
-      <ul className={styles.contributorList}>{attribution.map((person) => <li key={person.id}><div><strong>{person.name}</strong><div className={styles.contributorRoles}>{person.roles.map((role) => <Badge key={role}>{roleLabel(role)}</Badge>)}</div></div><span>{attributionMetrics(person).join(" · ") || "Project owner"}</span></li>)}</ul>
+      <ul className={styles.contributorList}>{attribution.map((person) => <li key={person.id}><div><strong>{person.name}</strong><div className={styles.contributorRoles}>{person.roles.map((role) => <Badge key={role}>{roleLabel(role)}</Badge>)}</div></div><span>{attributionMetrics(person).join(" · ")}</span></li>)}</ul>
     </section>
     <section aria-labelledby="forks-heading" className={styles.section} id="forks">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Lineage</p><h2 id="forks-heading">Forks</h2></div><span>Project descendants</span></header>
@@ -188,6 +188,5 @@ function attributionMetrics(person: AttributionPerson) {
     person.appliedChanges && `${person.appliedChanges} applied ${person.appliedChanges === 1 ? "change" : "changes"}`,
     person.appliedRevisions && `${person.appliedRevisions} applied ${person.appliedRevisions === 1 ? "revision" : "revisions"}`,
     person.reviewedChanges && `${person.reviewedChanges} applied ${person.reviewedChanges === 1 ? "change" : "changes"} reviewed`,
-    person.publishedRevisions && `${person.publishedRevisions} ${person.publishedRevisions === 1 ? "revision" : "revisions"} published`,
   ].filter(Boolean) as string[];
 }
