@@ -55,7 +55,7 @@ flowchart LR
 | Proposal | 대상 프로젝트의 `baseRevisionId`, 제안자의 `sourceRevisionId`, 제목·설명·상태 |
 | ChangeSet / Change | Proposal의 변경 묶음과 실제 리뷰·적용 단위. `appliedRevisionId`로 채택 결과 추적 |
 | ChangeReview | 사용자 리뷰와 시스템 승인 해제·재검토 이력 |
-| Issue / IssueComment | 프로젝트 또는 Revision에 대한 논의 |
+| Discussion / DiscussionComment · Issue / IssueComment | 프로젝트 Discussion과 댓글은 별도 엔티티다. Issue는 별도 작업 항목이며 `IssueKind.DESIGN_REQUEST`로 Design Request를 구분하고 `sourceDiscussionId`로 시작한 Discussion을 연결한다. |
 | Report / Notification | 신고 검토, Issue 생성·Fork 생성 알림 |
 
 **별도 `ChangeUnit` 테이블이나 Dependency 테이블은 없습니다.** 현재 유닛과 유닛 간 의존성은 S3에 저장된 Revision 번들의 `files[]` 항목에 기록합니다. Change의 `targetFileId`가 유닛의 stable ID를 가리킵니다.

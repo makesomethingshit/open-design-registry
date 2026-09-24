@@ -32,7 +32,7 @@ Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계
 | 선택 적용 의존성 | 번들 v3의 유닛 의존성 기록, 제안·적용 시 누락 의존성 확인 |
 | Capability·어댑터 | 구조화/전체 문서 표시, SVG 파일 종류 제안과 신뢰도 표시 |
 | 충돌·승인 해제 | 최신 Revision과 checksum 비교, 확인 불가 시 차단, Proposal 적용에 따른 승인 해제 이력 |
-| 향후 제품 방향 | 프로젝트 Discussion·Design Request, 활동 상태, 프로젝트 Watch·Star, 변화 중심 Feed |
+| 향후 제품 방향 | 활동 상태, 프로젝트 Watch·Star, 변화 중심 Feed |
 | 미구현 기술 범위 | Penpot 내부 객체 분해, 편집기 자동 동기화, 범용 Git식 merge |
 
 `STRUCTURED`는 ODR이 번들의 파일·유닛을 선택할 수 있다는 뜻입니다. PSD·SVG·Penpot 파일 내부의 레이어나 객체를 모두 이해한다는 뜻은 아닙니다.
