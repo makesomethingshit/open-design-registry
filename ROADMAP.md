@@ -12,13 +12,13 @@ ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)�
 - Revision 발행자와 Proposal 작성자·Reviewer·적용 결과의 출처 연결, 라이선스와 원본 자산 보존
 - Release v0: 프로젝트 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호가 있는 기록으로 묶어 발행·조회; 수정·삭제는 미지원
 
-이 기준선은 코드 기능을 뜻한다. 실제 서비스의 배포·운영 상태는 별도로 확인해야 한다. Discussion은 현재 Proposal 안의 댓글과 다르고, 아래의 프로젝트 Discussion·Watch 등은 아직 제품 방향이다.
+이 기준선은 코드 기능을 뜻한다. 실제 서비스의 배포·운영 상태는 별도로 확인해야 한다. 프로젝트 Discussion과 자체 댓글은 구현되어 있으며, 여기서 시작한 Issue·Design Request는 Proposal 및 적용 Revision의 출처로 연결된다. 활동 상태·Watch·Star·Feed는 아직 제품 방향이다.
 
-## 다음 제품 단계 — 프로젝트의 대화와 기여 요청
+## 구현 완료 (#43–#48) — 프로젝트의 대화와 기여 요청
 
-- 프로젝트의 방향과 해석을 논의하는 **Discussion**, 해결할 문제를 다루는 **Issue**, 관리자가 외부에 요청하는 명확한 작업인 **Design Request**를 구분한다.
-- Discussion에서 Issue나 Design Request로 구체화하고 Proposal로 이어질 수 있게 한다. 기존 Issue나 Fork 없이 시작하는 Proposal도 허용하는 협업 원칙을 유지한다.
-- 프로젝트 안에서 Proposal·Review·Revision·출처를 함께 이해하고, 기여를 시작할 작업을 발견할 수 있게 한다.
+- 프로젝트마다 별도 **Discussion**과 댓글을 제공하며, 작업 항목인 **Issue**와 **Design Request**를 구분한다.
+- Discussion에서 Issue나 Design Request를 만들고 출처를 연결할 수 있으며, 해당 작업 항목에 연결된 Proposal로 이어진다. 기존 Issue나 Fork 없이 시작하는 Proposal도 허용한다.
+- 프로젝트와 적용 Revision에서 Proposal·Review·Revision 및 Discussion까지 이어지는 출처를 확인할 수 있다.
 - 초기 공식 Contributor는 채택된 Proposal 작성자와 해당 Proposal의 Reviewer로 한정한다. 다른 도움은 설명에서 인정하되 유형을 계속 늘리지 않는다.
 
 완료 판단은 서로 다른 사용자가 프로젝트의 맥락을 이해하고 제안·리뷰·채택을 수행할 수 있는지, 채택된 Revision에서 기여와 출처를 추적할 수 있는지로 한다.
