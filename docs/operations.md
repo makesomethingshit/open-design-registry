@@ -46,7 +46,7 @@ npx prisma migrate deploy
 로컬 MinIO가 필요한 경우 CI와 같은 이미지로 실행할 수 있습니다.
 
 ```sh
-docker run --detach --rm --name odr-docs-minio --publish 9000:9000 --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+docker run --detach --rm --name odr-docs-minio --publish 9000:9000 --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=minioadmin docker.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z server /data
 node --env-file=.env scripts/prepare-test-storage.mjs
 npm run dev
 ```
