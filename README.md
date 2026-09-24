@@ -80,7 +80,7 @@ CI는 PostgreSQL과 고정 버전의 MinIO를 띄운 뒤 가입 → 프로젝트
 ```bash
 docker run --detach --rm --name open-design-registry-minio --publish 9000:9000 \
   --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=minioadmin \
-  quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+  docker.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z server /data
 ```
 
 스토리지·DB 값을 현재 프로세스의 환경 변수로 내보낸 뒤 아래 명령을 실행하세요. `test:storage:prepare`는 버킷이 없을 때만 생성합니다. `.env`를 사용하는 상세 명령은 [개발과 운영](docs/operations.md)에 있습니다.
