@@ -51,6 +51,22 @@ describe("project validation", () => {
     expect(validateRevisionSource({ hasFile: true, sourceUrl: "https://example.com/design.zip" })).toMatch(/exactly one/);
     expect(validateRevisionSource({ hasFile: false, sourceKey: "staging/user/missing" })).toMatch(/sourceKey/);
   });
+  it("accepts only supported activity status changes", () => {
+    expect(projectUpdateSchema.safeParse({ activityStatus: "PAUSED" }).success).toBe(true);
+    expect(projectUpdateSchema.safeParse({ activityStatus: "ARCHIVED" }).success).toBe(true);
+    expect(projectUpdateSchema.safeParse({ activityStatus: "ACTIVE" }).success).toBe(true);
+    expect(projectUpdateSchema.safeParse({ activityStatus: "Completed" }).success).toBe(false);
+    expect(projectUpdateSchema.safeParse({ activityStatus: "Final" }).success).toBe(false);
+    expect(projectUpdateSchema.safeParse({ activityStatus: "Stable" }).success).toBe(false);
+  });
+  it("declares the activity status migration without behavior-gating SQL", () => {
+    const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260924140000_project_activity_status/migration.sql"), "utf8");
+    expect(sql).toContain('CREATE TYPE "ProjectActivityStatus"');
+    expect(sql).toContain("ADD COLUMN \"activityStatus\"");
+    expect(sql).toContain("DEFAULT 'ACTIVE'");
+    expect(sql).not.toContain("Completed");
+    expect(sql).not.toMatch(/TRIGGER|CREATE FUNCTION/i);
+  });
   it("keeps the revision migration deployable on a fresh project schema", () => {
     const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260831000000_revision_constraints/migration.sql"), "utf8");
     expect(sql.indexOf('CREATE TABLE "Revision"')).toBeGreaterThanOrEqual(0);
