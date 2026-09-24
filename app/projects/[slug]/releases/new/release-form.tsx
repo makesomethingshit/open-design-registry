@@ -38,6 +38,7 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting) return;
     const form = event.currentTarget;
     if (!form.checkValidity()) {
       setFieldErrors(invalidFieldErrors(form));
@@ -61,6 +62,7 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
     setError("");
     setFieldErrors({});
     setSubmitting(true);
+    let navigated = false;
     try {
       const response = await fetch(`/api/projects/${slug}/releases`, {
         method: "POST",
@@ -77,10 +79,11 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
         return;
       }
       router.push(`/projects/${slug}/releases/${payload.number}`);
+      navigated = true;
     } catch {
       setError("Couldn’t publish the release. Try again.");
     } finally {
-      setSubmitting(false);
+      if (!navigated) setSubmitting(false);
     }
   }
 
