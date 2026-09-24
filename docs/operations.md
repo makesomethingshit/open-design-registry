@@ -2,7 +2,7 @@
 
 [README](../README.md) · [구조와 데이터 모델](architecture.md) · [Proposal 협업](proposals.md)
 
-기준: 2026-09-07, main `074a2401b46dc1143703c8afe0bd274251e9f821`. 명령은 저장소 루트에서 실행합니다. 기존 코드·설정과 대조한 절차이며, 이번 문서 작업에서 서버 기동·DB 마이그레이션·배포를 수행하지는 않았습니다.
+기준: 2026-09-24, main `5d5e0fbb215e7b823f65ca6b42c206d65f7c498c`. 명령은 저장소 루트에서 실행합니다. 기존 코드·설정과 대조한 절차이며, 이번 문서 작업에서 서버 기동·DB 마이그레이션·배포를 수행하지는 않았습니다.
 
 ## 로컬 준비
 
@@ -46,7 +46,7 @@ npx prisma migrate deploy
 로컬 MinIO가 필요한 경우 CI와 같은 이미지로 실행할 수 있습니다.
 
 ```sh
-docker run --detach --rm --name odr-docs-minio --publish 9000:9000 --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+docker run --detach --rm --name odr-docs-minio --publish 9000:9000 --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=minioadmin docker.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z server /data
 node --env-file=.env scripts/prepare-test-storage.mjs
 npm run dev
 ```
@@ -111,7 +111,7 @@ node --env-file=.env node_modules/@playwright/test/cli.js test
 
 ### 현재 CI에서 빠지는 것
 
-`.github/workflows/ci.yml`은 test·typecheck·build·e2e 작업을 정의합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화됩니다. **`RUN_PROPOSAL_CONCURRENCY_TEST`는 설정되어 있지 않으므로 이 경합 테스트는 CI에서도 기본 SKIP입니다.** 이 플래그를 설정해 별도로 실행해야 해당 결과를 확보할 수 있습니다.
+`.github/workflows/ci.yml`은 test·typecheck·build·e2e 작업을 정의합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화됩니다. **test 작업에는 `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`이 설정되어 있어 Proposal 경합 테스트도 CI에서 실행됩니다.**
 
 ## 운영 전 확인
 
@@ -132,8 +132,8 @@ node --env-file=.env node_modules/@playwright/test/cli.js test
 | checksum 없는 기존 유닛이 막힘 | `CHECK_UNAVAILABLE` 정책. 기존 데이터를 추정 보강하거나 검사를 우회하지 않음 |
 | 발행된 Revision 수정 SQL 실패 | 불변성 트리거가 의도대로 차단했는지. 새 Revision 발행 경로 사용 |
 | HTML 미리보기가 일부 동작하지 않음 | 스크립트·네트워크 등을 제한하는 CSP와 미리보기 형식 |
-| 기여 버튼에서 로그인 경로 문제 | 현재 실제 화면은 `/login`. 일부 기여 경로에는 `/sign-in` 리다이렉트가 남아 있어 먼저 로그인 후 재진입 필요 |
+| 기여 경로 로그인 복귀 | contribute-dialog, `/contribute`, `/proposals/new`, Discussions의 로그인 유도는 원래 작업 경로를 `/login?next=...`로 전달하는지 확인 |
 
-마지막 로그인 경로 항목은 기준 코드의 경로 불일치를 읽어 확인한 사항으로, 이번 문서 작업에서 브라우저로 재현하거나 코드를 수정하지 않았습니다.
+기준 코드에서는 contribute-dialog, `/contribute`, `/proposals/new`, Discussions의 로그인 유도가 `/login?next=...`를 사용함을 확인했습니다. 이번 문서 작업에서는 로그인 흐름을 브라우저에서 실행하지 않았습니다.
 
-기준 코드: [CI](https://github.com/makesomethingshit/open-design-registry/blob/074a2401b46dc1143703c8afe0bd274251e9f821/.github/workflows/ci.yml), [환경 예제](https://github.com/makesomethingshit/open-design-registry/blob/074a2401b46dc1143703c8afe0bd274251e9f821/.env.example), [테스트 설정](https://github.com/makesomethingshit/open-design-registry/blob/074a2401b46dc1143703c8afe0bd274251e9f821/playwright.config.ts).
+기준 코드: [CI](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/.github/workflows/ci.yml), [환경 예제](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/.env.example), [테스트 설정](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/playwright.config.ts).

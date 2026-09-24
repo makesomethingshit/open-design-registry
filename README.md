@@ -32,7 +32,7 @@ Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계
 | 선택 적용 의존성 | 번들 v3의 유닛 의존성 기록, 제안·적용 시 누락 의존성 확인 |
 | Capability·어댑터 | 구조화/전체 문서 표시, SVG 파일 종류 제안과 신뢰도 표시 |
 | 충돌·승인 해제 | 최신 Revision과 checksum 비교, 확인 불가 시 차단, Proposal 적용에 따른 승인 해제 이력 |
-| 향후 제품 방향 | 프로젝트 Discussion·Design Request, 활동 상태, 프로젝트 Watch·Star, 변화 중심 Feed |
+| 향후 제품 방향 | 활동 상태, 프로젝트 Watch·Star, 변화 중심 Feed |
 | 미구현 기술 범위 | Penpot 내부 객체 분해, 편집기 자동 동기화, 범용 Git식 merge |
 
 `STRUCTURED`는 ODR이 번들의 파일·유닛을 선택할 수 있다는 뜻입니다. PSD·SVG·Penpot 파일 내부의 레이어나 객체를 모두 이해한다는 뜻은 아닙니다.
@@ -80,7 +80,7 @@ CI는 PostgreSQL과 고정 버전의 MinIO를 띄운 뒤 가입 → 프로젝트
 ```bash
 docker run --detach --rm --name open-design-registry-minio --publish 9000:9000 \
   --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=minioadmin \
-  quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+  docker.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z server /data
 ```
 
 스토리지·DB 값을 현재 프로세스의 환경 변수로 내보낸 뒤 아래 명령을 실행하세요. `test:storage:prepare`는 버킷이 없을 때만 생성합니다. `.env`를 사용하는 상세 명령은 [개발과 운영](docs/operations.md)에 있습니다.
