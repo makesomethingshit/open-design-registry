@@ -77,7 +77,7 @@ Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 �
 
 ## Release v0
 
-`Project → Release → ReleaseRevision → Revision`은 불변 Revision 위에 조회 전용 역사 기록을 둡니다. Release는 같은 Project의 published Revision 1–50개를 참조하며 payload를 복사하지 않습니다. `ReleaseRevision.position`이 Revision 번호 순서를 보존합니다. `(projectId, number)`는 유일하고, 다음 번호 조회와 Release·join row 생성은 한 transaction에서 처리합니다. 동시 번호 충돌은 재시도 없이 409로 반환합니다. 프로젝트 소유자만 발행할 수 있으며 공개 여부는 Project를 따릅니다. v0에는 초안, 수정·삭제, 자산, 완료·안정 상태가 없습니다.
+`Project → Release → ReleaseRevision → Revision`은 불변 Revision 위에 조회 전용 역사 기록을 둡니다. Release는 같은 Project의 published Revision 1–50개를 참조하며 payload를 복사하지 않습니다. `ReleaseRevision.position`이 Revision 번호 순서를 보존합니다. `(projectId, number)`는 유일하고, Release 발행은 트랜잭션 안에서 Project 행을 `SELECT … FOR UPDATE`로 잠근 뒤 다음 번호를 조회하고 Release와 연결 행을 생성하므로, 동일 프로젝트에 대한 병렬 발행 요청은 직렬화됩니다. 번호 unique 충돌(P2002)은 잠금 하에서는 정상 경합이 모두 순차 처리되므로 도달 가능한 정상 흐름이 아니며, 예외적으로 발생한 경우에만 방어적으로 409를 반환합니다. 프로젝트 소유자만 발행할 수 있으며 공개 여부는 Project를 따릅니다. v0에는 초안, 수정·삭제, 자산, 완료·안정 상태가 없습니다.
 
 ## 번들과 capability
 
