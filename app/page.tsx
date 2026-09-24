@@ -54,7 +54,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           {hasActiveFilter && <TextLink href="/">Clear filters</TextLink>}
         </details>
       </form>
-      {projects.length ? <div aria-label="Public projects" className={styles.gallery}>{projects.map((project, index) => <ProjectCard coverUrl={publicAssetUrl(project.coverUrl)} description={project.description} href={`/projects/${project.slug}`} key={project.id} license={project.license} owner={project.owner.name} priority={index < 4} tags={project.revisions[0]?.tags ?? []} title={project.title} updatedAt={project.updatedAt} />)}</div> : <p className={styles.empty}>No public projects match those filters.</p>}
+      {projects.length ? <div aria-label="Public projects" className={styles.gallery}>{projects.map((project, index) => <ProjectCard activityStatus={project.activityStatus} coverUrl={publicAssetUrl(project.coverUrl)} description={project.description} href={`/projects/${project.slug}`} key={project.id} license={project.license} owner={project.owner.name} priority={index < 4} tags={project.revisions[0]?.tags ?? []} title={project.title} updatedAt={project.updatedAt} />)}</div> : <p className={styles.empty}>No public projects match those filters.</p>}
     </section>
   </div>;
 }

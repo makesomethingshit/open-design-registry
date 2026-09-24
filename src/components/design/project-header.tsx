@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Tag } from "@/src/components/ui/badge";
+import { StatusBadge, Tag } from "@/src/components/ui/badge";
+import { projectActivityStatusPresentation } from "@/src/lib/ui/activity-status";
 import { Icon } from "@/src/components/ui/icon";
 import styles from "./project-header.module.css";
 
 type ProjectHeaderProps = {
   actions?: ReactNode;
+  activityStatus?: string;
   description: string;
   lineage?: ReactNode;
   license: string;
@@ -16,13 +18,14 @@ type ProjectHeaderProps = {
   visibility: "public" | "private";
 };
 
-export function ProjectHeader({ actions, description, lineage, license, owner, revisionCount, slug, title, visibility }: ProjectHeaderProps) {
+export function ProjectHeader({ actions, activityStatus = "ACTIVE", description, lineage, license, owner, revisionCount, slug, title, visibility }: ProjectHeaderProps) {
   const isPublic = visibility === "public";
+  const status = projectActivityStatusPresentation(activityStatus);
   const introduction = projectIntroduction(description);
   return <header className={styles.header}>
     <div className={styles.content}>
       <p className={styles.path}><Link href="/">Open Design Registry</Link> <span aria-hidden="true">/</span> {slug}</p>
-      <div className={styles.titleRow}><h1 id="project-title">{title}</h1><Tag><Icon name={isPublic ? "globe" : "lock"} size={16} />{isPublic ? "Public" : "Private"}</Tag></div>
+      <div className={styles.titleRow}><h1 id="project-title">{title}</h1><Tag><Icon name={isPublic ? "globe" : "lock"} size={16} />{isPublic ? "Public" : "Private"}</Tag><StatusBadge icon={status.icon} tone={status.tone}>{status.label}</StatusBadge></div>
       {introduction && <p className={styles.description}>{introduction}</p>}
       {lineage && <p className={styles.lineage}>{lineage}</p>}
       <dl className={styles.meta}>
