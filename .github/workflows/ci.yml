@@ -26,6 +26,8 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      RUN_PROPOSAL_CONCURRENCY_TEST: "1"
     services:
       postgres:
         image: postgres:16

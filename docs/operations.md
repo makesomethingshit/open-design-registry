@@ -111,7 +111,7 @@ node --env-file=.env node_modules/@playwright/test/cli.js test
 
 ### 현재 CI에서 빠지는 것
 
-`.github/workflows/ci.yml`은 test·typecheck·build·e2e 작업을 정의합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화됩니다. **`RUN_PROPOSAL_CONCURRENCY_TEST`는 설정되어 있지 않으므로 이 경합 테스트는 CI에서도 기본 SKIP입니다.** 이 플래그를 설정해 별도로 실행해야 해당 결과를 확보할 수 있습니다.
+`.github/workflows/ci.yml`은 test·typecheck·build·e2e 작업을 정의합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화됩니다. **test 작업에는 `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`이 설정되어 있어 Proposal 경합 테스트도 CI에서 실행됩니다.**
 
 ## 운영 전 확인
 
