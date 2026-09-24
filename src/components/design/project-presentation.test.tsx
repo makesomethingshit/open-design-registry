@@ -5,11 +5,12 @@ import { RevisionItem } from "./revision-item";
 
 describe("project presentation", () => {
   it("uses only a short source-derived introduction in the header", () => {
-    const markup = renderToStaticMarkup(<ProjectHeader description="First sentence introduces the project. The full description remains in About." license="MIT" owner="Designer" revisionCount={1} slug="project" title="Project" visibility="public" />);
+    const markup = renderToStaticMarkup(<ProjectHeader activityStatus="PAUSED" description="First sentence introduces the project. The full description remains in About." license="MIT" owner="Designer" revisionCount={1} slug="project" title="Project" visibility="public" />);
     expect(markup).toContain("First sentence introduces the project.");
     expect(markup).not.toContain("The full description remains in About.");
-    expect(renderToStaticMarkup(<ProjectHeader description={"W".repeat(200)} license="MIT" owner="Designer" revisionCount={1} slug="project" title="Project" visibility="public" />)).toContain("…");
-    expect((renderToStaticMarkup(<ProjectHeader description="" license="MIT" owner="Designer" revisionCount={1} slug="project" title="Project" visibility="public" />).match(/<p(?:\s|>)/g) ?? [])).toHaveLength(1);
+    expect(markup).toContain("Paused");
+    expect(renderToStaticMarkup(<ProjectHeader activityStatus="ACTIVE" description={"W".repeat(200)} license="MIT" owner="Designer" revisionCount={1} slug="project" title="Project" visibility="public" />)).toContain("…");
+    expect((renderToStaticMarkup(<ProjectHeader activityStatus="ARCHIVED" description="" license="MIT" owner="Designer" revisionCount={1} slug="project" title="Project" visibility="public" />).match(/<p(?:\s|>)/g) ?? [])).toHaveLength(1);
   });
 
   it("keeps distinct times for revisions created on the same day", () => {

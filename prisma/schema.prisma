@@ -87,6 +87,7 @@ model Project {
   description String
   license     String
   isPublic    Boolean  @default(true)
+  activityStatus ProjectActivityStatus @default(ACTIVE)
   publicationConfirmedAt DateTime?
   publicationConfirmedBy String?
   coverUrl    String
@@ -112,6 +113,12 @@ model Project {
   @@index([isPublic, createdAt])
   @@index([forkedFromProjectId])
   @@index([forkedFromRevisionId])
+}
+
+enum ProjectActivityStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
 }
 
 enum ReportStatus {

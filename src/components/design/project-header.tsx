@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Tag } from "@/src/components/ui/badge";
 import { Icon } from "@/src/components/ui/icon";
+import { projectActivityStatusLabel, type ProjectActivityStatus } from "@/src/lib/project-activity-status";
 import styles from "./project-header.module.css";
 
 type ProjectHeaderProps = {
@@ -14,15 +15,16 @@ type ProjectHeaderProps = {
   slug: string;
   title: string;
   visibility: "public" | "private";
+  activityStatus: ProjectActivityStatus;
 };
 
-export function ProjectHeader({ actions, description, lineage, license, owner, revisionCount, slug, title, visibility }: ProjectHeaderProps) {
+export function ProjectHeader({ actions, activityStatus, description, lineage, license, owner, revisionCount, slug, title, visibility }: ProjectHeaderProps) {
   const isPublic = visibility === "public";
   const introduction = projectIntroduction(description);
   return <header className={styles.header}>
     <div className={styles.content}>
       <p className={styles.path}><Link href="/">Open Design Registry</Link> <span aria-hidden="true">/</span> {slug}</p>
-      <div className={styles.titleRow}><h1 id="project-title">{title}</h1><Tag><Icon name={isPublic ? "globe" : "lock"} size={16} />{isPublic ? "Public" : "Private"}</Tag></div>
+      <div className={styles.titleRow}><h1 id="project-title">{title}</h1><Tag><Icon name={isPublic ? "globe" : "lock"} size={16} />{isPublic ? "Public" : "Private"}</Tag><Tag>{projectActivityStatusLabel(activityStatus)}</Tag></div>
       {introduction && <p className={styles.description}>{introduction}</p>}
       {lineage && <p className={styles.lineage}>{lineage}</p>}
       <dl className={styles.meta}>

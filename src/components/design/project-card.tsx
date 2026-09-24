@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Tag } from "@/src/components/ui/badge";
+import { projectActivityStatusLabel, type ProjectActivityStatus } from "@/src/lib/project-activity-status";
 import styles from "./project-card.module.css";
 
 export type ProjectCardProps = {
@@ -12,9 +13,10 @@ export type ProjectCardProps = {
   tags: readonly string[];
   title: string;
   updatedAt: Date;
+  activityStatus: ProjectActivityStatus;
 };
 
-export function ProjectCard({ coverUrl, description, href, license, owner, priority = false, tags, title, updatedAt }: ProjectCardProps) {
+export function ProjectCard({ activityStatus, coverUrl, description, href, license, owner, priority = false, tags, title, updatedAt }: ProjectCardProps) {
   return <article className={styles.card}>
     <Link aria-label={`View ${title}`} className={styles.mediaLink} href={href}>
       <div className={styles.media}>
@@ -28,6 +30,7 @@ export function ProjectCard({ coverUrl, description, href, license, owner, prior
       <p className={styles.byline}>By {owner} <span aria-hidden="true">·</span> <time dateTime={updatedAt.toISOString()}>Updated {formatDate(updatedAt)}</time></p>
       <div className={styles.metadata}>
         <span>{license}</span>
+        <Tag>{projectActivityStatusLabel(activityStatus)}</Tag>
         {tags.slice(0, 3).map((tag) => <Tag key={tag}>{tag}</Tag>)}
       </div>
     </div>

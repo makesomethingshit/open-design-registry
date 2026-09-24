@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { projectActivityStatuses } from "./project-activity-status";
 
 export const projectSchema = z.object({
   title: z.string().trim().min(1).max(120),
@@ -12,6 +13,7 @@ export const projectUpdateSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   license: z.string().trim().min(1).max(80).optional(),
   isPublic: z.boolean().optional(),
+  activityStatus: z.enum(projectActivityStatuses).optional(),
   rightsConfirmed: z.boolean().optional(),
 }).strict();
 

@@ -91,6 +91,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       slug={project.slug}
       title={project.title}
       visibility={project.isPublic ? "public" : "private"}
+      activityStatus={project.activityStatus}
     />
     <SectionNav items={navigationItems} label="Project sections" />
 
@@ -135,7 +136,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       </div>
     </section>
 
-    {session?.user.id === project.ownerId && <details className={styles.ownerTools}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
+    {session?.user.id === project.ownerId && <details className={styles.ownerTools}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
 
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>
