@@ -84,6 +84,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     <ProjectHeader
       actions={<><ContributeDialog revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /><ContributeDialog initialIntent="fork" revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /></>}
       description={project.description}
+      activityStatus={project.activityStatus}
       license={project.license}
       lineage={project.forkedFrom && <>Forked from <Link href={`/projects/${project.forkedFrom.slug}`}>{project.forkedFrom.title}</Link> <span aria-hidden="true">·</span> Revision {project.forkedFromRevision?.number ?? "unknown"} <span aria-hidden="true">·</span> Original author {project.forkedFrom.owner.name} <span aria-hidden="true">·</span> Original revision license {project.forkedFromLicense ?? "not recorded"}</>}
       owner={project.owner.name}
@@ -135,7 +136,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       </div>
     </section>
 
-    {session?.user.id === project.ownerId && <details className={styles.ownerTools}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
+    {session?.user.id === project.ownerId && <details className={styles.ownerTools}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
 
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>

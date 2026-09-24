@@ -12,6 +12,7 @@ export const projectUpdateSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   license: z.string().trim().min(1).max(80).optional(),
   isPublic: z.boolean().optional(),
+  activityStatus: z.enum(["ACTIVE", "PAUSED", "ARCHIVED"]).optional(),
   rightsConfirmed: z.boolean().optional(),
 }).strict();
 

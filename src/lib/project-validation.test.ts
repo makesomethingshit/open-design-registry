@@ -20,6 +20,15 @@ describe("project validation", () => {
     const update = projectUpdateSchema.parse({ title: "renamed" });
     expect({ ...existing, ...update }).toEqual({ title: "renamed", description: "keep this", license: "MIT", isPublic: false });
   });
+  it("accepts only the descriptive project activity statuses", () => {
+    expect(projectUpdateSchema.parse({ activityStatus: "PAUSED" })).toEqual({ activityStatus: "PAUSED" });
+    expect(projectUpdateSchema.safeParse({ activityStatus: "COMPLETED" }).success).toBe(false);
+  });
+  it("adds the project activity enum with an ACTIVE migration default", () => {
+    const sql = readFileSync(resolve(process.cwd(), "prisma/migrations/20260924140000_project_activity_status/migration.sql"), "utf8");
+    expect(sql).toContain('CREATE TYPE "ProjectActivityStatus" AS ENUM (\'ACTIVE\', \'PAUSED\', \'ARCHIVED\')');
+    expect(sql).toContain('ADD COLUMN "activityStatus" "ProjectActivityStatus" NOT NULL DEFAULT \'ACTIVE\'');
+  });
   it("only accepts HTTP(S) revision sources", () => {
     expect(revisionUrlSchema.safeParse("https://example.com/design.zip").success).toBe(true);
     expect(revisionUrlSchema.safeParse("ftp://example.com/design.zip").success).toBe(false);

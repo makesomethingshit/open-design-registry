@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
 import { Checkbox } from "@/src/components/ui/checkbox";
-import { Field, Input, Textarea } from "@/src/components/ui/field";
+import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
 import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 import { Stack } from "@/src/components/ui/layout";
+import type { ProjectActivityStatus } from "@prisma/client";
 
-export default function ProjectSettingsForm({ slug, title, description, license, isPublic }: { slug: string; title: string; description: string; license: string; isPublic: boolean }) {
+export default function ProjectSettingsForm({ slug, title, description, license, isPublic, activityStatus }: { slug: string; title: string; description: string; license: string; isPublic: boolean; activityStatus: ProjectActivityStatus }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -30,7 +31,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
     setSaving(true);
     const form = new FormData(formElement);
     try {
-      const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), license: form.get("license"), isPublic: form.get("isPublic") === "on", rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
+      const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), license: form.get("license"), isPublic: form.get("isPublic") === "on", activityStatus: form.get("activityStatus"), rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
       if (!response.ok) {
         setError((await response.json().catch(() => null))?.error ?? "프로젝트를 저장하지 못했습니다.");
         return;
@@ -48,6 +49,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
     <summary>프로젝트 설정</summary>
     <form className="form" noValidate onSubmit={submit} aria-busy={saving}>
       <Stack gap={4}>
+        <Field id="settings-activity-status" label="Activity status"><Select defaultValue={activityStatus} name="activityStatus"><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option><option value="ARCHIVED">Archived</option></Select></Field>
         <Field error={fieldErrors.title} id="settings-title" invalid={Boolean(fieldErrors.title)} label="제목" required><Input name="title" defaultValue={title} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
         <Field error={fieldErrors.description} id="settings-description" invalid={Boolean(fieldErrors.description)} label="설명"><Textarea name="description" defaultValue={description} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.description; return next; })} maxLength={2000} /></Field>
         <Field error={fieldErrors.license} id="settings-license" invalid={Boolean(fieldErrors.license)} label="라이선스" required><Input name="license" defaultValue={license} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.license; return next; })} required maxLength={80} /></Field>

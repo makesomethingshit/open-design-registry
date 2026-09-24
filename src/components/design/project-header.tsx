@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Tag } from "@/src/components/ui/badge";
 import { Icon } from "@/src/components/ui/icon";
+import type { ProjectActivityStatus } from "@prisma/client";
 import styles from "./project-header.module.css";
 
 type ProjectHeaderProps = {
   actions?: ReactNode;
+  activityStatus: ProjectActivityStatus;
   description: string;
   lineage?: ReactNode;
   license: string;
@@ -16,7 +18,7 @@ type ProjectHeaderProps = {
   visibility: "public" | "private";
 };
 
-export function ProjectHeader({ actions, description, lineage, license, owner, revisionCount, slug, title, visibility }: ProjectHeaderProps) {
+export function ProjectHeader({ actions, activityStatus, description, lineage, license, owner, revisionCount, slug, title, visibility }: ProjectHeaderProps) {
   const isPublic = visibility === "public";
   const introduction = projectIntroduction(description);
   return <header className={styles.header}>
@@ -27,6 +29,7 @@ export function ProjectHeader({ actions, description, lineage, license, owner, r
       {lineage && <p className={styles.lineage}>{lineage}</p>}
       <dl className={styles.meta}>
         <div><dt>Owner</dt><dd>{owner}</dd></div>
+        <div><dt>Activity</dt><dd>{activityStatus.charAt(0) + activityStatus.slice(1).toLowerCase()}</dd></div>
         <div><dt>License</dt><dd>{license}</dd></div>
         <div><dt>Revisions</dt><dd>{revisionCount}</dd></div>
       </dl>
