@@ -19,6 +19,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   projects      Project[]
+  projectStars  ProjectStar[]
   reports       Report[]
   issues        Issue[]
   issueComments IssueComment[]
@@ -93,6 +94,7 @@ model Project {
   ownerId     String
   activityStatus ProjectActivityStatus @default(ACTIVE)
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  stars       ProjectStar[]
   revisions   Revision[]
   releases    Release[]
   reports     Report[]
@@ -113,6 +115,19 @@ model Project {
   @@index([isPublic, createdAt])
   @@index([forkedFromProjectId])
   @@index([forkedFromRevisionId])
+}
+
+model ProjectStar {
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([userId, createdAt])
+  @@index([projectId])
 }
 
 enum ProjectActivityStatus {

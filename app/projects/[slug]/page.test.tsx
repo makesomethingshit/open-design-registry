@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -13,11 +13,13 @@ const mocks = vi.hoisted(() => ({
   readBundle: vi.fn(),
   issueBoard: vi.fn(),
   sectionNav: vi.fn(),
+  findStarCount: vi.fn(),
+  headerActions: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, projectStar: { count: mocks.findStarCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
@@ -33,11 +35,12 @@ vi.mock("@/src/lib/attribution", async () => {
 vi.mock("@/src/lib/ui/status-presentation", () => ({ proposalStatusPresentation: () => ({ label: "Open", tone: "neutral", icon: "clock" }) }));
 vi.mock("@/app/capability-badge", () => ({ default: () => null }));
 vi.mock("@/app/reports/report-form", () => ({ default: () => null }));
-vi.mock("@/src/components/design/project-header", () => ({ ProjectHeader: () => null }));
+vi.mock("@/src/components/design/project-header", () => ({ ProjectHeader: ({ actions }: { actions?: unknown }) => { mocks.headerActions(actions); return null; } }));
 vi.mock("@/src/components/design/revision-item", () => ({ RevisionItem: () => null }));
 vi.mock("@/src/components/ui/badge", () => ({ Badge: ({ children }: { children: unknown }) => createElement("span", null, children as never), StatusBadge: () => null }));
 vi.mock("@/src/components/ui/section-nav", () => ({ SectionNav: (props: unknown) => { mocks.sectionNav(props); return null; } }));
 vi.mock("./contribute-dialog", () => ({ default: () => null }));
+vi.mock("./project-star-button", () => ({ ProjectStarButton: () => null }));
 vi.mock("./issue-board", () => ({ default: (props: unknown) => { mocks.issueBoard(props); return null; } }));
 vi.mock("./project-settings-form", () => ({ default: () => null }));
 vi.mock("./proposal-list", () => ({ default: () => null }));
@@ -159,10 +162,11 @@ describe("Project issue proposal visibility", () => {
   });
 });
 
-async function renderProjectPage(session: { user: { id: string } } | null, value = project()) {
+async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0) {
   vi.clearAllMocks();
   mocks.findProject.mockResolvedValue(value);
   mocks.getSession.mockResolvedValue(session);
+  mocks.findStarCount.mockResolvedValue(starCount);
   mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
   mocks.countProposals.mockResolvedValue(0);
   mocks.attribution.mockResolvedValue([]);
@@ -170,6 +174,36 @@ async function renderProjectPage(session: { user: { id: string } } | null, value
   mocks.readBundle.mockResolvedValue(null);
   return renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
 }
+
+describe("Project Star action", () => {
+  it("places the current user's Star control before Contribute and Fork", async () => {
+    await renderProjectPage({ user: { id: "viewer" } }, project(), 1);
+
+    const action = mocks.headerActions.mock.calls.at(-1)?.[0] as ReactElement<{ children: ReactElement<Record<string, unknown>>[] }>;
+    const [star, contribute, fork] = action.props.children;
+    expect(star.props).toEqual({ initialStarred: true, signedIn: true, slug: "demo" });
+    expect(contribute.props).toMatchObject({ signedIn: true, slug: "demo" });
+    expect(contribute.props.initialIntent).toBeUndefined();
+    expect(fork.props).toMatchObject({ initialIntent: "fork", signedIn: true, slug: "demo" });
+    expect(mocks.findStarCount).toHaveBeenCalledWith({ where: { userId: "viewer", projectId: "project" } });
+  });
+
+  it("provides a sign-in control to anonymous viewers and hides it on private owner pages", async () => {
+    await renderProjectPage(null);
+    const publicActions = mocks.headerActions.mock.calls.at(-1)?.[0] as ReactElement<{ children: ReactElement<Record<string, unknown>>[] }>;
+    expect(publicActions.props.children[0].props).toEqual({ initialStarred: false, signedIn: false, slug: "demo" });
+    expect(mocks.findStarCount).not.toHaveBeenCalled();
+
+    const privateProject = project();
+    privateProject.isPublic = false;
+    await renderProjectPage({ user: { id: "owner" } }, privateProject);
+    const privateActions = mocks.headerActions.mock.calls.at(-1)?.[0] as ReactElement<{ children: ReactElement<Record<string, unknown>>[] }>;
+    const visibleActions = privateActions.props.children.filter(Boolean);
+    expect(visibleActions).toHaveLength(2);
+    expect(visibleActions[0].props).not.toHaveProperty("initialStarred");
+    expect(mocks.findStarCount).not.toHaveBeenCalled();
+  });
+});
 
 describe("Project Releases section", () => {
   it("places Releases between Revisions and Discussions", async () => {

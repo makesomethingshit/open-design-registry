@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 type User = { name?: string | null; role?: string | null };
 
 export default function AuthNav() {
+  const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -54,5 +55,5 @@ export default function AuthNav() {
 
   if (!loaded || !user) return <nav className="auth-nav" aria-label="Account"><a href="/#public-projects-heading" className="nav-link">Explore</a><a href="/projects/new" className="nav-link nav-cta">New project</a><a href="/login" className="nav-link">Sign in</a></nav>;
   const initial = (user.name || "A").slice(0, 1).toUpperCase();
-  return <nav className="auth-nav" aria-label="Account"><a href="/projects" className="nav-link">My projects</a><a href="/projects/new" className="nav-link nav-cta">New project</a><a href="/notifications" className="nav-link" aria-label={unreadCount ? `Activity, ${unreadCount} unread` : "Activity"}>Activity{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</a>{user.role === "admin" && <a href="/admin/reports" className="nav-link">Reports</a>}<span className="nav-profile"><span className="avatar avatar-small" aria-hidden="true">{initial}</span><span className="nav-user">{user.name || "Account"}</span></span><button type="button" className="nav-button" onClick={signOut}>Sign out</button></nav>;
+  return <nav className="auth-nav" aria-label="Account"><a href="/projects" className="nav-link">My projects</a><a aria-current={pathname === "/stars" ? "page" : undefined} href="/stars" className="nav-link">Starred</a><a href="/projects/new" className="nav-link nav-cta">New project</a><a href="/notifications" className="nav-link" aria-label={unreadCount ? `Activity, ${unreadCount} unread` : "Activity"}>Activity{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</a>{user.role === "admin" && <a href="/admin/reports" className="nav-link">Reports</a>}<span className="nav-profile"><span className="avatar avatar-small" aria-hidden="true">{initial}</span><span className="nav-user">{user.name || "Account"}</span></span><button type="button" className="nav-button" onClick={signOut}>Sign out</button></nav>;
 }
