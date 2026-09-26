@@ -161,7 +161,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(returnedAfterPublish.searchParams.get("relatedIssue")).toBe(relatedIssueId);
     expect(returnedAfterPublish.searchParams.get("sourceProject")).toBe(forkSlug);
     expect(returnedAfterPublish.searchParams.get("sourceRevision")).toBe("2");
-    await expect(page.getByLabel("Source revision")).toContainText(`${forkSlug} · r2 · Contribution revision`);
+    await expect(page.getByLabel("Source revision", { exact: true })).toContainText(`${forkSlug} · r2 · Contribution revision`);
     await page.getByRole("button", { name: "Continue with whole document" }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${slug}/proposals/new\\?`));
     await expect(page.getByLabel("Related issue")).toHaveValue(relatedIssueId);
