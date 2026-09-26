@@ -64,6 +64,24 @@ export function sameDependencySet(left?: readonly string[], right?: readonly str
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
 
+export function sameRevisionBundleContents(left: RevisionBundle, right: RevisionBundle) {
+  return left.version === right.version && left.files.length === right.files.length && left.files.every((file, index) => {
+    const other = right.files[index];
+    if (!other) return false;
+    const sameChecksum = file.checksum?.toLowerCase() === other.checksum?.toLowerCase();
+    return file.id === other.id
+      && file.name === other.name
+      && file.kind === other.kind
+      && file.mimeType === other.mimeType
+      && file.size === other.size
+      && sameChecksum
+      && (file.assetKey === other.assetKey || Boolean(file.checksum && other.checksum && sameChecksum))
+      && file.previewKeys.length === other.previewKeys.length
+      && file.previewKeys.every((key, keyIndex) => key === other.previewKeys[keyIndex])
+      && sameDependencySet(file.dependencies, other.dependencies);
+  });
+}
+
 export function dependencyClosure(bundle: RevisionBundle, rootIds: readonly string[]) {
   const visited = new Set(rootIds);
   if (bundle.version !== 3) return visited;

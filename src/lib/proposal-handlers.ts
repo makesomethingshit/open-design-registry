@@ -5,7 +5,7 @@ import { prisma } from "./prisma";
 import { proposalApplySchema, proposalCloseSchema, proposalCreateSchema, proposalReviewSchema, issueCommentSchema } from "./project-validation";
 import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-status";
 import { deleteObject, publicAssetUrl } from "./storage";
-import { normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
+import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
 
 const proposalDetails = {
@@ -106,6 +106,52 @@ type UnitChangeRequest =
   | { action: "REMOVE_UNIT"; targetFileId: string }
   | { action: "ADD_UNIT"; sourceFileId: string };
 
+type AppliedRevisionSnapshot = {
+  sourceKey: string | null;
+  sourceUrl: string | null;
+  sourceChecksum: string | null;
+  tool: string | null;
+  toolVersion: string | null;
+  tags: string[];
+  capabilityMode: string | null;
+  capabilityUnitCount: number | null;
+  adapterId: string | null;
+  adapterVersion: string | null;
+  adapterConfidence: string | null;
+  adapterMaturity: string | null;
+  previews: Array<{ position: number; key: string; url: string; mimeType: string; size: number; altText: string }>;
+};
+
+function sameDocumentSource(left: AppliedRevisionSnapshot, right: AppliedRevisionSnapshot) {
+  const sameChecksum = Boolean(left.sourceKey && right.sourceKey && left.sourceChecksum && right.sourceChecksum
+    && left.sourceChecksum.toLowerCase() === right.sourceChecksum.toLowerCase());
+  const sameKey = Boolean(left.sourceKey && left.sourceKey === right.sourceKey
+    && (!left.sourceChecksum || !right.sourceChecksum || left.sourceChecksum.toLowerCase() === right.sourceChecksum.toLowerCase()));
+  return sameKey || sameChecksum || Boolean(left.sourceUrl && left.sourceUrl === right.sourceUrl);
+}
+
+function sameAppliedDocument(left: AppliedRevisionSnapshot, right: AppliedRevisionSnapshot, leftBundle: RevisionBundle | null, rightBundle: RevisionBundle | null) {
+  const sameSource = sameDocumentSource(left, right)
+    || Boolean(leftBundle && rightBundle && sameRevisionBundleContents(leftBundle, rightBundle));
+  if (!sameSource) return false;
+  return left.tool === right.tool
+    && left.toolVersion === right.toolVersion
+    && left.tags.length === right.tags.length
+    && left.tags.every((tag, index) => tag === right.tags[index])
+    && left.capabilityMode === right.capabilityMode
+    && left.capabilityUnitCount === right.capabilityUnitCount
+    && left.adapterId === right.adapterId
+    && left.adapterVersion === right.adapterVersion
+    && left.adapterConfidence === right.adapterConfidence
+    && left.adapterMaturity === right.adapterMaturity
+    && left.previews.length === right.previews.length
+    && left.previews.every((preview, index) => {
+      const other = right.previews[index];
+      return Boolean(other && preview.position === other.position && preview.key === other.key && preview.url === other.url
+        && preview.mimeType === other.mimeType && preview.size === other.size && preview.altText === other.altText);
+    });
+}
+
 async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) {
   const projects = new Map<string, LockedProject>();
   for (const projectId of [...new Set(projectIds)].sort()) {
@@ -156,6 +202,11 @@ function unitChanges(base: RevisionBundle, source: RevisionBundle | null, reques
     }
     const sourceFile = sources.get(request.sourceFileId);
     if (!sourceFile) return { error: "Selected source unit is no longer available" };
+    if (request.action === "MODIFY_UNIT" && source && sourceFile.id === target.id
+      && conflictForChange({ type: "MODIFY_UNIT", action: "MODIFY_UNIT", targetFileId: target.id }, base, source)?.status === "NO_CONFLICT"
+      && sourceFile.mimeType === target.mimeType && sourceFile.size === target.size
+      && sourceFile.previewKeys.length === target.previewKeys.length
+      && sourceFile.previewKeys.every((key, index) => key === target.previewKeys[index])) return { error: "Proposal has no changes" };
     changes.push({ type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: target.name, targetFileId: target.id, name: target.name, kind: target.kind, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey });
   }
   return { changes };
@@ -269,21 +320,28 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   if (!parsed.success) return error("Proposal title, description, or revisions are invalid");
   const input = parsed.data;
   const [baseRevision, sourceRevision] = await Promise.all([
-    prisma.revision.findFirst({ where: { id: input.baseRevisionId, projectId: project.id, isPublished: true }, select: { id: true, sourceKey: true } }),
-    prisma.revision.findUnique({ where: { id: input.sourceRevisionId }, include: { project: { select: { id: true, ownerId: true } } } }),
+    prisma.revision.findFirst({ where: { id: input.baseRevisionId, projectId: project.id, isPublished: true }, select: { id: true, sourceKey: true, sourceUrl: true, sourceChecksum: true, tool: true, toolVersion: true, tags: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, previews: { orderBy: [{ position: "asc" }, { key: "asc" }], select: { position: true, key: true, url: true, mimeType: true, size: true, altText: true } } } }),
+    prisma.revision.findUnique({ where: { id: input.sourceRevisionId }, include: { project: { select: { id: true, ownerId: true } }, previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } }),
   ]);
   if (!baseRevision) return error("Base revision not found", 400);
   if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
+  if (baseRevision.id === sourceRevision.id) return error("Proposal has no changes");
   const requestedFiles = input.files ?? [];
   const requestedUnitChanges = input.changes ?? [];
   if (requestedFiles.length && requestedUnitChanges.length) return error("Use either legacy file replacements or unit changes, not both");
-  const needsBaseBundle = Boolean(requestedFiles.length || requestedUnitChanges.length);
-  const needsSourceBundle = Boolean(requestedFiles.length || requestedUnitChanges.some((change) => change.action === "ADD_UNIT" || change.action === "MODIFY_UNIT"));
+  const wholeDocument = !requestedFiles.length && !requestedUnitChanges.length;
+  const knownSameSource = sameDocumentSource(baseRevision, sourceRevision);
+  const compareWholeBundles = wholeDocument && !knownSameSource
+    && baseRevision.capabilityMode === "STRUCTURED" && sourceRevision.capabilityMode === "STRUCTURED";
+  const requiresBaseBundle = Boolean(requestedFiles.length || requestedUnitChanges.length);
+  const requiresSourceBundle = Boolean(requestedFiles.length || requestedUnitChanges.some((change) => change.action === "ADD_UNIT" || change.action === "MODIFY_UNIT"));
+  const needsBaseBundle = requiresBaseBundle || compareWholeBundles;
+  const needsSourceBundle = requiresSourceBundle || compareWholeBundles;
   const [baseBundle, sourceBundle] = await Promise.all([
     needsBaseBundle ? readRevisionBundle(baseRevision.sourceKey) : Promise.resolve(null),
     needsSourceBundle ? readRevisionBundle(sourceRevision.sourceKey) : Promise.resolve(null),
   ]);
-  if ((needsBaseBundle && !baseBundle) || (needsSourceBundle && !sourceBundle)) return error("This revision needs a file bundle before individual units can be changed.", 409);
+  if ((requiresBaseBundle && !baseBundle) || (requiresSourceBundle && !sourceBundle)) return error("This revision needs a file bundle before individual units can be changed.", 409);
   let changes: ProposalChangeData[];
   if (requestedUnitChanges.length) {
     const prepared = unitChanges(baseBundle!, sourceBundle, requestedUnitChanges as UnitChangeRequest[]);
@@ -314,6 +372,7 @@ export async function createProjectProposal(request: Request, scope: { slug: str
     if (changes.length !== requestedFiles.length) return error("Selected files no longer match their published revisions", 400);
   } else {
     changes = [{ type: "REPLACE_DOCUMENT", action: "REPLACE_DOCUMENT", target: "whole_document" }];
+    if (sameAppliedDocument(baseRevision, sourceRevision, baseBundle, sourceBundle)) return error("Proposal has no changes");
   }
   const relatedIssueId = input.relatedIssueId || undefined;
   if (relatedIssueId) {

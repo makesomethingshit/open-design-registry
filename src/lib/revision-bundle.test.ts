@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getObject: vi.fn(), putBytes: vi.fn() }));
 vi.mock("./storage", () => ({ getObject: mocks.getObject, putBytes: mocks.putBytes }));
 
-const { capabilityForBundle, dependencyClosure, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, readRevisionBundleStrict, revisionBundleChecksum } = await import("./revision-bundle");
+const { capabilityForBundle, dependencyClosure, detectUnitChanges, encodeRevisionBundle, normalizeUnitName, publicBundleFiles, readRevisionBundle, readRevisionBundleStrict, revisionBundleChecksum, sameRevisionBundleContents } = await import("./revision-bundle");
 
 describe("revision bundle", () => {
   const bundle = { version: 1 as const, files: [{ id: "file-a", name: "poster.ai", mimeType: "application/postscript", size: 2400, assetKey: "private/source-a", previewKeys: ["preview-a"] }] };
@@ -11,6 +11,15 @@ describe("revision bundle", () => {
   it("uses the manifest bytes, not an asset checksum, for a bundle revision", () => {
     expect(revisionBundleChecksum(bundle)).toHaveLength(64);
     expect(encodeRevisionBundle(bundle).toString()).toContain('"assetKey":"private/source-a"');
+  });
+
+  it("compares bundle content using file checksums while retaining meaningful metadata", () => {
+    const original = { version: 2 as const, files: [{ ...bundle.files[0], kind: "asset", checksum: "a".repeat(64) }] };
+    const duplicate = { version: 2 as const, files: [{ ...original.files[0], assetKey: "private/copied-asset" }] };
+    expect(sameRevisionBundleContents(original, duplicate)).toBe(true);
+    expect(sameRevisionBundleContents(original, { ...duplicate, files: [{ ...duplicate.files[0], name: "renamed.ai" }] })).toBe(false);
+    expect(sameRevisionBundleContents(original, { ...duplicate, files: [{ ...duplicate.files[0], previewKeys: ["other-preview"] }] })).toBe(false);
+    expect(sameRevisionBundleContents({ version: 2, files: [{ ...bundle.files[0] }] }, { version: 2, files: [{ ...bundle.files[0], assetKey: "private/copied-asset" }] })).toBe(false);
   });
 
   it("only exposes file metadata to form consumers", () => {
