@@ -74,7 +74,8 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.getByText("Owner tools").click();
     await page.locator("form.revision-publish-form input[name=title]").fill("Second revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Make a second revision before restoring the first");
-    await page.locator('input[name="sourceUrl"]').fill("https://example.com/second-source.zip");
+    await page.locator('input[name="sources"]').setInputFiles({ name: "source-v2.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04changed-integration-source") });
+    await page.getByLabel("Unit identity").selectOption({ label: "source.zip · Asset" });
     await page.locator('input[name="previews"]').setInputFiles({ name: "design-v2.png", mimeType: "image/png", buffer: tinyPng });
     await page.getByLabel("Alt text for design-v2.png").fill("Second design preview");
     await page.getByRole("button", { name: "Publish revision" }).click();
@@ -150,8 +151,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.locator("#owner-tools")).toHaveAttribute("open", "");
     await page.locator("form.revision-publish-form input[name=title]").fill("Contribution revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Revise the forked source for a proposal");
-    await page.locator('input[name="sources"]').setInputFiles({ name: "source-v2.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04changed-integration-source") });
-    await page.getByLabel("Unit identity").selectOption({ label: "source.zip - Existing source" });
+    await page.getByLabel("Source URL").fill("https://example.com/forked-source-v2.zip");
     await page.locator('input[name="previews"]').setInputFiles({ name: "design-v2.png", mimeType: "image/png", buffer: tinyPng });
     await page.getByLabel("Alt text for design-v2.png").fill("Revised design preview");
     await page.getByRole("button", { name: "Publish revision" }).click();
@@ -162,12 +162,12 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(returnedAfterPublish.searchParams.get("sourceProject")).toBe(forkSlug);
     expect(returnedAfterPublish.searchParams.get("sourceRevision")).toBe("2");
     await expect(page.getByLabel("Source revision")).toContainText(`${forkSlug} · r2 · Contribution revision`);
-    await expect(page.getByRole("checkbox").first()).toBeVisible();
-    await page.getByRole("checkbox").first().check();
-    await page.getByRole("button", { name: "Continue to proposal" }).click();
+    await page.getByRole("button", { name: "Continue with whole document" }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${slug}/proposals/new\\?`));
     await expect(page.getByLabel("Related issue")).toHaveValue(relatedIssueId);
-    await expect(page.locator(".proposal-form .file-input-row")).toHaveCount(1);
+    await expect(page.locator(".proposal-form")).toContainText("Whole-document only.");
+    await expect(page.locator(".proposal-form .file-input-row")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Create proposal" })).toBeEnabled();
 
     const forkRevisionsResponse = await page.request.get(`/api${forkPath}/revisions`);
     expect(forkRevisionsResponse.status()).toBe(200);

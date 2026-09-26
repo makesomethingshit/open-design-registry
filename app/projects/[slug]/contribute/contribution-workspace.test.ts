@@ -21,7 +21,7 @@ describe("contribution workspace gating", () => {
     expect(canContinueWithContext({ ...ready, loadError: true, selectedCount: 1 })).toBe(false);
   });
 
-  it("allows a changed whole-document source but blocks the copied fork and same revision", () => {
+  it("allows whole-document preparation for a structured base with a URL-only source", () => {
     const wholeDocument = { ...ready, hasBase: true, hasSource: true, wholeDocument: true, sameRevision: false, copiedBase: false };
 
     expect(canContinueWithWholeDocument(wholeDocument)).toBe(true);

@@ -33,7 +33,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const sourceRevision = useMemo(() => sourceRevisions.find((revision) => revision.id === sourceRevisionId) ?? sourceRevisions[0], [sourceRevisionId, sourceRevisions]);
-  const canChooseUnits = Boolean(baseRevision.files.length);
+  const canChooseUnits = Boolean(baseRevision.files.length && sourceRevision?.files.length);
   const canUseSourceUnits = Boolean(sourceRevision?.files.length);
   const sourceOnlyFiles = useMemo(() => sourceRevision?.files.filter((file) => !baseRevision.files.some((target) => target.id === file.id)) ?? [], [baseRevision.files, sourceRevision]);
 

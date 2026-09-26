@@ -35,13 +35,26 @@ describe("contribution changes route", () => {
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("source");
   });
 
-  it("does not classify a structured base with no detected changes as whole-document", async () => {
-    mocks.readRevisionBundleStrict.mockImplementation(async (key: string) => key === "base" ? { files: [{ id: "target" }] } : { files: [] });
+  it("does not classify two structured revisions with no detected changes as whole-document", async () => {
+    mocks.readRevisionBundleStrict.mockImplementation(async (key: string) => key === "base" ? { files: [{ id: "target" }] } : { files: [{ id: "source" }] });
     mocks.detectUnitChanges.mockReturnValue([]);
 
     const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
 
     await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: false });
+  });
+
+  it("offers whole-document preparation for a structured base and URL-only source", async () => {
+    mocks.findSourceRevision.mockResolvedValue({ isPublished: true, sourceKey: null, sourceUrl: "https://example.test/source.zip", project: { ownerId: "contributor" } });
+    mocks.readRevisionBundleStrict.mockImplementation(async (key: string | null) => key === "base" ? { files: [{ id: "target" }] } : null);
+    mocks.detectUnitChanges.mockReturnValue([]);
+
+    const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: true });
+    expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("base");
+    expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith(null);
   });
 
   it("does not expose another contributor's source revision", async () => {

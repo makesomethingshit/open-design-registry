@@ -22,4 +22,19 @@ describe("proposal related issue labels", () => {
     expect(markup).toContain("Issue · Fix navigation");
     expect(markup).toContain("Design request · Create mobile empty state");
   });
+
+  it("allows whole-document submission when a structured base has a URL-only source", () => {
+    const markup = renderToStaticMarkup(<ProposalForm
+      baseRevision={{ id: "base", number: 1, title: "Base", files: [{ id: "target", name: "Target", mimeType: "application/zip", size: 10 }] }}
+      defaultRelatedIssueId=""
+      defaultSourceRevisionId="source"
+      relatedIssues={[]}
+      slug="demo"
+      sourceRevisions={[{ id: "source", number: 2, title: "URL source", projectTitle: "Contributor", projectSlug: "contributor", files: [] }]}
+    />);
+
+    expect(markup).toContain("Whole-document only.");
+    expect(markup).not.toContain("Add change");
+    expect(markup).not.toContain("disabled=\"\"");
+  });
 });
