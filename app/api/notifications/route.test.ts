@@ -25,8 +25,9 @@ describe("notification list route", () => {
     const response = await GET(new Request("http://localhost/api/notifications"));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ unreadCount: 1, notifications: [{ id: "notification", type: "ISSUE_CREATED" }] });
-    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { recipientId: "owner" }, orderBy: { createdAt: "desc" }, take: 50 }));
+    const visibility = { recipientId: "owner", OR: [{ type: { notIn: ["REVISION_PUBLISHED", "RELEASE_PUBLISHED"] } }, { project: { isPublic: true } }] };
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: visibility, orderBy: { createdAt: "desc" }, take: 50 }));
     expect(mocks.findMany.mock.calls[0][0].select).toHaveProperty("discussion");
-    expect(mocks.count).toHaveBeenCalledWith({ where: { recipientId: "owner", readAt: null } });
+    expect(mocks.count).toHaveBeenCalledWith({ where: { ...visibility, readAt: null } });
   });
 });

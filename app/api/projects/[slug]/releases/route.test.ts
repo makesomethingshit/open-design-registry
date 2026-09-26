@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   findRevisions: vi.fn(),
   findLatestRelease: vi.fn(),
   createRelease: vi.fn(),
+  findWatchers: vi.fn(),
+  createNotifications: vi.fn(),
   lockProject: vi.fn(),
   transaction: vi.fn(),
 }));
@@ -39,9 +41,11 @@ describe("project releases route", () => {
       { id: "revision-3", projectId: "project", number: 3, isPublished: true },
     ]);
     mocks.findLatestRelease.mockResolvedValue({ number: 2 });
+    mocks.findWatchers.mockResolvedValue([]);
+    mocks.createNotifications.mockResolvedValue({ count: 0 });
     mocks.createRelease.mockResolvedValue({ id: "release-3", number: 3 });
-    mocks.lockProject.mockResolvedValue([{ id: "project" }]);
-    mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease } } as never));
+    mocks.lockProject.mockResolvedValue([{ id: "project", isPublic: true }]);
+ mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never));
   });
 
   it("returns 404 for a missing project before checking session", async () => {
@@ -114,7 +118,7 @@ describe("project releases route", () => {
     });
     expect(mocks.lockProject).toHaveBeenCalledTimes(1);
     const [lockSql, lockedProjectId] = mocks.lockProject.mock.calls[0] as [TemplateStringsArray, string];
-    expect(lockSql.join("")).toContain('SELECT id FROM "Project" WHERE id = ');
+    expect(lockSql.join("")).toContain('SELECT id, "isPublic" FROM "Project" WHERE id = ');
     expect(lockSql.join("")).toContain("FOR UPDATE");
     expect(lockedProjectId).toBe("project");
     expect(mocks.lockProject.mock.invocationCallOrder[0]).toBeLessThan(mocks.findLatestRelease.mock.invocationCallOrder[0]);
@@ -146,7 +150,7 @@ describe("project releases route", () => {
     });
     mocks.transaction.mockImplementation(async (callback) => {
       try {
-        return await callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease } } as never);
+         return await callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never);
       } finally {
         const next = waiting.shift();
         if (next) next();
@@ -176,5 +180,30 @@ describe("project releases route", () => {
     const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "A release was published at the same time. Review your selection and try again." });
+  });
+  it("notifies project watchers except the publisher on publish", async () => {
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher-1" }]);
+    const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).toHaveBeenCalledWith({ where: { projectId: "project", userId: { not: "owner" } }, select: { userId: true } });
+    expect(mocks.createNotifications).toHaveBeenCalledWith({ data: [
+      { recipientId: "watcher-1", actorId: "owner", type: "RELEASE_PUBLISHED", projectId: "project", releaseId: "release-3" },
+    ] });
+  });
+
+  it("skips watch notifications when nobody watches the project", async () => {
+    const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
+  });
+
+  it("does not notify preserved watchers while the project is private", async () => {
+    mocks.lockProject.mockResolvedValue([{ id: "project", isPublic: false }]);
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher" }]);
+    const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).not.toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@ model User {
   accounts      Account[]
   projects      Project[]
   projectStars  ProjectStar[]
+  projectWatches ProjectWatch[]
   reports       Report[]
   issues        Issue[]
   issueComments IssueComment[]
@@ -95,6 +96,7 @@ model Project {
   activityStatus ProjectActivityStatus @default(ACTIVE)
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   stars       ProjectStar[]
+  watchers    ProjectWatch[]
   revisions   Revision[]
   releases    Release[]
   reports     Report[]
@@ -118,6 +120,19 @@ model Project {
 }
 
 model ProjectStar {
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([userId, createdAt])
+  @@index([projectId])
+}
+
+model ProjectWatch {
   userId    String
   projectId String
   createdAt DateTime @default(now())
@@ -203,6 +218,7 @@ model Revision {
   reviewInvalidations ChangeReview[] @relation("ChangeReviewCausedByRevision")
   rightsDeclarations RevisionRightsDeclaration[]
   releaseLinks ReleaseRevision[]
+  watchNotifications Notification[] @relation("NotificationRevision")
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -224,6 +240,7 @@ model Release {
   project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   publishedBy   User?    @relation("ReleasePublisher", fields: [publishedById], references: [id], onDelete: SetNull)
   revisions     ReleaseRevision[]
+  watchNotifications Notification[] @relation("NotificationRelease")
 
   @@unique([projectId, number])
   @@index([projectId, createdAt])
@@ -367,6 +384,8 @@ enum NotificationType {
   ISSUE_CREATED
   DISCUSSION_CREATED
   FORK_CREATED
+  REVISION_PUBLISHED
+  RELEASE_PUBLISHED
 }
 
 model Discussion {
@@ -581,6 +600,8 @@ model Notification {
   issueId         String?
   discussionId    String?
   forkedProjectId String?
+  revisionId      String?
+  releaseId       String?
   readAt          DateTime?
   createdAt       DateTime         @default(now())
   recipient       User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
@@ -589,6 +610,8 @@ model Notification {
   issue           Issue?           @relation(fields: [issueId], references: [id], onDelete: SetNull)
   discussion      Discussion?      @relation(fields: [discussionId], references: [id], onDelete: SetNull)
   forkedProject   Project?         @relation("NotificationForkedProject", fields: [forkedProjectId], references: [id], onDelete: SetNull)
+  revision        Revision?        @relation("NotificationRevision", fields: [revisionId], references: [id], onDelete: SetNull)
+  release         Release?         @relation("NotificationRelease", fields: [releaseId], references: [id], onDelete: SetNull)
 
   @@index([recipientId, readAt, createdAt])
   @@index([actorId])
@@ -596,4 +619,6 @@ model Notification {
   @@index([issueId])
   @@index([discussionId])
   @@index([forkedProjectId])
+  @@index([revisionId])
+  @@index([releaseId])
 }

@@ -216,7 +216,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index, altText: altTexts[index] });
     }
     const revision = await prisma.$transaction(async (tx) => {
-      const [lockedProject] = await tx.$queryRaw<Array<{ license: string }>>`SELECT license FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+      const [lockedProject] = await tx.$queryRaw<Array<{ license: string; isPublic: boolean }>>`SELECT license, "isPublic" FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) throw new PublishError("Project not found", 404);
       if (rightsInput) {
         const rightsContextError = validateRightsAgainstRevision(lockedProject, rightsInput);
@@ -305,7 +305,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           } : {}),
         },
       });
-      return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
+      const published = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
+      if (lockedProject.isPublic) {
+        const watchers = await tx.projectWatch.findMany({ where: { projectId: project.id, userId: { not: session.user.id } }, select: { userId: true } });
+        if (watchers.length) {
+          await tx.notification.createMany({ data: watchers.map((watcher) => ({ recipientId: watcher.userId, actorId: session.user.id, type: "REVISION_PUBLISHED", projectId: project.id, revisionId: published.id })) });
+        }
+      }
+      return published;
     });
     return NextResponse.json(toPublicRevision(revision), { status: 201 });
   } catch (cause) {
