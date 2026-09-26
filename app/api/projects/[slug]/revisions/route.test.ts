@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   createRevision: vi.fn(),
   updateRevision: vi.fn(),
   findLatest: vi.fn(),
+  findWatchers: vi.fn(),
+  createNotifications: vi.fn(),
   putObject: vi.fn(),
   deleteObject: vi.fn(),
   putBundle: vi.fn(),
@@ -55,11 +57,15 @@ describe("revision publishing route", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner" });
     mocks.findLatest.mockResolvedValue(undefined);
+    mocks.findWatchers.mockResolvedValue([]);
+    mocks.createNotifications.mockResolvedValue({ count: 0 });
     mocks.createRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.updateRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.transaction.mockImplementation(async (callback) => callback({
       $queryRaw: vi.fn().mockResolvedValue([{ license: "CC BY 4.0" }]),
       revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
+      projectWatch: { findMany: mocks.findWatchers },
+      notification: { createMany: mocks.createNotifications },
     }));
     mocks.putObject.mockImplementation(async (_file: File, key: string) => `https://cdn/${key}`);
     mocks.putBundle.mockResolvedValue({ checksum: "b".repeat(64) });
@@ -362,5 +368,22 @@ describe("revision publishing route", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: expect.stringMatching(/one alt text/i) });
     expect(mocks.putObject).not.toHaveBeenCalled();
+  });
+  it("notifies project watchers except the publisher on publish", async () => {
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher-1" }, { userId: "watcher-2" }]);
+    const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).toHaveBeenCalledWith({ where: { projectId: "project", userId: { not: "owner" } }, select: { userId: true } });
+    expect(mocks.createNotifications).toHaveBeenCalledWith({ data: [
+      { recipientId: "watcher-1", actorId: "owner", type: "REVISION_PUBLISHED", projectId: "project", revisionId: "revision" },
+      { recipientId: "watcher-2", actorId: "owner", type: "REVISION_PUBLISHED", projectId: "project", revisionId: "revision" },
+    ] });
+  });
+
+  it("skips watch notifications when nobody watches the project", async () => {
+    const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
   });
 });

@@ -14,12 +14,13 @@ const mocks = vi.hoisted(() => ({
   issueBoard: vi.fn(),
   sectionNav: vi.fn(),
   findStarCount: vi.fn(),
+  findWatchCount: vi.fn(),
   headerActions: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, projectStar: { count: mocks.findStarCount } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
@@ -162,11 +163,12 @@ describe("Project issue proposal visibility", () => {
   });
 });
 
-async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0) {
+async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0) {
   vi.clearAllMocks();
   mocks.findProject.mockResolvedValue(value);
   mocks.getSession.mockResolvedValue(session);
   mocks.findStarCount.mockResolvedValue(starCount);
+  mocks.findWatchCount.mockResolvedValue(watchCount);
   mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
   mocks.countProposals.mockResolvedValue(0);
   mocks.attribution.mockResolvedValue([]);
@@ -180,12 +182,14 @@ describe("Project Star action", () => {
     await renderProjectPage({ user: { id: "viewer" } }, project(), 1);
 
     const action = mocks.headerActions.mock.calls.at(-1)?.[0] as ReactElement<{ children: ReactElement<Record<string, unknown>>[] }>;
-    const [star, contribute, fork] = action.props.children;
+    const [star, watch, contribute, fork] = action.props.children;
     expect(star.props).toEqual({ initialStarred: true, signedIn: true, slug: "demo" });
+    expect(watch.props).toEqual({ initialWatched: false, signedIn: true, slug: "demo" });
     expect(contribute.props).toMatchObject({ signedIn: true, slug: "demo" });
     expect(contribute.props.initialIntent).toBeUndefined();
     expect(fork.props).toMatchObject({ initialIntent: "fork", signedIn: true, slug: "demo" });
     expect(mocks.findStarCount).toHaveBeenCalledWith({ where: { userId: "viewer", projectId: "project" } });
+    expect(mocks.findWatchCount).toHaveBeenCalledWith({ where: { userId: "viewer", projectId: "project" } });
   });
 
   it("provides a sign-in control to anonymous viewers and hides it on private owner pages", async () => {

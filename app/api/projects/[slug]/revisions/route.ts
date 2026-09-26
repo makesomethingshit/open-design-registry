@@ -305,7 +305,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           } : {}),
         },
       });
-      return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
+      const published = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
+      const watchers = await tx.projectWatch.findMany({ where: { projectId: project.id, userId: { not: session.user.id } }, select: { userId: true } });
+      if (watchers.length) {
+        await tx.notification.createMany({ data: watchers.map((watcher) => ({ recipientId: watcher.userId, actorId: session.user.id, type: "REVISION_PUBLISHED", projectId: project.id, revisionId: published.id })) });
+      }
+      return published;
     });
     return NextResponse.json(toPublicRevision(revision), { status: 201 });
   } catch (cause) {

@@ -16,6 +16,7 @@ import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import { prisma } from "@/src/lib/prisma";
 import ContributeDialog from "./contribute-dialog";
 import { ProjectStarButton } from "./project-star-button";
+import { ProjectWatchButton } from "./project-watch-button";
 import IssueBoard from "./issue-board";
 import ProjectSettingsForm from "./project-settings-form";
 import ProposalList, { type ProposalListItem } from "./proposal-list";
@@ -48,15 +49,17 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
   const latestRevision = project.revisions.at(-1);
-  const [proposalPage, activeProposalPage, activeProposalCount, attribution, latestProposal, starCount] = await Promise.all([
+  const [proposalPage, activeProposalPage, activeProposalCount, attribution, latestProposal, starCount, watchCount] = await Promise.all([
     listVisibleProposalSummaries(project.id, session?.user.id, { status: proposalFilter, take: 20 }),
     listVisibleProposalSummaries(project.id, session?.user.id, { status: "open", take: 3 }),
     countVisibleProposals(project.id, session?.user.id, "open"),
     listProjectAttribution(project.id, session?.user.id),
     latestRevision?.appliedProposal ? findVisibleProposal(latestRevision.appliedProposal.id, session?.user.id) : Promise.resolve(null),
     project.isPublic && session ? prisma.projectStar.count({ where: { userId: session.user.id, projectId: project.id } }) : Promise.resolve(0),
+    project.isPublic && session ? prisma.projectWatch.count({ where: { userId: session.user.id, projectId: project.id } }) : Promise.resolve(0),
   ]);
   const initialStarred = starCount > 0;
+  const initialWatched = watchCount > 0;
   const activeProposals = activeProposalPage.items;
   const proposalRows: ProposalListItem[] = proposalPage.items;
   const latestFiles = publicBundleFiles(await readRevisionBundle(latestRevision?.sourceKey));
@@ -86,7 +89,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       <article className={styles.project}>
     <ProjectHeader
       activityStatus={project.activityStatus}
-      actions={<>{project.isPublic && <ProjectStarButton initialStarred={initialStarred} key={project.slug} signedIn={Boolean(session)} slug={project.slug} />}<ContributeDialog revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /><ContributeDialog initialIntent="fork" revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /></>}
+       actions={<>{project.isPublic && <ProjectStarButton initialStarred={initialStarred} key={project.slug} signedIn={Boolean(session)} slug={project.slug} />}{project.isPublic && <ProjectWatchButton initialWatched={initialWatched} signedIn={Boolean(session)} slug={project.slug} />}<ContributeDialog revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /><ContributeDialog initialIntent="fork" revisionNumber={latestRevision?.number} signedIn={Boolean(session)} slug={project.slug} /></>}
       description={project.description}
       license={project.license}
       lineage={project.forkedFrom && <>Forked from <Link href={`/projects/${project.forkedFrom.slug}`}>{project.forkedFrom.title}</Link> <span aria-hidden="true">·</span> Revision {project.forkedFromRevision?.number ?? "unknown"} <span aria-hidden="true">·</span> Original author {project.forkedFrom.owner.name} <span aria-hidden="true">·</span> Original revision license {project.forkedFromLicense ?? "not recorded"}</>}

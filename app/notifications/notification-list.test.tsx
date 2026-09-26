@@ -12,8 +12,30 @@ describe("discussion notifications", () => {
       id: "notification", type: "DISCUSSION_CREATED", readAt: null, createdAt: "2026-09-12T00:00:00.000Z",
       actor: { name: "Jisoo" }, project: { slug: "demo", title: "Demo" }, issue: null,
       discussion: { id: "discussion", title: "Mobile navigation" }, forkedProject: null,
+      revision: null, release: null,
     }]} />);
     expect(html).toContain('href="/projects/demo/discussions/discussion"');
     expect(html).toContain("Mobile navigation");
+  });
+  it("links a revision notification to the project revisions", () => {
+    const html = renderToStaticMarkup(<NotificationList unreadCount={1} notifications={[{
+      id: "watch-revision", type: "REVISION_PUBLISHED", readAt: null, createdAt: "2026-09-12T00:00:00.000Z",
+      actor: { name: "Jisoo" }, project: { slug: "demo", title: "Demo" }, issue: null,
+      discussion: null, forkedProject: null,
+      revision: { id: "revision", number: 4, title: "Landing update" }, release: null,
+    }]} />);
+    expect(html).toContain('href="/projects/demo#revisions"');
+    expect(html).toContain("Landing update");
+  });
+
+  it("links a release notification to the project releases", () => {
+    const html = renderToStaticMarkup(<NotificationList unreadCount={1} notifications={[{
+      id: "watch-release", type: "RELEASE_PUBLISHED", readAt: null, createdAt: "2026-09-12T00:00:00.000Z",
+      actor: { name: "Jisoo" }, project: { slug: "demo", title: "Demo" }, issue: null,
+      discussion: null, forkedProject: null,
+      revision: null, release: { id: "release", number: 2, title: "Spring cut" },
+    }]} />);
+    expect(html).toContain('href="/projects/demo#releases"');
+    expect(html).toContain("Spring cut");
   });
 });

@@ -36,7 +36,7 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
       const [lockedProject] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) return null;
       const latest = await tx.release.findFirst({ where: { projectId: project.id }, orderBy: { number: "desc" }, select: { number: true } });
-      return tx.release.create({
+      const created = await tx.release.create({
         data: {
           projectId: project.id,
           number: (latest?.number ?? 0) + 1,
@@ -47,6 +47,11 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
         },
         select: { id: true, number: true },
       });
+      const watchers = await tx.projectWatch.findMany({ where: { projectId: project.id, userId: { not: session.user.id } }, select: { userId: true } });
+      if (watchers.length) {
+        await tx.notification.createMany({ data: watchers.map((watcher) => ({ recipientId: watcher.userId, actorId: session.user.id, type: "RELEASE_PUBLISHED", projectId: project.id, releaseId: created.id })) });
+      }
+      return created;
     });
     if (!release) return error("Project not found", 404);
     return NextResponse.json(release, { status: 201 });

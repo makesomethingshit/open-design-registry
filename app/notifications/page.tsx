@@ -24,6 +24,8 @@ export default async function NotificationsPage() {
         issue: { select: { id: true, title: true } },
         discussion: { select: { id: true, title: true } },
         forkedProject: { select: { slug: true, title: true } },
+        revision: { select: { id: true, number: true, title: true } },
+        release: { select: { id: true, number: true, title: true } },
       },
     }),
     prisma.notification.count({ where: { recipientId: session.user.id, readAt: null } }),
