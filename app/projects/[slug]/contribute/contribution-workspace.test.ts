@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-const { canContinueWithContext, maxProposalChanges } = await import("./contribution-workspace");
+const { canContinueWithContext, canContinueWithWholeDocument, maxProposalChanges } = await import("./contribution-workspace");
 
 describe("contribution workspace gating", () => {
   const ready = { currentKey: "[\"base\",\"source\"]", hasBase: true, hasSource: true, loadError: false, loadedKey: "[\"base\",\"source\"]", loading: false };
@@ -19,5 +19,14 @@ describe("contribution workspace gating", () => {
   it("blocks changes loaded for a different revision pair or an errored request", () => {
     expect(canContinueWithContext({ ...ready, currentKey: "[\"new-base\",\"source\"]", selectedCount: 1 })).toBe(false);
     expect(canContinueWithContext({ ...ready, loadError: true, selectedCount: 1 })).toBe(false);
+  });
+
+  it("allows whole-document preparation for a structured base with a URL-only source", () => {
+    const wholeDocument = { ...ready, hasBase: true, hasSource: true, wholeDocument: true, sameRevision: false, copiedBase: false };
+
+    expect(canContinueWithWholeDocument(wholeDocument)).toBe(true);
+    expect(canContinueWithWholeDocument({ ...wholeDocument, copiedBase: true })).toBe(false);
+    expect(canContinueWithWholeDocument({ ...wholeDocument, sameRevision: true })).toBe(false);
+    expect(canContinueWithWholeDocument({ ...wholeDocument, currentKey: "other" })).toBe(false);
   });
 });

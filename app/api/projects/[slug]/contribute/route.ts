@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
 
     const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundleStrict(baseRevision.sourceKey), readRevisionBundleStrict(sourceRevision.sourceKey)]);
-    return NextResponse.json({ changes: detectUnitChanges(baseBundle, sourceBundle) });
+    return NextResponse.json({ changes: detectUnitChanges(baseBundle, sourceBundle), wholeDocument: !baseBundle?.files.length || !sourceBundle?.files.length });
   } catch {
     return error("Could not load available changes.", 500);
   }

@@ -5,6 +5,7 @@ import ReportForm from "@/app/reports/report-form";
 import { ProjectHeader } from "@/src/components/design/project-header";
 import { RevisionItem } from "@/src/components/design/revision-item";
 import { Badge, StatusBadge } from "@/src/components/ui/badge";
+import { Banner } from "@/src/components/ui/banner";
 import { FormColumn, PageGrid, WideColumn } from "@/src/components/ui/layout";
 import { SectionNav } from "@/src/components/ui/section-nav";
 import { listProjectAttribution, type AttributionPerson, type AttributionRole } from "@/src/lib/attribution";
@@ -25,9 +26,13 @@ import styles from "./project.module.css";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string }> }) {
+export default async function ProjectPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string }> }) {
   const { slug } = await params;
   const query = await searchParams;
+  const requestedContributionBase = Number(query.baseRevision);
+  const contributionReturn = query.contributionTarget?.match(/^[a-z0-9]+(?:-[a-z0-9]+)*$/i) && Number.isInteger(requestedContributionBase) && requestedContributionBase > 0
+    ? { targetSlug: query.contributionTarget, baseRevision: requestedContributionBase, relatedIssueId: query.relatedIssue?.slice(0, 200) }
+    : undefined;
   const session = await getSession();
   const project = await prisma.project.findUnique({
     where: { slug },
@@ -142,7 +147,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       </div>
     </section>
 
-    {session?.user.id === project.ownerId && <details className={styles.ownerTools}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
+    {session?.user.id === project.ownerId && contributionReturn && <Banner title="Prepare your working revision" tone="info">Edit the source in an external design tool, then publish a new revision here. Publishing returns to the target contribution workspace.</Banner>}
+    {session?.user.id === project.ownerId && <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
 
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>
@@ -177,7 +183,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
     <IssueBoard canManage={project.isPublic && session?.user.id === project.ownerId} issues={visibleIssues} revisions={project.revisions} signedIn={project.isPublic && Boolean(session)} slug={project.slug} />
     <section aria-labelledby="proposals-heading" className={styles.section} id="proposals">
-      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Collaboration</p><h2 id="proposals-heading">Proposals</h2></div>{session && latestRevision && <Link className={styles.secondaryLink} href={`/projects/${project.slug}/proposals/new`}>New proposal</Link>}</header>
+      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Collaboration</p><h2 id="proposals-heading">Proposals</h2></div>{session && latestRevision && <Link className={styles.secondaryLink} href={`/projects/${project.slug}/contribute`}>New proposal</Link>}</header>
       <ProposalList initialCursor={proposalPage.nextCursor} initialFilter={proposalFilter} initialItems={proposalRows} slug={project.slug} />
     </section>
     <section aria-labelledby="contributors-heading" className={styles.section} id="contributors">

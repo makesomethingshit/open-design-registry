@@ -25,7 +25,7 @@ flowchart LR
 5. 원 프로젝트 소유자가 시각 비교와 변경 내용을 확인해 각 Change를 승인하거나 수정을 요청합니다. 수정 요청에는 댓글이 필요합니다.
 6. 소유자가 승인된 변경을 선택하고 적용합니다. 원본 이력을 수정하지 않고 다음 번호의 Revision을 발행합니다.
 
-현재 Fork API는 **공개 프로젝트의 발행 Revision으로 공개 Fork**를 생성하고, 표시된 라이선스로 공개할 권리가 있는지 확인받습니다. `Create contribution workspace`라는 문구가 비공개 생성 보장을 뜻하지 않습니다. 기여 공간 생성 직후에는 복제된 Revision 1이 선택된 Proposal 작성 화면으로 이동하므로, 실제 수정안을 제출하려면 생성된 프로젝트에 수정본을 발행하고 source Revision을 바꿔 선택합니다.
+현재 Fork API는 **공개 프로젝트의 발행 Revision으로 공개 Fork**를 생성하고, 표시된 라이선스로 공개할 권리가 있는지 확인받습니다. `Create contribution workspace`라는 문구가 비공개 생성 보장을 뜻하지 않습니다. 기여 준비 화면은 Fork 직후 대상 프로젝트·base Revision·관련 Issue를 유지한 채 복제된 Revision 1로 돌아옵니다. Fork만으로는 변경이 생기지 않으므로 외부 제작 도구에서 원본을 수정한 뒤 새 Revision을 발행합니다. 발행이 끝나면 대상의 기여 준비 화면으로 돌아와 새 source Revision을 선택합니다. 유닛을 제공하지 않는 형식은 전체 문서 Proposal로 이어질 수 있으며, 실제 변경이 없으면 서버가 생성을 거부합니다.
 
 리뷰어가 source 프로젝트를 읽을 수 있어야 합니다. 현재 비공개 프로젝트의 접근자는 소유자뿐이므로, 다른 소유자에게 제안하려면 source의 공개 여부를 먼저 확인해야 합니다. Proposal을 만든다고 접근 권한이 자동으로 생기지는 않습니다.
 
@@ -120,6 +120,8 @@ Proposal 적용으로 upstream 유닛의 내용이나 의존성 집합이 바뀌
 ```
 
 `changes` 또는 기존 `files` 배열 중 하나만 보냅니다(1~10개). 둘 다 없으면 `REPLACE_DOCUMENT` 하나를 생성합니다. base는 대상 프로젝트의 발행 Revision, source는 작성자 소유 프로젝트의 발행 Revision이어야 하며 Fork 혈통 자체를 필수 조건으로 검사하지는 않습니다.
+
+Contribution preparation uses whole-document mode when either revision lacks a structured unit bundle, including a structured base paired with a URL-only source.
 
 서버는 base와 source가 같은 Revision인 Proposal을 거부합니다. 전체 문서 제안은 source 자산의 동일성 또는 검증된 checksum/번들 비교와 적용되는 metadata·Preview가 같다고 확인될 때만 무변경으로 거부하며, 비교 자료가 없는 legacy Revision은 추측해 차단하지 않습니다. `MODIFY_UNIT`도 checksum·의존성 비교 결과와 실제 적용되는 파일 metadata·Preview가 모두 같을 때 거부합니다.
 

@@ -34,7 +34,12 @@ export default function ForkForm({ slug, number, license, signedIn }: { slug: st
         return;
       }
       const fork = await response.json();
-      router.push(contribution ? `/projects/${slug}/proposals/new?sourceProject=${encodeURIComponent(fork.slug)}&sourceRevision=1&baseRevision=${number}` : `/projects/${fork.slug}`);
+      if (contribution) {
+        const params = new URLSearchParams({ baseRevision: String(number), sourceProject: fork.slug, sourceRevision: "1" });
+        const relatedIssue = searchParams.get("relatedIssue");
+        if (relatedIssue) params.set("relatedIssue", relatedIssue);
+        router.push(`/projects/${encodeURIComponent(slug)}/contribute?${params}`);
+      } else router.push(`/projects/${encodeURIComponent(fork.slug)}`);
     } catch {
       setError("Could not fork revision. Try again.");
     } finally {

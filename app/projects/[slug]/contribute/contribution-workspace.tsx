@@ -13,7 +13,7 @@ import { PageHeader, Panel, SectionHeader, Stack } from "@/src/components/ui/lay
 import type { DetectedUnitChange } from "@/src/lib/revision-bundle";
 
 type BaseRevision = { id: string; number: number; title: string };
-type SourceRevision = { id: string; number: number; title: string; projectSlug: string; projectTitle: string; owner: string; sourceUrl: string | null; tool: string | null };
+type SourceRevision = { id: string; number: number; title: string; projectSlug: string; projectTitle: string; owner: string; sourceUrl: string | null; tool: string | null; projectForkedFromProjectId: string | null; projectForkedFromRevisionId: string | null };
 type RelatedIssue = { id: string; title: string; kind?: "ISSUE" | "DESIGN_REQUEST" };
 type WorkspaceDraft = { baseRevisionId?: string; sourceRevisionId?: string; selectedChangeKeys?: string[]; relatedIssueId?: string };
 export const maxProposalChanges = 10;
@@ -26,17 +26,22 @@ export function canContinueWithContext({ hasBase, hasSource, selectedCount, load
   return Boolean(hasBase && hasSource && selectedCount > 0 && selectedCount <= maxProposalChanges && !loading && !loadError && loadedKey && currentKey && loadedKey === currentKey);
 }
 
+export function canContinueWithWholeDocument({ hasBase, hasSource, loading, loadError, loadedKey, currentKey, wholeDocument, sameRevision, copiedBase }: { hasBase: boolean; hasSource: boolean; loading: boolean; loadError: boolean; loadedKey: string | null; currentKey: string | null; wholeDocument: boolean; sameRevision: boolean; copiedBase: boolean }) {
+  return Boolean(hasBase && hasSource && wholeDocument && !sameRevision && !copiedBase && !loading && !loadError && loadedKey && currentKey && loadedKey === currentKey);
+}
+
 function revisionPairKey(baseId: string, sourceId: string) {
   return JSON.stringify([baseId, sourceId]);
 }
 
-export default function ContributionWorkspace({ baseRevisions, project, relatedIssues, sourceRevisions }: { baseRevisions: BaseRevision[]; project: { slug: string; title: string; owner: string }; relatedIssues: RelatedIssue[]; sourceRevisions: SourceRevision[] }) {
+export default function ContributionWorkspace({ baseRevisions, initialBaseRevisionId, initialRelatedIssueId, initialSourceRevisionId, project, relatedIssues, sourceRevisions }: { baseRevisions: BaseRevision[]; initialBaseRevisionId?: string; initialRelatedIssueId?: string; initialSourceRevisionId?: string; project: { id: string; slug: string; title: string; owner: string }; relatedIssues: RelatedIssue[]; sourceRevisions: SourceRevision[] }) {
   const router = useRouter();
-  const [baseRevisionId, setBaseRevisionId] = useState(baseRevisions[0]?.id ?? "");
-  const [sourceRevisionId, setSourceRevisionId] = useState(sourceRevisions[0]?.id ?? "");
+  const [baseRevisionId, setBaseRevisionId] = useState(initialBaseRevisionId ?? baseRevisions[0]?.id ?? "");
+  const [sourceRevisionId, setSourceRevisionId] = useState(initialSourceRevisionId ?? sourceRevisions[0]?.id ?? "");
   const [selectedChangeKeys, setSelectedChangeKeys] = useState<string[]>([]);
-  const [relatedIssueId, setRelatedIssueId] = useState("");
+  const [relatedIssueId, setRelatedIssueId] = useState(initialRelatedIssueId ?? "");
   const [changes, setChanges] = useState<DetectedUnitChange[]>([]);
+  const [wholeDocument, setWholeDocument] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
@@ -58,8 +63,12 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
     } catch {
       // Ignore an invalid browser-only draft.
     }
+    if (initialBaseRevisionId && baseRevisions.some((revision) => revision.id === initialBaseRevisionId)) setBaseRevisionId(initialBaseRevisionId);
+    if (initialSourceRevisionId && sourceRevisions.some((revision) => revision.id === initialSourceRevisionId)) setSourceRevisionId(initialSourceRevisionId);
+    if (initialBaseRevisionId || initialSourceRevisionId) setSelectedChangeKeys([]);
+    if (initialRelatedIssueId !== undefined) setRelatedIssueId(initialRelatedIssueId);
     setHydratedDraft(true);
-  }, [baseRevisions, project.slug, relatedIssues, sourceRevisions]);
+  }, [baseRevisions, initialBaseRevisionId, initialRelatedIssueId, initialSourceRevisionId, project.slug, relatedIssues, sourceRevisions]);
 
   useEffect(() => {
     if (!hydratedDraft) return;
@@ -74,6 +83,7 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
     if (!baseRevisionId || !sourceRevisionId) {
       activeRequest.current = null;
       setChanges([]);
+      setWholeDocument(false);
       setLoadedKey(null);
       setLoading(false);
       setLoadError(false);
@@ -84,14 +94,16 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
     const requestToken = Symbol(requestKey);
     activeRequest.current = requestToken;
     setLoadedKey(null);
+    setWholeDocument(false);
     setLoading(true);
     setLoadError(false);
     void fetch(`/api/projects/${encodeURIComponent(project.slug)}/contribute?${new URLSearchParams({ baseRevisionId, sourceRevisionId })}`, { signal: controller.signal })
       .then(async (response) => {
-        const payload = await response.json().catch(() => null) as { changes?: DetectedUnitChange[] } | null;
+        const payload = await response.json().catch(() => null) as { changes?: DetectedUnitChange[]; wholeDocument?: boolean } | null;
         if (!response.ok || !Array.isArray(payload?.changes)) throw new Error("Could not load available changes.");
         if (!controller.signal.aborted && activeRequest.current === requestToken) {
           setChanges(payload.changes);
+          setWholeDocument(payload.wholeDocument === true);
           setLoadedKey(requestKey);
         }
       })
@@ -112,6 +124,14 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
 
   const selectedChanges = useMemo(() => changes.filter((change) => selectedChangeKeys.includes(changeKey(change))), [changes, selectedChangeKeys]);
   const canContinue = canContinueWithContext({ currentKey, hasBase: Boolean(baseRevision), hasSource: Boolean(sourceRevision), loadError, loadedKey, loading, selectedCount: selectedChanges.length });
+  const copiedBase = Boolean(sourceRevision && baseRevision && sourceRevision.number === 1 && sourceRevision.projectForkedFromProjectId === project.id && sourceRevision.projectForkedFromRevisionId === baseRevision.id);
+  const canContinueWholeDocument = changes.length === 0 && canContinueWithWholeDocument({ currentKey, hasBase: Boolean(baseRevision), hasSource: Boolean(sourceRevision), loadError, loadedKey, loading, wholeDocument, sameRevision: sourceRevision?.id === baseRevision?.id, copiedBase });
+  const forkParams = new URLSearchParams({ intent: "proposal" });
+  if (relatedIssueId) forkParams.set("relatedIssue", relatedIssueId);
+  const forkHref = baseRevision ? `/projects/${encodeURIComponent(project.slug)}/revisions/${baseRevision.number}?${forkParams}` : null;
+  const workingParams = baseRevision ? new URLSearchParams({ contributionTarget: project.slug, baseRevision: String(baseRevision.number) }) : null;
+  if (relatedIssueId) workingParams?.set("relatedIssue", relatedIssueId);
+  const workingProjectHref = sourceRevision && workingParams ? `/projects/${encodeURIComponent(sourceRevision.projectSlug)}?${workingParams}#owner-tools` : null;
 
   function invalidateLoadedChanges() {
     activeRequest.current = null;
@@ -155,6 +175,13 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
     router.push(`/projects/${project.slug}/proposals/new?${params}`);
   }
 
+  function continueToWholeDocumentProposal() {
+    if (!canContinueWholeDocument || !baseRevision || !sourceRevision) return;
+    const params = new URLSearchParams({ baseRevision: String(baseRevision.number), sourceProject: sourceRevision.projectSlug, sourceRevision: String(sourceRevision.number) });
+    if (relatedIssueId) params.set("relatedIssue", relatedIssueId);
+    router.push(`/projects/${project.slug}/proposals/new?${params}`);
+  }
+
   return <article className="detail proposal-page">
     <Stack gap={5}>
       <PageHeader description="Prepare changes to propose back to this project." title={`Contribute to ${project.title}`} />
@@ -168,7 +195,7 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
       <Panel aria-labelledby="working-source-heading">
         <Stack gap={3}>
           <SectionHeader id="working-source-heading" title="Working source" />
-          {sourceRevision ? <div className="capability-details"><dl><div><dt>Working source</dt><dd>{sourceRevision.owner} / {sourceRevision.projectTitle}</dd></div><div><dt>Revision</dt><dd>r{sourceRevision.number}</dd></div><div><dt>Source tool</dt><dd>{sourceRevision.tool ?? "Not recorded"}</dd></div></dl></div> : <p className="meta">Publish a revision in one of your projects to prepare a proposal.</p>}
+          {sourceRevision ? <div className="capability-details"><dl><div><dt>Working source</dt><dd>{sourceRevision.owner} / {sourceRevision.projectTitle}</dd></div><div><dt>Revision</dt><dd>r{sourceRevision.number}</dd></div><div><dt>Source tool</dt><dd>{sourceRevision.tool ?? "Not recorded"}</dd></div></dl></div> : <p className="meta">You have no published source revision to propose yet.</p>}
           <Field id="source-revision" label="Source revision"><Select disabled={!sourceRevisions.length} onChange={(event) => requestSourceRevision(event.target.value)} value={sourceRevisionId}>{sourceRevisions.length ? sourceRevisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.projectSlug} · r{revision.number} · {revision.title}</option>) : <option value="">No published source revisions</option>}</Select></Field>
           {sourceRevision?.sourceUrl && <TextLink href={sourceRevision.sourceUrl} rel="noreferrer" target="_blank">Open working source</TextLink>}
         </Stack>
@@ -186,8 +213,11 @@ export default function ContributionWorkspace({ baseRevisions, project, relatedI
             return <li className="change-row" key={key}><Checkbox checked={selected} description={`${changeKindLabel(change.kind ?? null)} · ${presentation.label}`} disabled={!selected && selectedChanges.length >= maxProposalChanges} id={`change-${key}`} label={`Select ${change.name} for proposal`} onChange={(event) => toggleChange(change, event.target.checked)} /><Badge>{presentation.label}</Badge></li>;
           })}</ul>}
           {selectedChanges.length >= maxProposalChanges && <p className="meta" role="status" aria-live="polite">Select up to {maxProposalChanges} changes per proposal. Deselect one before selecting another.</p>}
-          {!loading && !loadError && changes.length === 0 && <EmptyState icon="file" title="No changes prepared yet.">Publish or select a source revision with compatible units before creating a proposal.</EmptyState>}
-          <Button disabled={!canContinue} onClick={continueToProposal} size="lg">Continue to proposal</Button>
+          {!loading && !loadError && changes.length === 0 && !sourceRevision && <EmptyState action={forkHref ? <TextLink href={forkHref}>Fork Revision {baseRevision?.number} to start</TextLink> : undefined} icon="file" title="Start with a work copy">Fork the selected revision into your public project, edit its source in an external design tool, then publish a new revision. Forking alone does not create a proposal; confirm you can publish it under the displayed license.</EmptyState>}
+          {!loading && !loadError && changes.length === 0 && sourceRevision && canContinueWholeDocument && <Banner action={<Button onClick={continueToWholeDocumentProposal} size="sm">Continue with whole document</Button>} title="Whole-document proposal" tone="info">This format has no independently selectable units. The proposal submits the complete document; the server will reject it if it contains no applied change.</Banner>}
+          {!loading && !loadError && changes.length === 0 && sourceRevision && !canContinueWholeDocument && (copiedBase ? <Banner title="This fork is still an unchanged copy" tone="warning">Forking alone does not create a change. Edit the source in an external design tool and publish a new revision before proposing.</Banner> : <EmptyState icon="file" title="No selectable changes found">Select another source revision, or edit the working project in an external design tool and publish a new revision.</EmptyState>)}
+          {sourceRevision && !loading && !loadError && changes.length === 0 && <Stack gap={2}>{workingProjectHref && <TextLink href={workingProjectHref}>Open working project and publish a revision</TextLink>}{forkHref && <TextLink href={forkHref}>Fork the selected target revision</TextLink>}</Stack>}
+          {canContinueWholeDocument ? null : <Button disabled={!canContinue} onClick={continueToProposal} size="lg">Continue to proposal</Button>}
         </Stack>
       </Panel>
     </Stack>
