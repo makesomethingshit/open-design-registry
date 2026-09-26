@@ -47,7 +47,7 @@ export function applySuggestedKind(kinds: string[], index: number, request: numb
   return request === currentRequest ? kinds.map((value, currentIndex) => currentIndex === index && !value ? "auto" : value) : kinds;
 }
 
-export default function RevisionPublishForm({ slug, existingFiles }: { slug: string; existingFiles: ExistingFile[] }) {
+export default function RevisionPublishForm({ slug, existingFiles, contributionReturn }: { slug: string; existingFiles: ExistingFile[]; contributionReturn?: { targetSlug: string; baseRevision: number; relatedIssueId?: string } }) {
   const router = useRouter();
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFileIds, setSourceFileIds] = useState<string[]>([]);
@@ -158,7 +158,11 @@ export default function RevisionPublishForm({ slug, existingFiles }: { slug: str
         setError("Revision could not be published");
         return;
       }
-      router.push(`/projects/${slug}/revisions/${payload.number}`);
+      if (contributionReturn) {
+        const params = new URLSearchParams({ baseRevision: String(contributionReturn.baseRevision), sourceProject: slug, sourceRevision: String(payload.number) });
+        if (contributionReturn.relatedIssueId) params.set("relatedIssue", contributionReturn.relatedIssueId);
+        router.push(`/projects/${encodeURIComponent(contributionReturn.targetSlug)}/contribute?${params}`);
+      } else router.push(`/projects/${slug}/revisions/${payload.number}`);
     } catch {
       setError("Revision could not be published");
     } finally {

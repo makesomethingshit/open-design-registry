@@ -30,9 +30,18 @@ describe("contribution changes route", () => {
     const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ changes: [{ action: "ADD_UNIT", sourceFileId: "unit", name: "Poster", kind: "artboard" }] });
+    await expect(response.json()).resolves.toEqual({ changes: [{ action: "ADD_UNIT", sourceFileId: "unit", name: "Poster", kind: "artboard" }], wholeDocument: true });
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("base");
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("source");
+  });
+
+  it("does not classify a structured base with no detected changes as whole-document", async () => {
+    mocks.readRevisionBundleStrict.mockImplementation(async (key: string) => key === "base" ? { files: [{ id: "target" }] } : { files: [] });
+    mocks.detectUnitChanges.mockReturnValue([]);
+
+    const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
+
+    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: false });
   });
 
   it("does not expose another contributor's source revision", async () => {
