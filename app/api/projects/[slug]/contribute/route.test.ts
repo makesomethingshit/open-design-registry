@@ -20,17 +20,18 @@ describe("contribution changes route", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "contributor" } });
     mocks.findProject.mockResolvedValue({ id: "target", isPublic: true, ownerId: "owner" });
-    mocks.findBaseRevision.mockResolvedValue({ sourceKey: "base" });
-    mocks.findSourceRevision.mockResolvedValue({ isPublished: true, sourceKey: "source", project: { ownerId: "contributor" } });
+    mocks.findBaseRevision.mockResolvedValue({ sourceKey: "base", sourceUrl: null, capabilityMode: null });
+    mocks.findSourceRevision.mockResolvedValue({ isPublished: true, sourceKey: "source", sourceUrl: null, capabilityMode: null, project: { ownerId: "contributor" } });
     mocks.readRevisionBundleStrict.mockResolvedValue({ files: [] });
     mocks.detectUnitChanges.mockReturnValue([{ action: "ADD_UNIT", sourceFileId: "unit", name: "Poster", kind: "artboard" }]);
   });
 
   it("returns server-derived changes only for the signed-in contributor's source revision", async () => {
+    mocks.readRevisionBundleStrict.mockImplementation(async (key: string) => ({ files: [{ id: key }] }));
     const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ changes: [{ action: "ADD_UNIT", sourceFileId: "unit", name: "Poster", kind: "artboard" }], wholeDocument: true });
+    await expect(response.json()).resolves.toEqual({ changes: [{ action: "ADD_UNIT", sourceFileId: "unit", name: "Poster", kind: "artboard" }], wholeDocument: false, capabilityMode: "STRUCTURED", capabilityUnitCount: 1 });
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("base");
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("source");
   });
@@ -41,20 +42,31 @@ describe("contribution changes route", () => {
 
     const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
 
-    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: false });
+    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: false, capabilityMode: "STRUCTURED", capabilityUnitCount: 1 });
   });
 
   it("offers whole-document preparation for a structured base and URL-only source", async () => {
-    mocks.findSourceRevision.mockResolvedValue({ isPublished: true, sourceKey: null, sourceUrl: "https://example.test/source.zip", project: { ownerId: "contributor" } });
+    mocks.findSourceRevision.mockResolvedValue({ isPublished: true, sourceKey: null, sourceUrl: "https://example.test/source.zip", capabilityMode: "WHOLE_DOCUMENT", project: { ownerId: "contributor" } });
     mocks.readRevisionBundleStrict.mockImplementation(async (key: string | null) => key === "base" ? { files: [{ id: "target" }] } : null);
     mocks.detectUnitChanges.mockReturnValue([]);
 
     const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: true });
+    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: true, capabilityMode: "WHOLE_DOCUMENT", capabilityUnitCount: null });
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith("base");
     expect(mocks.readRevisionBundleStrict).toHaveBeenCalledWith(null);
+  });
+
+  it("marks missing legacy capability metadata unknown without blocking whole-document preparation", async () => {
+    mocks.findBaseRevision.mockResolvedValue({ sourceKey: null, sourceUrl: null, capabilityMode: null });
+    mocks.findSourceRevision.mockResolvedValue({ isPublished: true, sourceKey: null, sourceUrl: null, capabilityMode: null, project: { ownerId: "contributor" } });
+    mocks.readRevisionBundleStrict.mockResolvedValue(null);
+    mocks.detectUnitChanges.mockReturnValue([]);
+
+    const response = await GET(new Request("http://localhost/api/projects/target/contribute?baseRevisionId=base&sourceRevisionId=source"), { params: Promise.resolve({ slug: "target" }) });
+
+    await expect(response.json()).resolves.toEqual({ changes: [], wholeDocument: true, capabilityMode: "UNKNOWN", capabilityUnitCount: null });
   });
 
   it("does not expose another contributor's source revision", async () => {

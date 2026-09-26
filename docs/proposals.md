@@ -123,6 +123,8 @@ Proposal 적용으로 upstream 유닛의 내용이나 의존성 집합이 바뀌
 
 Contribution preparation uses whole-document mode when either revision lacks a structured unit bundle, including a structured base paired with a URL-only source.
 
+Contribution scope is shown beside the project action and recalculated for each selected base/source pair. Structured pairs list the published source file-unit count; whole-document pairs submit the complete revision for review. Missing legacy capability metadata is labeled as unknown and does not claim selectable units or block whole-document preparation. Layers and objects are not selectable units.
+
 서버는 base와 source가 같은 Revision인 Proposal을 거부합니다. 전체 문서 제안은 source 자산의 동일성 또는 검증된 checksum/번들 비교와 적용되는 metadata·Preview가 같다고 확인될 때만 무변경으로 거부하며, 비교 자료가 없는 legacy Revision은 추측해 차단하지 않습니다. `MODIFY_UNIT`도 checksum·의존성 비교 결과와 실제 적용되는 파일 metadata·Preview가 모두 같을 때 거부합니다.
 
 생성은 `201`; 같은 `(projectId, authorId, requestId)` 재시도는 기존 Proposal과 `200`을 반환합니다. 내용이 다른 새 제안에 이전 requestId를 재사용하지 않습니다.

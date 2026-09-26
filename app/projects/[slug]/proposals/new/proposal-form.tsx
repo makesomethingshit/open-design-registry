@@ -8,7 +8,7 @@ import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
 import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 
 type BundleFile = { id: string; name: string; kind?: string; mimeType: string; size: number };
-type SourceRevision = { id: string; number: number; title: string; projectTitle: string; projectSlug: string; files: BundleFile[] };
+type SourceRevision = { id: string; number: number; title: string; projectTitle: string; projectSlug: string; sourceUrl?: string | null; capabilityMode?: string | null; capabilityUnitCount?: number | null; files: BundleFile[] };
 type RelatedIssue = { id: string; title: string; kind?: "ISSUE" | "DESIGN_REQUEST" };
 type UnitAction = "MODIFY_UNIT" | "RENAME_UNIT" | "REMOVE_UNIT" | "ADD_UNIT";
 export type ProposalDraftChange = { action: UnitAction; targetFileId?: string; sourceFileId?: string; newName?: string };
@@ -24,7 +24,7 @@ function actionLabel(action: UnitAction) {
   return { MODIFY_UNIT: "Modify", RENAME_UNIT: "Rename", REMOVE_UNIT: "Remove", ADD_UNIT: "Add" }[action];
 }
 
-export default function ProposalForm({ slug, baseRevision, sourceRevisions, relatedIssues, defaultSourceRevisionId, defaultRelatedIssueId = "", initialChanges = [] }: { slug: string; baseRevision: { id: string; number: number; title: string; files: BundleFile[] }; sourceRevisions: SourceRevision[]; relatedIssues: RelatedIssue[]; defaultSourceRevisionId: string; defaultRelatedIssueId?: string; initialChanges?: ProposalDraftChange[] }) {
+export default function ProposalForm({ slug, baseRevision, sourceRevisions, relatedIssues, defaultSourceRevisionId, defaultRelatedIssueId = "", initialChanges = [] }: { slug: string; baseRevision: { id: string; number: number; title: string; sourceUrl?: string | null; capabilityMode?: string | null; capabilityUnitCount?: number | null; files: BundleFile[] }; sourceRevisions: SourceRevision[]; relatedIssues: RelatedIssue[]; defaultSourceRevisionId: string; defaultRelatedIssueId?: string; initialChanges?: ProposalDraftChange[] }) {
   const router = useRouter();
   const [sourceRevisionId, setSourceRevisionId] = useState(defaultSourceRevisionId);
   const [changes, setChanges] = useState<DraftChange[]>(() => initialChanges.map((change) => ({ ...change, key: crypto.randomUUID() })));
@@ -35,6 +35,17 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
   const sourceRevision = useMemo(() => sourceRevisions.find((revision) => revision.id === sourceRevisionId) ?? sourceRevisions[0], [sourceRevisionId, sourceRevisions]);
   const canChooseUnits = Boolean(baseRevision.files.length && sourceRevision?.files.length);
   const canUseSourceUnits = Boolean(sourceRevision?.files.length);
+  const knownWholeDocument = !canChooseUnits && Boolean(
+    baseRevision.capabilityMode === "WHOLE_DOCUMENT"
+    || sourceRevision?.capabilityMode === "WHOLE_DOCUMENT"
+    || (!baseRevision.files.length && baseRevision.sourceUrl)
+    || (!sourceRevision?.files.length && sourceRevision?.sourceUrl),
+  );
+  const capabilityCopy = canChooseUnits
+    ? `This pair has ${sourceRevision.files.length} selectable published file ${sourceRevision.files.length === 1 ? "unit" : "units"}. You can select file-level changes; layers and objects are not selectable.`
+    : knownWholeDocument
+      ? "Whole-document only. You can propose the complete revised document for review; individual files, layers, and objects cannot be selected."
+      : "Capability not recorded. Unit-level selection cannot be confirmed for this revision. Whole-document proposals remain available when units cannot be compared.";
   const sourceOnlyFiles = useMemo(() => sourceRevision?.files.filter((file) => !baseRevision.files.some((target) => target.id === file.id)) ?? [], [baseRevision.files, sourceRevision]);
 
   function resetRequest() {
@@ -127,7 +138,8 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
     <Field id="proposal-related-issue" label="Related issue"><Select name="relatedIssueId" defaultValue={defaultRelatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option value={issue.id} key={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
     <section className="file-input-list" aria-labelledby="units-to-propose-heading">
       <div className="section-heading"><h2 id="units-to-propose-heading">Units to propose</h2>{canChooseUnits && <button type="button" className="button secondary" onClick={addChange} disabled={changes.length >= maxProposalChanges}>Add change</button>}</div>
-      {!canChooseUnits ? <p className="empty-state">Whole-document only. This format does not expose independently changeable units.</p> : changes.map((change) => {
+      <p className="meta" role="status" aria-live="polite">{capabilityCopy}</p>
+      {!canChooseUnits ? null : changes.map((change) => {
         const target = baseRevision.files.find((file) => file.id === change.targetFileId);
         const needsTarget = change.action !== "ADD_UNIT";
         return <article className="change-row file-input-row" key={change.key}>

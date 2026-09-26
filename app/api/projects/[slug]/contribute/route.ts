@@ -22,14 +22,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     if (!project || (!project.isPublic && project.ownerId !== session.user.id)) return error("Project not found", 404);
 
     const [baseRevision, sourceRevision] = await Promise.all([
-      prisma.revision.findFirst({ where: { id: baseRevisionId, projectId: project.id, isPublished: true }, select: { sourceKey: true } }),
-      prisma.revision.findUnique({ where: { id: sourceRevisionId }, select: { isPublished: true, sourceKey: true, project: { select: { ownerId: true } } } }),
+      prisma.revision.findFirst({ where: { id: baseRevisionId, projectId: project.id, isPublished: true }, select: { sourceKey: true, sourceUrl: true, capabilityMode: true } }),
+      prisma.revision.findUnique({ where: { id: sourceRevisionId }, select: { isPublished: true, sourceKey: true, sourceUrl: true, capabilityMode: true, project: { select: { ownerId: true } } } }),
     ]);
     if (!baseRevision) return error("Base revision not found", 400);
     if (!sourceRevision?.isPublished || sourceRevision.project.ownerId !== session.user.id) return error("Source revision not found", 400);
 
     const [baseBundle, sourceBundle] = await Promise.all([readRevisionBundleStrict(baseRevision.sourceKey), readRevisionBundleStrict(sourceRevision.sourceKey)]);
-    return NextResponse.json({ changes: detectUnitChanges(baseBundle, sourceBundle), wholeDocument: !baseBundle?.files.length || !sourceBundle?.files.length });
+    const hasBaseUnits = Boolean(baseBundle?.files.length);
+    const hasSourceUnits = Boolean(sourceBundle?.files.length);
+    const wholeDocument = !hasBaseUnits || !hasSourceUnits;
+    const capabilityKnown = !wholeDocument
+      || baseRevision.capabilityMode === "WHOLE_DOCUMENT"
+      || sourceRevision.capabilityMode === "WHOLE_DOCUMENT"
+      || (!hasBaseUnits && Boolean(baseRevision.sourceUrl))
+      || (!hasSourceUnits && Boolean(sourceRevision.sourceUrl));
+    const capabilityMode = !wholeDocument ? "STRUCTURED" : capabilityKnown ? "WHOLE_DOCUMENT" : "UNKNOWN";
+    return NextResponse.json({
+      changes: detectUnitChanges(baseBundle, sourceBundle),
+      wholeDocument,
+      capabilityMode,
+      capabilityUnitCount: capabilityMode === "STRUCTURED" ? sourceBundle?.files.length ?? null : null,
+    });
   } catch {
     return error("Could not load available changes.", 500);
   }

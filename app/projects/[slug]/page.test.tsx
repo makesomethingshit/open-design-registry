@@ -182,7 +182,7 @@ describe("Project Star action", () => {
     await renderProjectPage({ user: { id: "viewer" } }, project(), 1);
 
     const action = mocks.headerActions.mock.calls.at(-1)?.[0] as ReactElement<{ children: ReactElement<Record<string, unknown>>[] }>;
-    const [star, watch, contribute, fork] = action.props.children;
+    const [star, watch, contribute, fork] = action.props.children.filter(Boolean);
     expect(star.props).toEqual({ initialStarred: true, signedIn: true, slug: "demo" });
     expect(watch.props).toEqual({ initialWatched: false, signedIn: true, slug: "demo" });
     expect(contribute.props).toMatchObject({ signedIn: true, slug: "demo" });
@@ -195,7 +195,7 @@ describe("Project Star action", () => {
   it("provides a sign-in control to anonymous viewers and hides it on private owner pages", async () => {
     await renderProjectPage(null);
     const publicActions = mocks.headerActions.mock.calls.at(-1)?.[0] as ReactElement<{ children: ReactElement<Record<string, unknown>>[] }>;
-    expect(publicActions.props.children[0].props).toEqual({ initialStarred: false, signedIn: false, slug: "demo" });
+    expect(publicActions.props.children.filter(Boolean)[0].props).toEqual({ initialStarred: false, signedIn: false, slug: "demo" });
     expect(mocks.findStarCount).not.toHaveBeenCalled();
 
     const privateProject = project();

@@ -16,6 +16,7 @@ type BaseRevision = { id: string; number: number; title: string };
 type SourceRevision = { id: string; number: number; title: string; projectSlug: string; projectTitle: string; owner: string; sourceUrl: string | null; tool: string | null; projectForkedFromProjectId: string | null; projectForkedFromRevisionId: string | null };
 type RelatedIssue = { id: string; title: string; kind?: "ISSUE" | "DESIGN_REQUEST" };
 type WorkspaceDraft = { baseRevisionId?: string; sourceRevisionId?: string; selectedChangeKeys?: string[]; relatedIssueId?: string };
+type ContributionCapabilityMode = "STRUCTURED" | "WHOLE_DOCUMENT" | "UNKNOWN";
 export const maxProposalChanges = 10;
 
 function changeKey(change: DetectedUnitChange) {
@@ -42,6 +43,8 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
   const [relatedIssueId, setRelatedIssueId] = useState(initialRelatedIssueId ?? "");
   const [changes, setChanges] = useState<DetectedUnitChange[]>([]);
   const [wholeDocument, setWholeDocument] = useState(false);
+  const [capabilityMode, setCapabilityMode] = useState<ContributionCapabilityMode>("UNKNOWN");
+  const [capabilityUnitCount, setCapabilityUnitCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
@@ -84,6 +87,8 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
       activeRequest.current = null;
       setChanges([]);
       setWholeDocument(false);
+      setCapabilityMode("UNKNOWN");
+      setCapabilityUnitCount(null);
       setLoadedKey(null);
       setLoading(false);
       setLoadError(false);
@@ -95,15 +100,19 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
     activeRequest.current = requestToken;
     setLoadedKey(null);
     setWholeDocument(false);
+    setCapabilityMode("UNKNOWN");
+    setCapabilityUnitCount(null);
     setLoading(true);
     setLoadError(false);
     void fetch(`/api/projects/${encodeURIComponent(project.slug)}/contribute?${new URLSearchParams({ baseRevisionId, sourceRevisionId })}`, { signal: controller.signal })
       .then(async (response) => {
-        const payload = await response.json().catch(() => null) as { changes?: DetectedUnitChange[]; wholeDocument?: boolean } | null;
+        const payload = await response.json().catch(() => null) as { changes?: DetectedUnitChange[]; wholeDocument?: boolean; capabilityMode?: ContributionCapabilityMode; capabilityUnitCount?: number | null } | null;
         if (!response.ok || !Array.isArray(payload?.changes)) throw new Error("Could not load available changes.");
         if (!controller.signal.aborted && activeRequest.current === requestToken) {
           setChanges(payload.changes);
           setWholeDocument(payload.wholeDocument === true);
+          setCapabilityMode(payload.capabilityMode === "STRUCTURED" || payload.capabilityMode === "WHOLE_DOCUMENT" ? payload.capabilityMode : "UNKNOWN");
+          setCapabilityUnitCount(typeof payload.capabilityUnitCount === "number" ? payload.capabilityUnitCount : null);
           setLoadedKey(requestKey);
         }
       })
@@ -198,13 +207,16 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
           {sourceRevision ? <div className="capability-details"><dl><div><dt>Working source</dt><dd>{sourceRevision.owner} / {sourceRevision.projectTitle}</dd></div><div><dt>Revision</dt><dd>r{sourceRevision.number}</dd></div><div><dt>Source tool</dt><dd>{sourceRevision.tool ?? "Not recorded"}</dd></div></dl></div> : <p className="meta">You have no published source revision to propose yet.</p>}
           <Field id="source-revision" label="Source revision"><Select disabled={!sourceRevisions.length} onChange={(event) => requestSourceRevision(event.target.value)} value={sourceRevisionId}>{sourceRevisions.length ? sourceRevisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.projectSlug} · r{revision.number} · {revision.title}</option>) : <option value="">No published source revisions</option>}</Select></Field>
           {sourceRevision?.sourceUrl && <TextLink href={sourceRevision.sourceUrl} rel="noreferrer" target="_blank">Open working source</TextLink>}
+          {loading && <p className="meta" role="status" aria-live="polite">Checking contribution scope for this revision pair…</p>}
+          {!loading && !loadError && currentKey && loadedKey === currentKey && capabilityMode === "WHOLE_DOCUMENT" && <Banner title="Whole-document proposal" tone="info">You can propose the complete revised document for review. Individual files, layers, and objects cannot be selected.</Banner>}
+          {!loading && !loadError && currentKey && loadedKey === currentKey && capabilityMode === "STRUCTURED" && <Banner title={`${capabilityUnitCount} selectable file ${capabilityUnitCount === 1 ? "unit" : "units"}`} tone="info">This count describes published units in the selected source, not detected changes. Select file-level changes below; layers and objects cannot be selected.</Banner>}
+          {!loading && !loadError && currentKey && loadedKey === currentKey && capabilityMode === "UNKNOWN" && <Banner title="Capability not recorded" tone="info">This revision pair has no reliable unit-capability record. Do not infer selectable files; whole-document proposals remain available when unit comparison is unavailable.</Banner>}
         </Stack>
       </Panel>
       <Panel aria-busy={loading} aria-labelledby="changes-to-propose-heading">
         <Stack gap={3}>
           <SectionHeader id="changes-to-propose-heading" title="Changes to propose" />
           <Field id="related-issue" label="Related issue"><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
-          {loading && <p className="meta" role="status">Loading changes…</p>}
           {loadError && <Banner action={<Button onClick={() => { invalidateLoadedChanges(); setRetry((current) => current + 1); }} size="sm" variant="secondary">Retry</Button>} title="Could not load available changes." tone="error" />}
           {!loading && !loadError && changes.length > 0 && <ul className="history" aria-label="Available changes">{changes.map((change) => {
             const presentation = changeActionPresentation({ action: change.action, type: change.action });
