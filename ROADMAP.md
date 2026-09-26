@@ -27,7 +27,7 @@ ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)�
 ## 구현 완료 — 프로젝트 재방문과 기여 발견
 
 - **Star**는 공개 프로젝트에 대한 관심·다시 보기로, **Watch**는 해당 프로젝트의 새 Revision·Release 발행 알림으로 제공한다. Proposal이나 토론 활동은 Watch 알림 대상이 아니다.
-- `/contribute`에서 공개 Active 프로젝트의 열린 Design Request를 검색하고 도구·태그·라이선스로 좁혀 프로젝트의 Issue 영역으로 이동할 수 있다.
+- `/contribute`에서 공개 프로젝트의 열린 Design Request를 검색하고 도구·태그·라이선스로 좁혀 프로젝트의 Issue 영역으로 이동할 수 있다.
 - `/feed`에서 공개 프로젝트에 발행된 Revision·Release를 시간순으로 탐색한다. 사람 활동이나 개인별 추천은 포함하지 않는다.
 
 실제 사용자가 프로젝트를 발견하고 참여하는 흐름을 확인하며 다음 우선순위를 정한다.

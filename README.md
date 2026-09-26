@@ -34,7 +34,7 @@ Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계
 | 충돌·승인 해제 | 최신 Revision과 checksum 비교, 확인 불가 시 차단, Proposal 적용에 따른 승인 해제 이력 |
 | 활동 상태(Active/Paused/Archived; 표시 전용) | 프로젝트 카드·헤더 표시 |
 | 프로젝트 Star·Watch | Star는 관심·다시 보기, Watch는 새 Revision·Release 발행 알림 |
-| 기여 발견 (`/contribute`) | 공개 Active 프로젝트의 열린 Design Request 검색·필터·페이지 이동 |
+| 기여 발견 (`/contribute`) | 공개 프로젝트의 열린 Design Request 검색·필터·페이지 이동 |
 | 전역 변경 피드 (`/feed`) | 공개 프로젝트의 발행된 Revision·Release를 시간순으로 탐색 |
 | 미구현 기술 범위 | Penpot 내부 객체 분해, 편집기 자동 동기화, 범용 Git식 merge |
 

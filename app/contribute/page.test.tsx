@@ -34,8 +34,9 @@ beforeEach(() => {
 });
 
 describe("Contribution Discovery", () => {
-  it("lists active public open design requests with project context and stable issue links", async () => {
+  it("lists public open design requests with project context and stable issue links", async () => {
     const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+    const query = mocks.findMany.mock.calls[0][0];
 
     expect(markup).toContain("Open design requests");
     expect(markup).toContain("Improve the mobile empty state");
@@ -51,11 +52,12 @@ describe("Contribution Discovery", () => {
       where: expect.objectContaining({
         kind: "DESIGN_REQUEST",
         status: "OPEN",
-        project: expect.objectContaining({ isPublic: true, activityStatus: "ACTIVE" }),
+        project: expect.objectContaining({ isPublic: true }),
       }),
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 25,
     }));
+    expect(query.where.project).not.toHaveProperty("activityStatus");
   });
 
   it("normalizes homepage filters, searches request and project text, and preserves filters in next-page links", async () => {
@@ -72,7 +74,6 @@ describe("Contribution Discovery", () => {
         ],
         project: expect.objectContaining({
           isPublic: true,
-          activityStatus: "ACTIVE",
           license: "CC BY 4.0",
           revisions: { some: { isPublished: true, tool: { equals: "figma" }, tags: { hasEvery: ["ui"] } } },
         }),

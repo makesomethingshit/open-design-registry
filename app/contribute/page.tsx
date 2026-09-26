@@ -25,7 +25,6 @@ export default async function ContributePage({ searchParams }: { searchParams: P
       status: "OPEN",
       project: {
         isPublic: true,
-        activityStatus: "ACTIVE",
         ...(license ? { license } : {}),
         ...(tool || tag ? { revisions: { some: { isPublished: true, ...(tool ? { tool: { equals: tool } } : {}), ...(tag ? { tags: { hasEvery: [tag] } } : {}) } } } : {}),
       },
@@ -70,7 +69,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
       <p>Find a project looking for help, then open its request to understand the context and propose a change.</p>
     </header>
     <section aria-labelledby="requests-heading" className={styles.results}>
-      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Active public projects</p><h2 id="requests-heading">Design requests</h2></div><p>{items.length} {items.length === 1 ? "request" : "requests"} on this page</p></header>
+      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Public projects</p><h2 id="requests-heading">Design requests</h2></div><p>{items.length} {items.length === 1 ? "request" : "requests"} on this page</p></header>
       <form action="/contribute" className={styles.filters} method="get">
         <div className={styles.searchRow}>
           <label className={styles.searchLabel} htmlFor="request-search">Search requests<input defaultValue={query} id="request-search" name="q" placeholder="Request or project name and description" type="search" /></label>
