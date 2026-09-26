@@ -1,0 +1,7 @@
+.list { display: grid; gap: var(--odr-space-3); padding: 0; margin: var(--odr-space-5) 0; list-style: none; }
+.item { padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-surface-panel); }
+.meta { display: flex; align-items: center; gap: var(--odr-space-2); color: var(--odr-text-muted); font-size: var(--odr-font-label); }
+.project, .detail { margin: var(--odr-space-2) 0 0; color: var(--odr-text-secondary); font-size: var(--odr-font-label); }
+.item h2 { margin: var(--odr-space-2) 0 0; font-size: var(--odr-font-heading); line-height: var(--odr-line-heading); }
+.description { margin: var(--odr-space-3) 0 0; color: var(--odr-text-secondary); line-height: var(--odr-line-prose); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.pagination { display: flex; justify-content: flex-end; margin-bottom: var(--odr-space-6); }
