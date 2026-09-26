@@ -13,7 +13,7 @@ ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)�
 - Release v0: 프로젝트 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호가 있는 기록으로 묶어 발행·조회; 수정·삭제는 미지원
 - 활동 상태(Active/Paused/Archived; 표시 전용): 프로젝트 카드·헤더에 표시
 
-이 기준선은 코드 기능을 뜻한다. 실제 서비스의 배포·운영 상태는 별도로 확인해야 한다. 프로젝트 Discussion과 자체 댓글은 구현되어 있으며, 여기서 시작한 Issue·Design Request는 Proposal 및 적용 Revision의 출처로 연결된다. Watch·Star·Feed는 아직 제품 방향이다.
+이 기준선은 코드 기능을 뜻한다. 실제 서비스의 배포·운영 상태는 별도로 확인해야 한다. 프로젝트 Discussion과 자체 댓글은 구현되어 있으며, 여기서 시작한 Issue·Design Request는 Proposal 및 적용 Revision의 출처로 연결된다.
 
 ## 구현 완료 (#43–#48) — 프로젝트의 대화와 기여 요청
 
@@ -24,13 +24,13 @@ ODR이 장기적으로 만들려는 디자인 생태계는 [Vision](VISION.md)�
 
 완료 판단은 서로 다른 사용자가 프로젝트의 맥락을 이해하고 제안·리뷰·채택을 수행할 수 있는지, 채택된 Revision에서 기여와 출처를 추적할 수 있는지로 한다.
 
-## 다음 제품 단계 — 변화의 기록과 발견
+## 구현 완료 — 프로젝트 재방문과 기여 발견
 
-- 사람 Follow 대신 프로젝트 Follow/Watch로 Revision·Release·Proposal 등의 변화를 따라가게 한다. Star는 관심·응원·다시 보기의 표현으로 다루고 인기·품질 점수로 삼지 않는다.
-- 전역 Feed는 Revision·Release 같은 실제 변화를 중심으로 조용하게 유지한다. 프로젝트 안에서는 Discussion·Issue·Design Request·Proposal·Review까지 과정과 맥락을 보여 준다.
-- 태그·도구·라이선스 검색에 기여 가능한 작업 발견을 연결하고, 원본·라이선스·출처를 확인할 수 있게 한다.
+- **Star**는 공개 프로젝트에 대한 관심·다시 보기로, **Watch**는 해당 프로젝트의 새 Revision·Release 발행 알림으로 제공한다. Proposal이나 토론 활동은 Watch 알림 대상이 아니다.
+- `/contribute`에서 공개 Active 프로젝트의 열린 Design Request를 검색하고 도구·태그·라이선스로 좁혀 프로젝트의 Issue 영역으로 이동할 수 있다.
+- `/feed`에서 공개 프로젝트에 발행된 Revision·Release를 시간순으로 탐색한다. 사람 활동이나 개인별 추천은 포함하지 않는다.
 
-이 단계의 우선순위와 화면 구성은 실제 사용자가 프로젝트를 발견하고 참여하는 흐름을 확인하며 정한다.
+실제 사용자가 프로젝트를 발견하고 참여하는 흐름을 확인하며 다음 우선순위를 정한다.
 
 ## 계속 필요한 운영 기반
 

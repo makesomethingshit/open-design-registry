@@ -4,7 +4,7 @@
 
 Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계속 해석하고 발전시키는 협업 플랫폼을 지향합니다. 개인 디자이너와 오픈소스 디자인 참여자가 프로젝트를 중심으로 만나고, 원본·미리보기·변경 이력·출처를 보존하며 기여합니다. 장기적으로 무엇을 만들려 하는지는 [Vision](VISION.md), 그 방향의 철학적 배경은 [Philosophy](PHILOSOPHY.md), 구체적인 제품 원칙은 [제품 방향](docs/product-direction.md)에서 설명합니다.
 
-현재는 로그인, 공개·비공개 프로젝트, Revision 발행·비교·복원, Release, Issue·댓글, Fork, 알림·신고 검토에 더해 **Proposal → 변경별 리뷰 → 선택 적용 → 새 Revision** 흐름을 제공합니다. Release v0에서는 프로젝트 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호가 있는 판본으로 묶어 조회할 수 있습니다. 수정·삭제는 지원하지 않습니다. 원본 파일을 ODR 번들로 발행하면 파일·유닛 단위 변경을 제안할 수 있고, 전체 문서 교체도 지원합니다.
+현재는 로그인, 공개·비공개 프로젝트, Revision 발행·비교·복원, Release, Issue·댓글, Fork, 알림·신고 검토에 더해 **Proposal → 변경별 리뷰 → 선택 적용 → 새 Revision** 흐름을 제공합니다. 공개 프로젝트의 Star·Watch, 열린 Design Request 발견, 공개 Revision·Release 변경 피드도 제공합니다. Release v0에서는 프로젝트 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호가 있는 판본으로 묶어 조회할 수 있습니다. 수정·삭제는 지원하지 않습니다. 원본 파일을 ODR 번들로 발행하면 파일·유닛 단위 변경을 제안할 수 있고, 전체 문서 교체도 지원합니다.
 
 아래 현재 지원 범위는 저장소 코드 기준이며 실제 서비스 배포 여부와는 별개입니다. `package.json` 버전은 `0.1.0`입니다.
 
@@ -33,7 +33,9 @@ Open Design Registry는 공개된 디자인 프로젝트를 여러 사람이 계
 | Capability·어댑터 | 구조화/전체 문서 표시, SVG 파일 종류 제안과 신뢰도 표시 |
 | 충돌·승인 해제 | 최신 Revision과 checksum 비교, 확인 불가 시 차단, Proposal 적용에 따른 승인 해제 이력 |
 | 활동 상태(Active/Paused/Archived; 표시 전용) | 프로젝트 카드·헤더 표시 |
-| 향후 제품 방향 | 프로젝트 Watch·Star, 변화 중심 Feed |
+| 프로젝트 Star·Watch | Star는 관심·다시 보기, Watch는 새 Revision·Release 발행 알림 |
+| 기여 발견 (`/contribute`) | 공개 Active 프로젝트의 열린 Design Request 검색·필터·페이지 이동 |
+| 전역 변경 피드 (`/feed`) | 공개 프로젝트의 발행된 Revision·Release를 시간순으로 탐색 |
 | 미구현 기술 범위 | Penpot 내부 객체 분해, 편집기 자동 동기화, 범용 Git식 merge |
 
 `STRUCTURED`는 ODR이 번들의 파일·유닛을 선택할 수 있다는 뜻입니다. PSD·SVG·Penpot 파일 내부의 레이어나 객체를 모두 이해한다는 뜻은 아닙니다.
