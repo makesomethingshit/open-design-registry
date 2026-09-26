@@ -5,7 +5,7 @@ import { prisma } from "./prisma";
 import { proposalApplySchema, proposalCloseSchema, proposalCreateSchema, proposalReviewSchema, issueCommentSchema } from "./project-validation";
 import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-status";
 import { deleteObject, publicAssetUrl } from "./storage";
-import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
+import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameDependencySet, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
 
 const proposalDetails = {
@@ -106,6 +106,8 @@ type UnitChangeRequest =
   | { action: "REMOVE_UNIT"; targetFileId: string }
   | { action: "ADD_UNIT"; sourceFileId: string };
 
+type SourceTargetChange = { type?: string; action?: string | null; targetFileId?: string | null; assetKey?: string | null };
+
 type AppliedRevisionSnapshot = {
   sourceKey: string | null;
   sourceUrl: string | null;
@@ -122,15 +124,54 @@ type AppliedRevisionSnapshot = {
   previews: Array<{ position: number; key: string; url: string; mimeType: string; size: number; altText: string }>;
 };
 
+function sourceMappings(source: RevisionBundle | null, changes: readonly SourceTargetChange[]) {
+  const sourceFiles = new Map(source?.files.map((file) => [file.assetKey, file]) ?? []);
+  const sourceToTargetId = new Map<string, string>();
+  for (const change of changes) {
+    if (!change.assetKey || !change.targetFileId) continue;
+    const sourceFile = sourceFiles.get(change.assetKey);
+    if (!sourceFile) continue;
+    const existingTargetId = sourceToTargetId.get(sourceFile.id);
+    if (source?.version === 3 && existingTargetId && existingTargetId !== change.targetFileId) {
+      throw new ProposalError("A source unit cannot map to multiple target units", 409);
+    }
+    sourceToTargetId.set(sourceFile.id, change.targetFileId);
+  }
+  return { sourceFiles, sourceToTargetId };
+}
+
+function hasNoOpModifyUnit(base: RevisionBundle, source: RevisionBundle | null, changes: readonly SourceTargetChange[]) {
+  const { sourceFiles, sourceToTargetId } = sourceMappings(source, changes);
+  return changes.some((change) => {
+    if ((change.action ?? change.type) !== "MODIFY_UNIT") return false;
+    const target = base.files.find((file) => file.id === change.targetFileId);
+    const sourceFile = change.assetKey ? sourceFiles.get(change.assetKey) : undefined;
+    if (!target || !sourceFile || !target.checksum || !sourceFile.checksum
+      || target.checksum.toLowerCase() !== sourceFile.checksum.toLowerCase()
+      || target.mimeType !== sourceFile.mimeType || target.size !== sourceFile.size
+      || target.previewKeys.length !== sourceFile.previewKeys.length
+      || !target.previewKeys.every((key, index) => key === sourceFile.previewKeys[index])) return false;
+    const dependencies = source?.version === 3
+      ? sourceFile.dependencies!.map((id) => sourceToTargetId.get(id) ?? id)
+      : target.dependencies;
+    return sameDependencySet(target.dependencies, dependencies);
+  });
+}
+
 function sameDocumentSource(left: AppliedRevisionSnapshot, right: AppliedRevisionSnapshot) {
   const sameChecksum = Boolean(left.sourceKey && right.sourceKey && left.sourceChecksum && right.sourceChecksum
     && left.sourceChecksum.toLowerCase() === right.sourceChecksum.toLowerCase());
   const sameKey = Boolean(left.sourceKey && left.sourceKey === right.sourceKey
     && (!left.sourceChecksum || !right.sourceChecksum || left.sourceChecksum.toLowerCase() === right.sourceChecksum.toLowerCase()));
-  return sameKey || sameChecksum || Boolean(left.sourceUrl && left.sourceUrl === right.sourceUrl);
+  const sameUrl = Boolean(left.sourceUrl && left.sourceUrl === right.sourceUrl && left.sourceChecksum && right.sourceChecksum
+    && left.sourceChecksum.toLowerCase() === right.sourceChecksum.toLowerCase());
+  return sameKey || sameChecksum || sameUrl;
 }
 
 function sameAppliedDocument(left: AppliedRevisionSnapshot, right: AppliedRevisionSnapshot, leftBundle: RevisionBundle | null, rightBundle: RevisionBundle | null) {
+  const sameUrlWithDifferentChecksums = Boolean(left.sourceUrl && left.sourceUrl === right.sourceUrl && left.sourceChecksum && right.sourceChecksum
+    && left.sourceChecksum.toLowerCase() !== right.sourceChecksum.toLowerCase());
+  if (sameUrlWithDifferentChecksums) return false;
   const sameSource = sameDocumentSource(left, right)
     || Boolean(leftBundle && rightBundle && sameRevisionBundleContents(leftBundle, rightBundle));
   if (!sameSource) return false;
@@ -202,11 +243,6 @@ function unitChanges(base: RevisionBundle, source: RevisionBundle | null, reques
     }
     const sourceFile = sources.get(request.sourceFileId);
     if (!sourceFile) return { error: "Selected source unit is no longer available" };
-    if (request.action === "MODIFY_UNIT" && source && sourceFile.id === target.id
-      && conflictForChange({ type: "MODIFY_UNIT", action: "MODIFY_UNIT", targetFileId: target.id }, base, source)?.status === "NO_CONFLICT"
-      && sourceFile.mimeType === target.mimeType && sourceFile.size === target.size
-      && sourceFile.previewKeys.length === target.previewKeys.length
-      && sourceFile.previewKeys.every((key, index) => key === target.previewKeys[index])) return { error: "Proposal has no changes" };
     changes.push({ type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: target.name, targetFileId: target.id, name: target.name, kind: target.kind, mimeType: sourceFile.mimeType, size: sourceFile.size, assetKey: sourceFile.assetKey });
   }
   return { changes };
@@ -348,6 +384,7 @@ export async function createProjectProposal(request: Request, scope: { slug: str
     if ("error" in prepared) return error(prepared.error ?? "Selected unit is invalid");
     changes = prepared.changes;
     try {
+      if (hasNoOpModifyUnit(baseBundle!, sourceBundle, changes)) return error("Proposal has no changes");
       selectiveBundle(baseBundle!, sourceBundle, changes, changes);
     } catch (cause) {
       if (cause instanceof ProposalError) {
@@ -524,30 +561,7 @@ type SelectedUnitChange = {
 };
 
 function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, changes: SelectedUnitChange[], allChanges: SelectedUnitChange[]) {
-  const sourceFiles = new Map(source?.files.map((file) => [file.assetKey, file]) ?? []);
-  const sourceToTargetId = new Map<string, string>();
-  if (source?.version === 3) {
-    for (const change of allChanges) {
-      if (!change.assetKey || !change.targetFileId) continue;
-      const sourceFile = sourceFiles.get(change.assetKey);
-      if (!sourceFile) continue;
-      const existingTargetId = sourceToTargetId.get(sourceFile.id);
-      if (existingTargetId && existingTargetId !== change.targetFileId) {
-        throw new ProposalError(
-          "A source unit cannot map to multiple target units",
-          409,
-        );
-      }
-      sourceToTargetId.set(sourceFile.id, change.targetFileId);
-    }
-  } else {
-    for (const [sourceId, targetId] of allChanges.flatMap((change) => {
-      const sourceFile = change.assetKey ? sourceFiles.get(change.assetKey) : undefined;
-      return sourceFile && change.targetFileId ? [[sourceFile.id, change.targetFileId] as const] : [];
-    })) {
-      sourceToTargetId.set(sourceId, targetId);
-    }
-  }
+  const { sourceFiles, sourceToTargetId } = sourceMappings(source, allChanges);
   const dependenciesFor = (file: RevisionBundleFile) => file.dependencies!.map((id) => sourceToTargetId.get(id) ?? id);
   const files = [...latest.files];
   const changedIds = new Set<string>();

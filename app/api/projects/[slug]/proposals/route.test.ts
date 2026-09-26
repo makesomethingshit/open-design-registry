@@ -115,6 +115,17 @@ describe("proposal creation route", () => {
     expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
+  it("allows a whole-document proposal when the same URL has different checksums", async () => {
+    const sourceUrl = "https://example.com/design.zip";
+    mocks.findBase.mockResolvedValueOnce(baseRevision({ sourceKey: null, sourceUrl, sourceChecksum: "a".repeat(64) }));
+    mocks.findSource.mockResolvedValueOnce(sourceRevision({ sourceKey: null, sourceUrl, sourceChecksum: "b".repeat(64) }));
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Updated source", body: "The linked source changed" }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(201);
+    expect(mocks.transaction).toHaveBeenCalledOnce();
+    expect(mocks.createProposal).toHaveBeenCalledOnce();
+  });
+
   it("allows a whole-document proposal when equal source checksums have different applied metadata", async () => {
     mocks.findBase.mockResolvedValueOnce(baseRevision({ sourceChecksum: "a".repeat(64) }));
     mocks.findSource.mockResolvedValueOnce(sourceRevision({ sourceChecksum: "a".repeat(64), tool: "Illustrator" }));
@@ -202,6 +213,21 @@ describe("proposal creation route", () => {
     const changed = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Change card format", body: "Explain", changes: [{ action: "MODIFY_UNIT", targetFileId: "card", sourceFileId: "card" }] }), { params: Promise.resolve({ slug: "target" }) });
     expect(changed.status).toBe(201);
     expect(mocks.createProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a checksum-confirmed no-op MODIFY_UNIT across different source and target IDs before writes", async () => {
+    const checksum = "a".repeat(64);
+    const base = { version: 2 as const, files: [{ id: "card", name: "Card", kind: "component", mimeType: "image/png", size: 20, assetKey: "base-card", previewKeys: ["card-preview"], checksum }] };
+    const source = { version: 2 as const, files: [{ id: "copy", name: "Card copy", kind: "component", mimeType: "image/png", size: 20, assetKey: "source-copy", previewKeys: ["card-preview"], checksum }] };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? base : source));
+
+    const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Same card", body: "No change", changes: [{ action: "MODIFY_UNIT", targetFileId: "card", sourceFileId: "copy" }] }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Proposal has no changes" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.findLatestProposal).not.toHaveBeenCalled();
+    expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
   it("rejects a proposal whose requested units leave a dependency missing", async () => {
