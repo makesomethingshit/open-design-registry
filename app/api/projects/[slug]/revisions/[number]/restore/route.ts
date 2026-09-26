@@ -21,7 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   try {
     const revision = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+      const [lockedProject] = await tx.$queryRaw<Array<{ isPublic: boolean }>>`SELECT "isPublic" FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+      if (!lockedProject) throw new RestoreError("Project not found", 404);
       const source = await tx.revision.findUnique({
         where: { projectId_number: { projectId: project.id, number: revisionNumber } },
         include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } },
@@ -54,7 +55,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           previews: { create: source.previews.map(({ position, key, url, mimeType, size, altText }) => ({ position, key, url, mimeType, size, altText })) },
         },
       });
-      return tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
+      const published = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
+      if (lockedProject.isPublic) {
+        const watchers = await tx.projectWatch.findMany({ where: { projectId: project.id, userId: { not: session.user.id } }, select: { userId: true } });
+        if (watchers.length) {
+          await tx.notification.createMany({ data: watchers.map(({ userId }) => ({ recipientId: userId, actorId: session.user.id, type: "REVISION_PUBLISHED" as const, projectId: project.id, revisionId: published.id })) });
+        }
+      }
+      return published;
     });
     return NextResponse.json(toPublicRevision(revision), { status: 201 });
   } catch (cause) {

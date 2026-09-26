@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   findLatest: vi.fn(),
   findWatchers: vi.fn(),
   createNotifications: vi.fn(),
+  lockProject: vi.fn(),
   putObject: vi.fn(),
   deleteObject: vi.fn(),
   putBundle: vi.fn(),
@@ -59,10 +60,11 @@ describe("revision publishing route", () => {
     mocks.findLatest.mockResolvedValue(undefined);
     mocks.findWatchers.mockResolvedValue([]);
     mocks.createNotifications.mockResolvedValue({ count: 0 });
+    mocks.lockProject.mockResolvedValue([{ license: "CC BY 4.0", isPublic: true }]);
     mocks.createRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.updateRevision.mockResolvedValue({ id: "revision", number: 1, previews: [] });
     mocks.transaction.mockImplementation(async (callback) => callback({
-      $queryRaw: vi.fn().mockResolvedValue([{ license: "CC BY 4.0" }]),
+      $queryRaw: mocks.lockProject,
       revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
       projectWatch: { findMany: mocks.findWatchers },
       notification: { createMany: mocks.createNotifications },
@@ -384,6 +386,15 @@ describe("revision publishing route", () => {
     const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
     expect(mocks.findWatchers).toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
+  });
+
+  it("does not notify preserved watchers while the project is private", async () => {
+    mocks.lockProject.mockResolvedValue([{ license: "CC BY 4.0", isPublic: false }]);
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher" }]);
+    const response = await POST(request({ sourceUrl: "https://example.com/design.zip", previews: new File(["png"], "preview.png", { type: "image/png" }) }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).not.toHaveBeenCalled();
     expect(mocks.createNotifications).not.toHaveBeenCalled();
   });
 });

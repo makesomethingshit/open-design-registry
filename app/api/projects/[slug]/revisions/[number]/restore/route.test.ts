@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   updateRevision: vi.fn(),
   transaction: vi.fn(),
   lockProject: vi.fn(),
+  findWatchers: vi.fn(),
+  createNotifications: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
@@ -25,6 +27,8 @@ describe("revision restore route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.lockProject.mockResolvedValue([{ isPublic: true }]);
+    mocks.findWatchers.mockResolvedValue([]);
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner" });
     mocks.findSource.mockResolvedValue({
       id: "revision-1",
@@ -69,6 +73,8 @@ describe("revision restore route", () => {
     mocks.transaction.mockImplementation(async (callback) => callback({
       $queryRaw: mocks.lockProject,
       revision: { findUnique: mocks.findSource, findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.updateRevision },
+      projectWatch: { findMany: mocks.findWatchers },
+      notification: { createMany: mocks.createNotifications },
     }));
   });
 
@@ -136,6 +142,20 @@ describe("revision restore route", () => {
     mocks.findSource.mockResolvedValueOnce({ id: "legacy", number: 1, title: "Legacy", license: null, sourceKey: "legacy/source", sourceUrl: null, isPublished: true, previews: [] });
     expect((await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) })).status).toBe(201);
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ license: null }) }));
+  });
+
+  it("notifies watchers when a public revision is restored", async () => {
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher" }]);
+    expect((await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) })).status).toBe(201);
+    expect(mocks.findWatchers).toHaveBeenCalledWith({ where: { projectId: "project", userId: { not: "owner" } }, select: { userId: true } });
+    expect(mocks.createNotifications).toHaveBeenCalledWith({ data: [{ recipientId: "watcher", actorId: "owner", type: "REVISION_PUBLISHED", projectId: "project", revisionId: "revision-3" }] });
+  });
+
+  it("does not notify prior watchers when a private revision is restored", async () => {
+    mocks.lockProject.mockResolvedValue([{ isPublic: false }]);
+    expect((await POST(request(), { params: Promise.resolve({ slug: "demo", number: "1" }) })).status).toBe(201);
+    expect(mocks.findWatchers).not.toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
   });
 
   it("returns 404 for missing or unpublished historical revisions", async () => {

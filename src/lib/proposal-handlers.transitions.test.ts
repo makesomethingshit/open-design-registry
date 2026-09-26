@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), findChanges: vi.fn(), createHistory: vi.fn(), findLatest: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), findChanges: vi.fn(), createHistory: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), findWatchers: vi.fn(), createNotifications: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: vi.fn() }));
@@ -46,12 +46,16 @@ describe("proposal transition serialization", () => {
     mocks.findLatest.mockResolvedValue({ id: "base", number: 10 });
     mocks.createRevision.mockResolvedValue({ id: "staged" });
     mocks.publishRevision.mockResolvedValue({ id: "revision-11", number: 11, title: "Accepted: Improve header" });
+    mocks.findRevision.mockResolvedValue({ id: "revision-11", number: 11, title: "Accepted: Improve header" });
+    mocks.findWatchers.mockResolvedValue([]);
     mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({
       $queryRaw: mocks.lockProject,
       proposal: { findUnique: mocks.findProposal, update: mocks.updateProposal },
       change: { update: mocks.updateChange, updateMany: mocks.updateChanges, findMany: mocks.findChanges },
       changeReview: { create: mocks.createHistory },
-      revision: { findFirst: mocks.findLatest, create: mocks.createRevision, update: mocks.publishRevision },
+      revision: { findFirst: mocks.findLatest, findUnique: mocks.findRevision, create: mocks.createRevision, update: mocks.publishRevision },
+      projectWatch: { findMany: mocks.findWatchers },
+      notification: { createMany: mocks.createNotifications },
     }));
   });
 
@@ -61,6 +65,21 @@ describe("proposal transition serialization", () => {
     expect(state.status).toBe("ACCEPTED");
     expect(mocks.createRevision).toHaveBeenCalledTimes(1);
     expect(events).toEqual(["lock:source", "lock:target", "proposal", "lock:target", "proposal"]);
+  });
+
+  it("notifies watchers once for a newly applied whole-document revision", async () => {
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher" }]);
+    expect((await apply()).status).toBe(201);
+    expect((await apply()).status).toBe(200);
+    expect(mocks.createNotifications).toHaveBeenCalledOnce();
+    expect(mocks.createNotifications).toHaveBeenCalledWith({ data: [{ recipientId: "watcher", actorId: "owner", type: "REVISION_PUBLISHED", projectId: "target", revisionId: "revision-11" }] });
+  });
+
+  it("does not notify preserved watchers when the target project is private", async () => {
+    mocks.lockProject.mockImplementation(async (_sql: unknown, projectId: string) => [{ id: projectId, ownerId: projectId === "target" ? "owner" : "contributor", license: "MIT", isPublic: projectId !== "target" }]);
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher" }]);
+    expect((await apply()).status).toBe(201);
+    expect(mocks.findWatchers).not.toHaveBeenCalled();
   });
 
   it("keeps unrecorded capability unknown for a whole-document apply", async () => {

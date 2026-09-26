@@ -44,7 +44,7 @@ describe("project releases route", () => {
     mocks.findWatchers.mockResolvedValue([]);
     mocks.createNotifications.mockResolvedValue({ count: 0 });
     mocks.createRelease.mockResolvedValue({ id: "release-3", number: 3 });
-    mocks.lockProject.mockResolvedValue([{ id: "project" }]);
+    mocks.lockProject.mockResolvedValue([{ id: "project", isPublic: true }]);
  mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never));
   });
 
@@ -118,7 +118,7 @@ describe("project releases route", () => {
     });
     expect(mocks.lockProject).toHaveBeenCalledTimes(1);
     const [lockSql, lockedProjectId] = mocks.lockProject.mock.calls[0] as [TemplateStringsArray, string];
-    expect(lockSql.join("")).toContain('SELECT id FROM "Project" WHERE id = ');
+    expect(lockSql.join("")).toContain('SELECT id, "isPublic" FROM "Project" WHERE id = ');
     expect(lockSql.join("")).toContain("FOR UPDATE");
     expect(lockedProjectId).toBe("project");
     expect(mocks.lockProject.mock.invocationCallOrder[0]).toBeLessThan(mocks.findLatestRelease.mock.invocationCallOrder[0]);
@@ -195,6 +195,15 @@ describe("project releases route", () => {
     const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
     expect(mocks.findWatchers).toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
+  });
+
+  it("does not notify preserved watchers while the project is private", async () => {
+    mocks.lockProject.mockResolvedValue([{ id: "project", isPublic: false }]);
+    mocks.findWatchers.mockResolvedValue([{ userId: "watcher" }]);
+    const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findWatchers).not.toHaveBeenCalled();
     expect(mocks.createNotifications).not.toHaveBeenCalled();
   });
 });

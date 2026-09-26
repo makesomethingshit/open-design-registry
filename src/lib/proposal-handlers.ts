@@ -115,6 +115,13 @@ async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) 
   return projects;
 }
 
+async function notifyRevisionWatchers(tx: Prisma.TransactionClient, projectId: string, actorId: string, revisionId: string) {
+  const watchers = await tx.projectWatch.findMany({ where: { projectId, userId: { not: actorId } }, select: { userId: true } });
+  if (watchers.length) {
+    await tx.notification.createMany({ data: watchers.map(({ userId }) => ({ recipientId: userId, actorId, type: "REVISION_PUBLISHED", projectId, revisionId })) });
+  }
+}
+
 function unitChanges(base: RevisionBundle, source: RevisionBundle | null, requested: UnitChangeRequest[]) {
   const targets = new Map(base.files.map((file) => [file.id, file]));
   const sources = new Map(source?.files.map((file) => [file.id, file]) ?? []);
@@ -633,6 +640,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         await tx.change.update({ where: { id: selected[0].id }, data: { appliedRevisionId: revision.id } });
         if (beforeBundle && afterBundle) await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, beforeBundle, afterBundle, null, revision);
         await tx.proposal.update({ where: { id: proposal.id }, data: { status: "ACCEPTED", acceptedById: session.user.id } });
+        if (lockedProject.isPublic) await notifyRevisionWatchers(tx, initial.projectId, session.user.id, revision.id);
         return { revision, alreadyApplied: false };
       }
       const latestWithSource = await tx.revision.findUnique({ where: { id: latest.id }, include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } });
@@ -693,6 +701,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, latestBundle, bundle, selected.map((change) => change.targetFileId).filter((id): id is string => Boolean(id)), revision);
       const appliedCount = proposal.changeSet.changes.filter((change) => change.appliedRevisionId).length + selected.length;
       await tx.proposal.update({ where: { id: proposal.id }, data: { status: proposalStatusForChanges(proposal.changeSet.changes.map((change) => change.reviewStatus), appliedCount), acceptedById: session.user.id } });
+      if (lockedProject.isPublic) await notifyRevisionWatchers(tx, initial.projectId, session.user.id, revision.id);
       return { revision, alreadyApplied: false };
     });
     return NextResponse.json(result, { status: result.alreadyApplied ? 200 : 201 });
