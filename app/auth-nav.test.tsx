@@ -20,9 +20,9 @@ vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname, useRouter
 
 const { default: AuthNav } = await import("./auth-nav");
 
-function renderNav(pathname = "/stars") {
+function renderNav(pathname = "/stars", signedIn = true) {
   mocks.pathname = pathname;
-  mocks.state = [{ name: "Jun", role: "user" }, 0, true];
+  mocks.state = [signedIn ? { name: "Jun", role: "user" } : null, 0, true];
   mocks.stateIndex = 0;
   return renderToStaticMarkup(AuthNav());
 }
@@ -47,5 +47,19 @@ describe("AuthNav Starred link", () => {
 
   it("only marks Starred current at /stars", () => {
     expect(renderNav("/projects")).not.toMatch(/<a aria-current="page" href="\/stars"/);
+  });
+});
+
+describe("AuthNav Contribute link", () => {
+  it("shows Contribution Discovery to visitors and marks it current", () => {
+    expect(renderNav("/contribute", false)).toMatch(/<a aria-current="page" href="\/contribute" class="nav-link">Contribute<\/a>/);
+  });
+
+  it("keeps Contribute and Feed available to visitors and members", () => {
+    for (const signedIn of [false, true]) {
+      const markup = renderNav("/feed", signedIn);
+      expect(markup).toContain('href="/contribute"');
+      expect(markup).toMatch(/<a aria-current="page" href="\/feed" class="nav-link">Feed<\/a>/);
+    }
   });
 });
