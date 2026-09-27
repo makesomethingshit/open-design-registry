@@ -10,8 +10,8 @@ import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form"
 import { Stack } from "@/src/components/ui/layout";
 
 const activityOptions = [
-  { value: "ACTIVE", label: "Active — ongoing work" },
-  { value: "PAUSED", label: "Paused — temporarily on hold" },
+  { value: "ACTIVE", label: "Active — work is ongoing" },
+  { value: "PAUSED", label: "Paused — work is temporarily on hold" },
   { value: "ARCHIVED", label: "Archived — kept for reference" },
 ] as const;
 
@@ -38,32 +38,32 @@ export default function ProjectSettingsForm({ slug, title, description, document
     try {
       const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), document: form.get("document"), license: form.get("license"), isPublic: form.get("isPublic") === "on", activityStatus: form.get("activityStatus"), rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
       if (!response.ok) {
-        setError((await response.json().catch(() => null))?.error ?? "프로젝트를 저장하지 못했습니다.");
+        setError((await response.json().catch(() => null))?.error ?? "Could not save project settings.");
         return;
       }
-      setSuccess("프로젝트 설정을 저장했습니다.");
+      setSuccess("Project settings saved.");
       router.refresh();
     } catch {
-      setError("프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.");
+      setError("Could not save project settings. Try again.");
     } finally {
       setSaving(false);
     }
   }
 
   return <details className="project-settings">
-    <summary>프로젝트 설정</summary>
+    <summary>Project settings</summary>
     <form className="form" noValidate onSubmit={submit} aria-busy={saving}>
       <Stack gap={4}>
-        <Field error={fieldErrors.title} id="settings-title" invalid={Boolean(fieldErrors.title)} label="제목" required><Input name="title" defaultValue={title} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
-        <Field error={fieldErrors.description} id="settings-description" invalid={Boolean(fieldErrors.description)} label="설명"><Textarea name="description" defaultValue={description} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.description; return next; })} maxLength={2000} /></Field>
+        <Field error={fieldErrors.title} id="settings-title" invalid={Boolean(fieldErrors.title)} label="Title" required><Input name="title" defaultValue={title} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
+        <Field error={fieldErrors.description} id="settings-description" invalid={Boolean(fieldErrors.description)} label="Description"><Textarea name="description" defaultValue={description} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.description; return next; })} maxLength={2000} /></Field>
         <Field error={fieldErrors.document} id="settings-document" invalid={Boolean(fieldErrors.document)} label="Project document (Markdown)"><Textarea name="document" defaultValue={document} rows={12} maxLength={50000} /></Field>
-        <Field error={fieldErrors.license} id="settings-license" invalid={Boolean(fieldErrors.license)} label="라이선스" required><Input name="license" defaultValue={license} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.license; return next; })} required maxLength={80} /></Field>
-        <Field id="settings-activity-status" label="활동 상태" description="표시용 상태입니다. 제안·검색·발행 동작은 바뀌지 않습니다."><Select name="activityStatus" defaultValue={activityStatus}>{activityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
-        <Checkbox defaultChecked={isPublic} label="공개 프로젝트" name="isPublic" />
-        {!isPublic && <Checkbox label="공개 전 원본 공개 권리를 확인했습니다." name="rightsConfirmed" />}
-        {error && <Banner tone="error" title="저장 실패">{error}</Banner>}
-        {success && <Banner tone="success" title="저장 완료">{success}</Banner>}
-        <Button loading={saving} loadingLabel="저장 중" type="submit">설정 저장</Button>
+        <Field error={fieldErrors.license} id="settings-license" invalid={Boolean(fieldErrors.license)} label="License" required><Input name="license" defaultValue={license} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.license; return next; })} required maxLength={80} /></Field>
+        <Field id="settings-activity-status" label="Activity status" description="This describes project activity. It does not affect proposals, search, or publishing."><Select name="activityStatus" defaultValue={activityStatus}>{activityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
+        <Checkbox defaultChecked={isPublic} label="Public project" name="isPublic" />
+        {!isPublic && <Checkbox label="I confirm that I have the right to share the source publicly." name="rightsConfirmed" />}
+        {error && <Banner tone="error" title="Could not save project settings">{error}</Banner>}
+        {success && <Banner tone="success" title="Saved">{success}</Banner>}
+        <Button loading={saving} loadingLabel="Saving settings" type="submit">Save settings</Button>
       </Stack>
     </form>
   </details>;
