@@ -79,6 +79,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <p className={styles.eyebrow}>Public design projects</p>
           <h2 id="projects-heading">Start with the work.</h2>
           <p className={styles.sectionDescription}>Explore actual public projects and the context needed to build on them.</p>
+          {query && <p className={styles.searchStatus} role="status">Search: <strong>{query}</strong> <TextLink href="#global-search-input">Edit search</TextLink></p>}
         </div>
         <div className={styles.sectionActions}>
           <form action="/" className={styles.filters} method="get">
@@ -115,7 +116,7 @@ async function ProjectResults({ hasMatchCondition, projects, retryHref }: { hasM
   }
 
   if (!rows.length) return hasMatchCondition
-    ? <div className={styles.empty} role="status"><h3>No projects match these filters</h3><p>Clear the search or filters to explore all public projects.</p></div>
+    ? <div className={styles.empty} role="status"><h3>No projects match these filters</h3><p>Clear the search or filters to explore all public projects.</p><TextLink href="/">Clear filters</TextLink></div>
     : <div className={styles.empty} role="status"><h3>No public projects yet</h3><p>Start the registry with a public design project.</p><Link className={secondaryLink} href="/projects/new">Create the first project</Link></div>;
 
   return <>

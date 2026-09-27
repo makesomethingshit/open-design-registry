@@ -52,7 +52,9 @@ describe("AuthNav Starred link", () => {
 
 describe("AuthNav Contribute link", () => {
   it("shows Contribution Discovery to visitors and marks it current", () => {
-    expect(renderNav("/contribute", false)).toMatch(/<a aria-current="page" href="\/contribute" class="nav-link">Contribute<\/a>/);
+    const markup = renderNav("/contribute", false);
+    expect(markup).toMatch(/<a aria-current="page" href="\/contribute" class="nav-link">Contribute<\/a>/);
+    expect(markup).toContain('href="/#projects"');
   });
 
   it("keeps Contribute and Feed available to visitors and members", () => {
