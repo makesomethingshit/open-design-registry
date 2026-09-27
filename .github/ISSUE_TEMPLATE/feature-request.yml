@@ -1,6 +1,6 @@
 name: Feature request
 description: Suggest a new capability or improvement.
-title: "[Feature]: "
+title: "[P?][feature] "
 labels:
   - enhancement
 
@@ -11,6 +11,22 @@ body:
         Please search existing issues before submitting a new request.
 
         Describe the problem or desired outcome before focusing on implementation.
+
+        Replace P? in the title with one priority: P0, P1, P2, or P3.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Select the current priority of this issue.
+      options:
+        - P0 - Critical
+        - P1 - High
+        - P2 - Normal
+        - P3 - Low
+      default: 2
+    validations:
+      required: true
 
   - type: textarea
     id: problem

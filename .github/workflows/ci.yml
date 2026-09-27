@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, edited]
 
 permissions:
   contents: read
@@ -24,6 +25,19 @@ env:
   S3_SECRET_ACCESS_KEY: minioadmin
 
 jobs:
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          [[ "$PR_TITLE" =~ ^\[P[0-3]\]\[(bug|feature)\]\ .+\ \(\#[0-9]+\)$ ]] || {
+            echo 'PR title must be [P{0-3}][bug|feature] Short summary (#issue)'
+            exit 1
+          }
+
   test:
     runs-on: ubuntu-latest
     env:
