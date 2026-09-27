@@ -15,7 +15,7 @@ const activityOptions = [
   { value: "ARCHIVED", label: "Archived — kept for reference" },
 ] as const;
 
-export default function ProjectSettingsForm({ slug, title, description, license, isPublic, activityStatus }: { slug: string; title: string; description: string; license: string; isPublic: boolean; activityStatus: string }) {
+export default function ProjectSettingsForm({ slug, title, description, document, license, isPublic, activityStatus }: { slug: string; title: string; description: string; document: string; license: string; isPublic: boolean; activityStatus: string }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -36,7 +36,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
     setSaving(true);
     const form = new FormData(formElement);
     try {
-      const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), license: form.get("license"), isPublic: form.get("isPublic") === "on", activityStatus: form.get("activityStatus"), rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
+      const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), document: form.get("document"), license: form.get("license"), isPublic: form.get("isPublic") === "on", activityStatus: form.get("activityStatus"), rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
       if (!response.ok) {
         setError((await response.json().catch(() => null))?.error ?? "프로젝트를 저장하지 못했습니다.");
         return;
@@ -56,6 +56,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
       <Stack gap={4}>
         <Field error={fieldErrors.title} id="settings-title" invalid={Boolean(fieldErrors.title)} label="제목" required><Input name="title" defaultValue={title} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
         <Field error={fieldErrors.description} id="settings-description" invalid={Boolean(fieldErrors.description)} label="설명"><Textarea name="description" defaultValue={description} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.description; return next; })} maxLength={2000} /></Field>
+        <Field error={fieldErrors.document} id="settings-document" invalid={Boolean(fieldErrors.document)} label="Project document (Markdown)"><Textarea name="document" defaultValue={document} rows={12} maxLength={50000} /></Field>
         <Field error={fieldErrors.license} id="settings-license" invalid={Boolean(fieldErrors.license)} label="라이선스" required><Input name="license" defaultValue={license} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.license; return next; })} required maxLength={80} /></Field>
         <Field id="settings-activity-status" label="활동 상태" description="표시용 상태입니다. 제안·검색·발행 동작은 바뀌지 않습니다."><Select name="activityStatus" defaultValue={activityStatus}>{activityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
         <Checkbox defaultChecked={isPublic} label="공개 프로젝트" name="isPublic" />

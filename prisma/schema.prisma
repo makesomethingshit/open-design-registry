@@ -87,6 +87,7 @@ model Project {
   slug        String   @unique
   title       String
   description String
+  document    String   @default("")
   license     String
   isPublic    Boolean  @default(true)
   publicationConfirmedAt DateTime?

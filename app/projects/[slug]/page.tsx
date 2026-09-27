@@ -19,6 +19,7 @@ import ContributeDialog from "./contribute-dialog";
 import { ProjectStarButton } from "./project-star-button";
 import { ProjectWatchButton } from "./project-watch-button";
 import IssueBoard from "./issue-board";
+import ProjectDocument from "./project-document";
 import ProjectSettingsForm from "./project-settings-form";
 import ProposalList, { type ProposalListItem } from "./proposal-list";
 import RevisionPublishForm from "./revision-publish-form";
@@ -147,8 +148,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       </div>
     </section>
 
+    <ProjectDocument document={project.document ?? ""} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
+
     {session?.user.id === project.ownerId && contributionReturn && <Banner title="Prepare your working revision" tone="info">Edit the source in an external design tool, then publish a new revision here. Publishing returns to the target contribution workspace.</Banner>}
-    {session?.user.id === project.ownerId && <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
+    {session?.user.id === project.ownerId && <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} document={project.document ?? ""} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
 
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>
