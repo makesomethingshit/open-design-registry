@@ -117,7 +117,7 @@ describe("Starred projects page", () => {
     const markup = await renderPage();
     expect(markup).toContain("No starred projects yet.");
     expect(markup).toContain("Star projects you want to revisit.");
-    expect(markup).toContain('href="/#public-projects-heading"');
+    expect(markup).toContain('href="/#projects"');
     expect(markup).toContain("Explore projects");
   });
 });

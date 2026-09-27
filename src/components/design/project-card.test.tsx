@@ -17,4 +17,11 @@ describe("ProjectCard", () => {
     expect(markup).toContain('loading="eager"');
     expect(markup).toContain('fetchPriority="high"');
   });
+
+  it("shows a no-preview placeholder without requesting an empty image", () => {
+    const markup = renderToStaticMarkup(<ProjectCard {...project} coverUrl="" titleLevel={3} />);
+    expect(markup).toContain("No preview");
+    expect(markup).toContain("<h3");
+    expect(markup).not.toContain("<img");
+  });
 });
