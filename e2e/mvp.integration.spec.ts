@@ -17,15 +17,15 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
     await signUp(page, `Owner ${suffix}`, ownerEmail, password);
     await page.goto("/projects/new");
-    await page.getByLabel("제목").fill(projectTitle);
-    await page.getByLabel("설명").fill("Real storage integration flow");
+    await page.getByLabel("Title").fill(projectTitle);
+    await page.getByLabel("Description").fill("Real storage integration flow");
     await page.locator('input[name="cover"]').setInputFiles({ name: "cover.png", mimeType: "image/png", buffer: tinyPng });
     await page.locator('input[name="rightsConfirmed"]').check();
     const createProjectResponsePromise = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname === "/api/projects" && response.request().method() === "POST";
     });
-    await page.getByRole("button", { name: "생성하기" }).click();
+    await page.getByRole("button", { name: "Create project" }).click();
     const createProjectResponse = await createProjectResponsePromise;
     expect(createProjectResponse.status()).toBe(201);
     await expect(page).toHaveURL(/\/projects\/[^/]+$/, { timeout: 15_000 });
@@ -186,15 +186,15 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await signIn(page, ownerEmail, password);
     await expect(page.getByRole("link", { name: /Activity, 2 unread/ })).toBeVisible();
     await page.goto("/notifications");
-    await expect(page.getByRole("heading", { name: "알림" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
     const issueNotification = page.getByRole("listitem").filter({ hasText: issueTitle });
-    const forkNotification = page.getByRole("listitem").filter({ hasText: "Fork했습니다." });
+    const forkNotification = page.getByRole("listitem").filter({ hasText: "forked" });
     await expect(issueNotification).toBeVisible();
     await expect(forkNotification).toBeVisible();
-    await issueNotification.getByRole("button", { name: "읽음 처리" }).click();
+    await issueNotification.getByRole("button", { name: "Mark as read" }).click();
     await expect(page.getByRole("link", { name: /Activity, 1 unread/ })).toBeVisible();
-    await forkNotification.getByRole("button", { name: "읽음 처리" }).click();
-    await expect(page.getByText("미확인 알림 0개")).toBeVisible();
+    await forkNotification.getByRole("button", { name: "Mark as read" }).click();
+    await expect(page.getByText("Unread notifications 0")).toBeVisible();
     await expect(page.getByRole("link", { name: "Activity" })).toBeVisible();
 
     // A fork owns independent asset references even after upstream becomes private.
@@ -218,19 +218,19 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
 async function signUp(page: Page, name: string, email: string, password: string) {
   await page.goto("/login");
-  await page.getByRole("button", { name: "처음 오셨나요? 가입" }).click();
-  await page.getByLabel("이름").fill(name);
-  await page.getByLabel("이메일").fill(email);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "가입하기" }).click();
+  await page.getByRole("button", { name: "New here? Create an account" }).click();
+  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
 
 async function signIn(page: Page, email: string, password: string) {
   await page.goto("/login");
-  await page.getByLabel("이메일").fill(email);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
 

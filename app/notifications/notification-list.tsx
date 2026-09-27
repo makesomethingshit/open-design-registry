@@ -38,32 +38,32 @@ export default function NotificationList({ notifications: initialNotifications, 
       const response = await fetch(`/api/notifications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ read: true }) });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
-        setErrorsById((current) => setRowMessage(current, id, payload?.error ?? "알림을 읽음 처리하지 못했습니다."));
+        setErrorsById((current) => setRowMessage(current, id, payload?.error ?? "Could not mark notification as read."));
         return;
       }
       setNotifications((current) => current.map((notification) => notification.id === id ? { ...notification, readAt: new Date().toISOString() } : notification));
       setUnreadCount((current) => Math.max(0, current - 1));
-      setSuccessesById((current) => setRowMessage(current, id, "알림을 읽음 처리했습니다."));
+      setSuccessesById((current) => setRowMessage(current, id, "Notification marked as read."));
       window.dispatchEvent(new Event("notifications-state-changed"));
     } catch {
-      setErrorsById((current) => setRowMessage(current, id, "알림을 읽음 처리하지 못했습니다. 다시 시도해 주세요."));
+      setErrorsById((current) => setRowMessage(current, id, "Could not mark notification as read. Please try again."));
     } finally {
       setPendingById((current) => setRowBusy(current, id, false));
     }
   }
 
-  if (!notifications.length) return <EmptyState title="새 알림이 없습니다." icon="clock">Issue, 토론, Fork와 Watch 중인 프로젝트의 Revision·Release 알림이 이곳에 표시됩니다.</EmptyState>;
+  if (!notifications.length) return <EmptyState title="No new notifications." icon="clock">Notifications about Issues, Discussions, Forks, Revisions, and Releases from projects you watch will appear here.</EmptyState>;
   return <Stack gap={3}>
-    <p className="meta" aria-live="polite">미확인 알림 <Badge tone={unreadCount ? "warning" : "success"}>{unreadCount}</Badge>개</p>
+    <p className="meta" aria-live="polite">Unread notifications <Badge tone={unreadCount ? "warning" : "success"}>{unreadCount}</Badge></p>
     <ul className="notifications">{notifications.map((notification) => {
       const issue = notification.type === "ISSUE_CREATED";
       const discussion = notification.type === "DISCUSSION_CREATED";
       const revision = notification.type === "REVISION_PUBLISHED";
       const release = notification.type === "RELEASE_PUBLISHED";
       const href = issue ? `/projects/${notification.project.slug}#issues` : discussion ? notification.discussion ? `/projects/${notification.project.slug}/discussions/${notification.discussion.id}` : `/projects/${notification.project.slug}#discussions` : revision ? notification.revision ? `/projects/${notification.project.slug}/revisions/${notification.revision.number}` : `/projects/${notification.project.slug}#revisions` : release ? notification.release ? `/projects/${notification.project.slug}/releases/${notification.release.number}` : `/projects/${notification.project.slug}#releases` : `/projects/${notification.forkedProject?.slug ?? notification.project.slug}`;
-      const message = issue ? `${notification.actor.name}님이 ${notification.project.title}에 Issue${notification.issue ? ` “${notification.issue.title}”` : ""}를 만들었습니다.` : discussion ? `${notification.actor.name}님이 ${notification.project.title}에서 토론${notification.discussion ? ` “${notification.discussion.title}”` : ""}을 시작했습니다.` : revision ? `${notification.actor.name}님이 ${notification.project.title}에 Revision${notification.revision ? ` ${notification.revision.number} “${notification.revision.title}”` : ""}을 발행했습니다.` : release ? `${notification.actor.name}님이 ${notification.project.title}에 Release${notification.release ? ` ${notification.release.number} “${notification.release.title}”` : ""}을 발행했습니다.` : `${notification.actor.name}님이 ${notification.project.title}을 Fork했습니다.`;
+      const message = issue ? `${notification.actor.name} created an Issue in ${notification.project.title}${notification.issue ? `: “${notification.issue.title}”` : ""}.` : discussion ? `${notification.actor.name} started a Discussion in ${notification.project.title}${notification.discussion ? `: “${notification.discussion.title}”` : ""}.` : revision ? `${notification.actor.name} published Revision${notification.revision ? ` ${notification.revision.number} in ${notification.project.title}${notification.revision.title ? `: “${notification.revision.title}”` : ""}` : ` in ${notification.project.title}`}.` : release ? `${notification.actor.name} published Release${notification.release ? ` ${notification.release.number} in ${notification.project.title}${notification.release.title ? `: “${notification.release.title}”` : ""}` : ` in ${notification.project.title}`}.` : `${notification.actor.name} forked ${notification.project.title}.`;
       const id = notification.id;
-      return <li aria-busy={Boolean(pendingById[id])} className={`notification ${notification.readAt ? "read" : "unread"}`} key={id}><div><Link href={href}>{message}</Link><time className="meta" dateTime={notification.createdAt}>{new Date(notification.createdAt).toLocaleString("ko-KR")}</time></div>{!notification.readAt && <Button loading={Boolean(pendingById[id])} loadingLabel="처리 중" onClick={() => { void markRead(id); }} size="sm" type="button" variant="secondary">읽음 처리</Button>}{errorsById[id] && <Banner tone="error" title="읽음 처리 실패">{errorsById[id]}</Banner>}{successesById[id] && <Banner tone="success" title="처리 완료">{successesById[id]}</Banner>}</li>;
+      return <li aria-busy={Boolean(pendingById[id])} className={`notification ${notification.readAt ? "read" : "unread"}`} key={id}><div><Link href={href}>{message}</Link><time className="meta" dateTime={notification.createdAt}>{new Date(notification.createdAt).toLocaleString("en-US")}</time></div>{!notification.readAt && <Button loading={Boolean(pendingById[id])} loadingLabel="Marking as read" onClick={() => { void markRead(id); }} size="sm" type="button" variant="secondary">Mark as read</Button>}{errorsById[id] && <Banner tone="error" title="Could not mark as read">{errorsById[id]}</Banner>}{successesById[id] && <Banner tone="success" title="Marked as read">{successesById[id]}</Banner>}</li>;
     })}</ul>
   </Stack>;
 }
