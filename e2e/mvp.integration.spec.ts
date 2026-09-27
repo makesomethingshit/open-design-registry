@@ -96,10 +96,10 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.goto(filteredHome);
     await expect(page.getByRole("link", { name: projectTitle, exact: true })).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: `Search: ${projectTitle}` })).toBeVisible();
-    await expect(page.getByLabel("Tool")).toHaveValue("penpot");
-    await expect(page.getByLabel("Tag")).toHaveValue("ui");
-    await expect(page.getByLabel("License")).toHaveValue("CC BY 4.0");
-    await expect(page.getByLabel("Sort")).toHaveValue("recent");
+    await expect(page.locator('form input[name="tool"]')).toHaveValue("penpot");
+    await expect(page.locator('form input[name="tag"]')).toHaveValue("ui");
+    await expect(page.locator('form select[name="license"]')).toHaveValue("CC BY 4.0");
+    await expect(page.locator('form select[name="sort"]')).toHaveValue("recent");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const filters = page.locator("details").first();
     const filtersSummary = filters.locator("summary");
