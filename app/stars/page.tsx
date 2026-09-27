@@ -47,7 +47,7 @@ export default async function StarsPage() {
         <p>Most recently starred first</p>
       </header>
       {stars.length ? <div aria-label="Starred projects" className={exploreStyles.gallery}>
-        {stars.map(({ project }, index) => <ProjectCard activityStatus={project.activityStatus} coverUrl={publicAssetUrl(project.coverUrl)} description={project.description} href={`/projects/${project.slug}`} key={project.id} license={project.license} owner={project.owner.name} priority={index < 4} tags={project.revisions[0]?.tags ?? []} title={project.title} updatedAt={project.updatedAt} />)}
+        {stars.map(({ project }, index) => <ProjectCard activityStatus={project.activityStatus} coverUrl={project.coverUrl ? publicAssetUrl(project.coverUrl) : ""} description={project.description} href={`/projects/${project.slug}`} key={project.id} license={project.license} owner={project.owner.name} priority={index < 4} tags={project.revisions[0]?.tags ?? []} title={project.title} updatedAt={project.updatedAt} />)}
       </div> : <EmptyState action={<Link className={styles.exploreLink} href="/#public-projects-heading">Explore projects</Link>} title="No starred projects yet.">Star projects you want to revisit.</EmptyState>}
     </section>
   </div>;

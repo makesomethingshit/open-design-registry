@@ -3,10 +3,11 @@
 .media { position: relative; display: grid; aspect-ratio: 4 / 3; place-items: center; overflow: hidden; border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-surface-subtle); }
 .skeleton { position: absolute; inset: 0; background: var(--odr-surface-subtle); }
 .media img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; }
+.noPreview { display: grid; width: 100%; height: 100%; place-items: center; background: var(--odr-surface-subtle); color: var(--odr-text-muted); font-size: var(--odr-font-body); }
 .content { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--odr-space-2); }
-.content h2 { min-width: 0; margin: 0; font-size: var(--odr-font-prose); line-height: var(--odr-line-body); }
-.content h2 a { color: var(--odr-text-primary); text-decoration: none; text-underline-offset: 0.15em; overflow-wrap: anywhere; }
-.content h2 a:hover, .content h2 a:focus-visible { text-decoration: underline; }
+.content h2, .content h3 { min-width: 0; margin: 0; font-size: var(--odr-font-prose); line-height: var(--odr-line-body); }
+.content h2 a, .content h3 a { color: var(--odr-text-primary); text-decoration: none; text-underline-offset: 0.15em; overflow-wrap: anywhere; }
+.content h2 a:hover, .content h2 a:focus-visible, .content h3 a:hover, .content h3 a:focus-visible { text-decoration: underline; }
 .description, .byline { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); overflow-wrap: anywhere; }
 .byline { color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .metadata { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--odr-space-2); color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
