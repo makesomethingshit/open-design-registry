@@ -1,3 +1,6 @@
+<!-- PR title: [P{0-3}][bug|feature] Short summary (#issue).
+Use the related issue's priority and type. Choose one priority, never P2/P3. -->
+
 ## Related issue
 
 <!-- Link the issue this PR addresses. Use "Closes #123" only when the PR fully resolves it. -->
