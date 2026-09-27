@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
   const form = await request.formData();
   const parsed = projectSchema.safeParse({
     title: form.get("title"), description: form.get("description") ?? "", license: form.get("license"), isPublic: form.get("isPublic") === "on" || form.get("isPublic") === "true",
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const rightsConfirmed = form.get("rightsConfirmed") === "on" || form.get("rightsConfirmed") === "true";
   const cover = form.get("cover");
   if (!parsed.success || (parsed.data.isPublic && !rightsConfirmed) || !(cover instanceof File) || !imageTypes.has(cover.type) || cover.size > maxImageBytes) {
-    return NextResponse.json({ error: "제목, 라이선스와 10MB 이하 PNG/JPG 대표 이미지를 확인하세요." }, { status: 400 });
+    return NextResponse.json({ error: "Check the title, license, and PNG/JPG cover image (up to 10 MB)." }, { status: 400 });
   }
   const baseSlug = slugify(parsed.data.title);
   const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
@@ -69,6 +69,6 @@ export async function POST(request: Request) {
   } catch (cause) {
     await deleteObject(coverKey).catch(() => undefined);
     console.error("project creation failed", cause);
-    return NextResponse.json({ error: "프로젝트를 만들지 못했습니다." }, { status: 500 });
+    return NextResponse.json({ error: "Could not create project." }, { status: 500 });
   }
 }

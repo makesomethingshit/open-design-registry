@@ -29,13 +29,13 @@ export default function ReportForm({ projectSlug, revisionId }: { projectSlug?: 
     try {
       const response = await fetch("/api/reports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectSlug, revisionId, reason: form.get("reason"), details: form.get("details") }) });
       if (!response.ok) {
-        setError((await response.json().catch(() => null))?.error ?? "신고를 접수하지 못했습니다.");
+        setError((await response.json().catch(() => null))?.error ?? "Could not submit this report.");
         return;
       }
       formElement.reset();
-      setSuccess("신고가 접수되었습니다.");
+      setSuccess("Report submitted.");
     } catch {
-      setError("신고를 접수하지 못했습니다. 다시 시도해 주세요.");
+      setError("Could not submit this report. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -43,12 +43,12 @@ export default function ReportForm({ projectSlug, revisionId }: { projectSlug?: 
 
   return <form className="report-form" noValidate onSubmit={submit} aria-busy={submitting}>
     <Stack gap={3}>
-      <h3>공개 내용 신고</h3>
-      <Field error={fieldErrors.reason} id="report-reason" invalid={Boolean(fieldErrors.reason)} label="사유" required><Input name="reason" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.reason; return next; })} required maxLength={120} /></Field>
-      <Field error={fieldErrors.details} id="report-details" invalid={Boolean(fieldErrors.details)} label="상세 설명"><Textarea name="details" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.details; return next; })} maxLength={2000} /></Field>
-      {error && <Banner tone="error" title="신고 접수 실패">{error}</Banner>}
-      {success && <Banner tone="success" title="신고 접수 완료">{success}</Banner>}
-      <Button disabled={submitting} loading={submitting} loadingLabel="접수 중" type="submit" variant="secondary">신고 제출</Button>
+      <h3>Report this content</h3>
+      <Field error={fieldErrors.reason} id="report-reason" invalid={Boolean(fieldErrors.reason)} label="Reason" required><Input name="reason" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.reason; return next; })} required maxLength={120} /></Field>
+      <Field error={fieldErrors.details} id="report-details" invalid={Boolean(fieldErrors.details)} label="Additional details"><Textarea name="details" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.details; return next; })} maxLength={2000} /></Field>
+      {error && <Banner tone="error" title="Could not submit report">{error}</Banner>}
+      {success && <Banner tone="success" title="Report submitted">{success}</Banner>}
+      <Button disabled={submitting} loading={submitting} loadingLabel="Submitting report" type="submit" variant="secondary">Submit report</Button>
     </Stack>
   </form>;
 }

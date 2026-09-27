@@ -146,7 +146,7 @@ test.describe("proposal review regression fixtures", () => {
     await expect.poll(() => applyRequests).toBe(1);
     releaseResponse?.();
 
-    await expect(workspace.getByRole("status").filter({ hasText: "Applied 2 changes · r14" })).toBeVisible();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 2 changes · Revision 14" })).toBeVisible();
     await expect(workspace.getByText("Applied · r14").first()).toBeVisible();
     await expect(workspace.getByLabel(posterLabel)).toHaveCount(0);
     await expect(workspace.getByLabel(addLabel)).toHaveCount(0);
@@ -170,7 +170,7 @@ test.describe("proposal review regression fixtures", () => {
     await workspace.getByLabel(posterLabel).check();
     await workspace.getByRole("button", { name: "Apply 1 selected changes" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Apply 1 selected changes" }).click();
-    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · Revision 14" })).toBeVisible();
     await expect.poll(() => applyRequests).toBe(1);
     await expect.poll(() => proposalReads).toBe(1);
     await expect(workspace.getByLabel(posterLabel)).toHaveCount(0);
@@ -259,7 +259,7 @@ test.describe("proposal review regression fixtures", () => {
     await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
     await expect(dialog.getByRole("button", { name: "Retry application" })).toBeVisible();
     await dialog.getByRole("button", { name: "Retry application" }).click();
-    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · Revision 14" })).toBeVisible();
     await expect.poll(() => applyRequests).toBe(2);
   });
 
@@ -306,7 +306,7 @@ test.describe("proposal review regression fixtures", () => {
     await dialog.getByRole("button", { name: "Check proposal status" }).first().click();
     await expect(dialog.getByRole("button", { name: "Retry application" })).toBeVisible();
     await dialog.getByRole("button", { name: "Retry application" }).click();
-    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · r14" })).toBeVisible();
+    await expect(workspace.getByRole("status").filter({ hasText: "Applied 1 change · Revision 14" })).toBeVisible();
     await expect.poll(() => applyRequests).toBe(2);
   });
 
@@ -403,7 +403,7 @@ test.describe("proposal review regression fixtures", () => {
 
   test("keeps Apply 409 feedback visible and restores review focus", async ({ page }) => {
     const workspace = await openStaleApply(page, ["Select Modify A deliberately long approved poster name for responsive review verification for application"]);
-    await expect(workspace).toContainText("Latest revision changed: r11 → r13.");
+    await expect(workspace).toContainText("Latest revision changed: Revision 11 → Revision 13.");
     await page.route("**/api/proposals/fixture-proposal/apply", async (route) => {
       await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Review the latest revision before applying these selected changes", latestRevision: { id: "fixture-r14" } }) });
     });

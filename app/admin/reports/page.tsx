@@ -11,7 +11,7 @@ export default async function AdminReportsPage() {
   const reports = await prisma.report.findMany({ orderBy: { createdAt: "desc" }, include: { reporter: { select: { name: true, email: true } }, project: { select: { slug: true, title: true } }, revision: { select: { number: true, project: { select: { slug: true, title: true } } } } } });
   return <PageGrid aria-labelledby="reports-heading">
     <ReadingColumn>
-      <PageHeader eyebrow="MODERATION" id="reports-heading" title="신고 검토" description="공개 콘텐츠 신고를 행 단위로 검토하고 처리합니다." />
+      <PageHeader eyebrow="MODERATION" id="reports-heading" title="Review reports" description="Review and resolve reports about public content." />
       <ReportList reports={reports} />
     </ReadingColumn>
   </PageGrid>;

@@ -24,19 +24,19 @@ export default function ReportList({ reports }: { reports: Report[] }) {
       const response = await fetch(`/api/admin/reports/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "RESOLVED", hide }) });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
-        setErrors((current) => ({ ...current, [id]: payload?.error ?? "신고를 처리하지 못했습니다." }));
+        setErrors((current) => ({ ...current, [id]: payload?.error ?? "Could not resolve the report." }));
         return;
       }
       setItems((current) => current.map((report) => report.id === id ? { ...report, status: "RESOLVED" } : report));
-      setSuccesses((current) => ({ ...current, [id]: hide ? "공개 노출을 제거하고 신고를 해결했습니다." : "신고 검토를 완료했습니다." }));
+      setSuccesses((current) => ({ ...current, [id]: hide ? "Removed the content from public view and resolved the report." : "Report review complete." }));
     } catch {
-      setErrors((current) => ({ ...current, [id]: "신고를 처리하지 못했습니다. 다시 시도해 주세요." }));
+      setErrors((current) => ({ ...current, [id]: "Could not resolve the report. Please try again." }));
     } finally {
       setPendingById((current) => setRowBusy(current, id, false));
     }
   }
 
-  if (!items.length) return <EmptyState title="검토할 신고가 없습니다." icon="check">현재 대기 중인 신고가 없습니다.</EmptyState>;
+  if (!items.length) return <EmptyState title="No reports to review." icon="check">There are no reports awaiting review.</EmptyState>;
   return <Stack gap={3}>
     {items.map((report) => <Panel className="card" key={report.id}>
       <Stack gap={3}>
@@ -45,11 +45,11 @@ export default function ReportList({ reports }: { reports: Report[] }) {
         <p><strong>{report.reason}</strong></p>
         <p>{report.details}</p>
         {report.status === "OPEN" && <div className="actions">
-          <Button loading={Boolean(pendingById[report.id])} loadingLabel="처리 중" onClick={() => { void resolve(report.id, true); }} type="button">공개 노출 제거 후 해결</Button>
-          <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void resolve(report.id, false); }} type="button" variant="secondary">검토 완료</Button>
+          <Button loading={Boolean(pendingById[report.id])} loadingLabel="Resolving report" onClick={() => { void resolve(report.id, true); }} type="button">Remove from public view and resolve</Button>
+          <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void resolve(report.id, false); }} type="button" variant="secondary">Mark as reviewed</Button>
         </div>}
-        {errors[report.id] && <Banner tone="error" title="신고 처리 실패">{errors[report.id]}</Banner>}
-        {successes[report.id] && <Banner tone="success" title="처리 완료">{successes[report.id]}</Banner>}
+        {errors[report.id] && <Banner tone="error" title="Could not resolve report">{errors[report.id]}</Banner>}
+        {successes[report.id] && <Banner tone="success" title="Report resolved">{successes[report.id]}</Banner>}
       </Stack>
     </Panel>)}
   </Stack>;

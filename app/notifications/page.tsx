@@ -35,7 +35,7 @@ export default async function NotificationsPage() {
 
   return <PageGrid aria-labelledby="notifications-heading">
     <ReadingColumn>
-      <PageHeader description="프로젝트의 Issue·토론·Fork와 Watch 중인 Revision·Release 발행을 확인하세요." eyebrow="ACTIVITY" id="notifications-heading" title="알림" />
+      <PageHeader description="Track Issues, Discussions, and Forks in your projects, plus Revisions and Releases from projects you watch." eyebrow="ACTIVITY" id="notifications-heading" title="Notifications" />
       <NotificationList notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} unreadCount={unreadCount} />
     </ReadingColumn>
   </PageGrid>;
