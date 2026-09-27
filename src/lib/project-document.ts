@@ -25,10 +25,15 @@ function isHttpUrl(value: string) {
 }
 
 function renderInline(source: string): string {
-  // Escape first, then restore markup from escaped tokens.
-  let out = escapeHtml(source);
-  // Inline code spans (backticks survive escaping).
-  out = out.replace(/`([^`\n]+?)`/g, "<code>$1</code>");
+  // Escape first, then restore markup from escaped tokens. Code spans are
+  // stashed behind placeholders so later replacements cannot turn markup
+  // inside code into active HTML.
+  const codeSpans: string[] = [];
+  let out = escapeHtml(source.replace(/\u0000/g, ""));
+  out = out.replace(/`([^`\n]+?)`/g, (match, code) => {
+    codeSpans.push("<code>" + code + "</code>");
+    return "\u0000" + (codeSpans.length - 1) + "\u0000";
+  });
   // Images: ![alt](url) — http(s) only.
   out = out.replace(/!\[([^\]]*?)\]\(([^)\s]+?)\)/g, (match, alt, url) =>
     isHttpUrl(url) ? `<img src="${url}" alt="${alt}" loading="lazy">` : match,
@@ -40,7 +45,7 @@ function renderInline(source: string): string {
   // Bold then italic (escaped \* stays "*").
   out = out.replace(/\*\*([^\*\n]+?)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|[^\*])\*([^\*\n]+?)\*/g, "$1<em>$2</em>");
-  return out;
+  return out.replace(/\u0000(\d+)\u0000/g, (match, index) => codeSpans[Number(index)] ?? match);
 }
 
 // Render a Markdown subset to sanitized HTML. No raw HTML passthrough.

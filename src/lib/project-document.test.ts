@@ -33,6 +33,20 @@ describe("renderProjectDocument", () => {
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>");
   });
+  it("keeps link and image markup inside inline code inert", () => {
+    const html = renderProjectDocument("`[link](https://example.com)`");
+    expect(html).toContain("<code>[link](https://example.com)</code>");
+    expect(html).not.toContain("<a ");
+    const img = renderProjectDocument("`![alt](https://example.com/a.png)`");
+    expect(img).toContain("<code>![alt](https://example.com/a.png)</code>");
+    expect(img).not.toContain("<img");
+  });
+  it("keeps emphasis inside inline code literal", () => {
+    const html = renderProjectDocument("`**bold** and *italic*`");
+    expect(html).toContain("<code>**bold** and *italic*</code>");
+    expect(html).not.toContain("<strong>");
+    expect(html).not.toContain("<em>");
+  });
 });
 
 describe("project document validation", () => {

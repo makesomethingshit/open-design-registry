@@ -268,3 +268,30 @@ describe("Project Discussions section", () => {
     expect(markup).not.toContain("<form");
   });
 });
+
+describe("Project Document section", () => {
+  it("renders the saved document as sanitized HTML", async () => {
+    const value = { ...project(), document: "# Doc title" };
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, value);
+    expect(markup).toContain("Project document");
+    expect(markup).toContain("<h1>Doc title</h1>");
+    expect(markup).not.toContain("No project document has been added yet.");
+  });
+
+  it("shows the empty state with an owner edit CTA only to the owner", async () => {
+    const ownerMarkup = await renderProjectPage({ user: { id: "owner" } });
+    expect(ownerMarkup).toContain("No project document has been added yet.");
+    expect(ownerMarkup).toContain("Add one in Owner tools");
+
+    const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } });
+    expect(visitorMarkup).toContain("No project document has been added yet.");
+    expect(visitorMarkup).not.toContain("Add one in Owner tools");
+  });
+
+  it("never renders raw HTML from the document", async () => {
+    const value = { ...project(), document: "<script>alert(1)</script>" };
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, value);
+    expect(markup).not.toContain("<script>alert(1)</script>");
+    expect(markup).toContain("&lt;script&gt;");
+  });
+});
