@@ -89,7 +89,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
         const project = request.project;
         const latestRevision = project.revisions[0];
         const status = projectActivityStatusPresentation(project.activityStatus);
-        const requestHref = `/projects/${project.slug}#issue-${request.id}`;
+        const requestHref = `/projects/${project.slug}/issues/${request.id}`;
         return <li key={request.id}>
           <article className={styles.requestCard}>
             <Link aria-label={`View ${project.title}`} className={styles.coverLink} href={`/projects/${project.slug}`}><img alt={`${project.title} cover`} loading="lazy" src={publicAssetUrl(project.coverUrl)} /></Link>

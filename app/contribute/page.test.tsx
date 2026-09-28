@@ -46,7 +46,7 @@ describe("Contribution Discovery", () => {
     expect(markup).toContain("MIT");
     expect(markup).toContain("Figma");
     expect(markup).toContain("mobile");
-    expect(markup).toContain('href="/projects/design-system#issue-request-1"');
+    expect(markup).toContain('href="/projects/design-system/issues/request-1"');
     expect(markup).not.toContain("Next page");
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
