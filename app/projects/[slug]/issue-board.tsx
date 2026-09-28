@@ -118,7 +118,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     <div className="section-heading"><h2 id="issues-heading">Issues</h2><Badge>{issues.length}</Badge></div>
     {issues.length ? <div className="issues">{issues.map((issue) => <article className="issue" id={`issue-${issue.id}`} key={issue.id}>
       <Stack gap={3}>
-        <div className="issue-heading"><h3>{issue.title}</h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></span></div>
+        <div className="issue-heading"><h3><Link href={`/projects/${slug}/issues/${issue.id}`}>{issue.title}</Link></h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></span></div>
         <p>{issue.body}</p>
         <p className="meta">Opened by {issue.author.name}{issue.revision ? ` · Revision ${issue.revision.number}` : ""}</p>
         {issue.sourceDiscussion && <p className="meta"><Link href={`/projects/${slug}/discussions/${issue.sourceDiscussion.id}`}>From discussion: {issue.sourceDiscussion.title}</Link></p>}

@@ -60,6 +60,7 @@ describe("IssueBoard provenance links", () => {
     expect(markup).toContain('id="issue-issue-14"');
     expect(markup).toContain('href="/proposals/proposal-32"');
     expect(markup).toContain('href="/projects/demo/revisions/14"');
+    expect(markup).toContain('href="/projects/demo/issues/issue-14"');
     expect(markup).toContain("Proposal 32");
     expect(markup).toContain("Revision 14");
   });

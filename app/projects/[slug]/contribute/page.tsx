@@ -24,7 +24,10 @@ export default async function ContributionPage({ params, searchParams }: { param
     },
   });
   if (!project || (!project.isPublic && project.ownerId !== session?.user.id)) notFound();
-  if (!session) redirect(`/login?next=${encodeURIComponent(`/projects/${slug}/contribute`)}`);
+  if (!session) {
+    const next = `/projects/${slug}/contribute${query.relatedIssue ? `?relatedIssue=${encodeURIComponent(query.relatedIssue)}` : ""}`;
+    redirect(`/login?next=${encodeURIComponent(next)}`);
+  }
 
   const sourceProjects = await prisma.project.findMany({
     where: { ownerId: session.user.id },
