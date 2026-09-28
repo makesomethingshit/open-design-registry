@@ -413,7 +413,7 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   }
   const relatedIssueId = input.relatedIssueId || undefined;
   if (relatedIssueId) {
-    const relatedIssue = await prisma.issue.findFirst({ where: { id: relatedIssueId, projectId: project.id }, select: { id: true } });
+    const relatedIssue = await prisma.issue.findFirst({ where: { id: relatedIssueId, projectId: project.id, status: "OPEN" }, select: { id: true } });
     if (!relatedIssue) return error("Related issue not found", 400);
   }
   const result = await prisma.$transaction(async (tx) => {
