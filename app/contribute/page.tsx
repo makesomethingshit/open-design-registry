@@ -71,7 +71,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
         <h1>Open design requests</h1>
         <p>Find a project looking for help, then open its request to understand the context and propose a change.</p>
       </header>
-      <div className={styles.empty} role="alert"><p>Requests couldn{"'"}t load. Try again.</p><TextLink href="/contribute">Try again</TextLink></div>
+      <div className={styles.empty} role="alert"><p>Requests couldn{"'"}t load. Try again.</p><TextLink href={pageHref({ query, tool, tag, license, cursor })}>Try again</TextLink></div>
     </div>;
   }
   const hasMore = requests.length > defaultPageSize;
@@ -121,9 +121,9 @@ export default async function ContributePage({ searchParams }: { searchParams: P
             </figure>
             <div className={styles.requestContent}>
               <div className={styles.requestHeading}><Badge>Design request</Badge><time dateTime={request.createdAt.toISOString()}>Opened {formatDate(request.createdAt)}</time></div>
-              <h3><Link href={requestHref}>{request.title}</Link></h3>
+              <h3><Link className={styles.titleLink} href={requestHref}>{request.title}</Link></h3>
               <p className={styles.body}>{request.body || "No summary provided"}</p>
-              <p className={styles.projectLine}>For <Link href={`/projects/${project.slug}`}>{project.title}</Link> · by {project.owner.name}</p>
+              <p className={styles.projectLine}>For <Link className={styles.projectLink} href={`/projects/${project.slug}`}>{project.title}</Link> · by {project.owner.name}</p>
               <div className={styles.metadata}>
                 <StatusBadge icon={status.icon} tone={status.tone}>{status.label}</StatusBadge>
                 <span>{project.license}</span>
@@ -144,14 +144,15 @@ function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
 }
 
-function pageHref({ query, tool, tag, license, cursor }: { query: string; tool: string; tag: string; license: string; cursor: string }) {
+function pageHref({ query, tool, tag, license, cursor }: { query: string; tool: string; tag: string; license: string; cursor?: string }) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (tool) params.set("tool", tool);
   if (tag) params.set("tag", tag);
   if (license) params.set("license", license);
-  params.set("cursor", cursor);
-  return `/contribute?${params}`;
+  if (cursor) params.set("cursor", cursor);
+  const search = params.toString();
+  return search ? `/contribute?${search}` : "/contribute";
 }
 
 function formatDate(value: Date) {

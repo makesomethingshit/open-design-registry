@@ -151,4 +151,24 @@ describe("Contribution Discovery", () => {
     const frame = readFileSync(new URL("./page.module.css", import.meta.url), "utf8").match(/\.imageFrame\s*\{[^}]*\}/)?.[0] ?? "";
     expect(frame).toContain("aspect-ratio");
   });
+
+  it("preserves filters in the error retry link and sizes the real card links for touch", async () => {
+    mocks.findMany.mockRejectedValue(new Error("db down"));
+    const failed = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({ q: "empty state", tool: "Figma", tag: "UI", license: "CC BY 4.0", cursor: "request-25" }) }));
+
+    expect(failed).toContain('href="/contribute?q=empty+state&amp;tool=figma&amp;tag=ui&amp;license=CC+BY+4.0&amp;cursor=request-25"');
+
+    mocks.findMany.mockResolvedValue([request("request-1")]);
+    const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+    const titleAnchor = markup.match(/<h3><a[^>]*>/)?.[0] ?? "";
+
+    expect(titleAnchor).toContain('href="/projects/design-system/issues/request-1"');
+    expect(titleAnchor).toMatch(/class="[^"]+"/);
+    const css = readFileSync(new URL("./page.module.css", import.meta.url), "utf8");
+    for (const name of ["titleLink", "projectLink"]) {
+      const block = css.match(new RegExp(`\\.${name}[^{]*\\{[^}]*\\}`))?.[0] ?? "";
+      expect(block).toContain("min-height");
+      expect(block).toContain("--odr-touch-target");
+    }
+  });
 });

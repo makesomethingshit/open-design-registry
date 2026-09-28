@@ -34,6 +34,7 @@
 .body, .projectLine { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); overflow-wrap: anywhere; }
 .body { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .requestLink { display: inline-flex; align-items: center; min-height: var(--odr-touch-target); }
+.titleLink, .projectLink { display: inline-flex; align-items: center; min-height: var(--odr-touch-target); max-width: 100%; }
 .metadata > span:not([class]) { color: var(--odr-text-muted); font-size: var(--odr-font-label); }
 .requestLink, .pagination a { width: max-content; color: var(--odr-accent); font-size: var(--odr-font-label); font-weight: var(--odr-weight-semibold); text-underline-offset: 0.15em; }
 .empty { display: grid; justify-items: start; gap: var(--odr-space-2); padding: var(--odr-space-7) 0; color: var(--odr-text-muted); font-size: var(--odr-font-prose); }
