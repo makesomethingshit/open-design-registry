@@ -134,15 +134,14 @@ function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
 }
 
-function pageHref({ query, tool, tag, license, cursor }: { query: string; tool: string; tag: string; license: string; cursor?: string }) {
+function pageHref({ query, tool, tag, license, cursor }: { query: string; tool: string; tag: string; license: string; cursor: string }) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (tool) params.set("tool", tool);
   if (tag) params.set("tag", tag);
   if (license) params.set("license", license);
-  if (cursor) params.set("cursor", cursor);
-  const search = params.toString();
-  return search ? `/contribute?${search}` : "/contribute";
+  params.set("cursor", cursor);
+  return `/contribute?${params}`;
 }
 
 function formatDate(value: Date) {
