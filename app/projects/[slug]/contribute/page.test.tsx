@@ -27,6 +27,15 @@ beforeEach(() => {
 });
 
 describe("contribution page request context", () => {
+  it("preserves a related issue through the login redirect", async () => {
+    mocks.getSession.mockResolvedValue(null);
+
+    await expect(ContributionPage({
+      params: Promise.resolve({ slug: "demo" }),
+      searchParams: Promise.resolve({ relatedIssue: "request-1" }),
+    })).rejects.toThrow("NEXT_REDIRECT:/login?next=%2Fprojects%2Fdemo%2Fcontribute%3FrelatedIssue%3Drequest-1");
+  });
+
   it("passes a valid related issue from the URL into the contribution workspace", async () => {
     const page = await ContributionPage({
       params: Promise.resolve({ slug: "demo" }),
