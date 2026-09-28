@@ -41,7 +41,7 @@ describePostgres("Contribute image-preview MIME selection", () => {
         previews: {
           create: [
             { position: 0, key: `contrib-mime-html-${uid}`, url: `https://example.test/${htmlToken}.html`, mimeType: "text/html", size: 32, altText: "HTML preview" },
-            { position: 1, key: `contrib-mime-png-${uid}`, url: `https://example.test/${pngToken}.png`, mimeType: "image/png", size: 1, altText: "" },
+            { position: 1, key: `contrib-mime-png-${uid}`, url: `https://example.test/${pngToken}.png`, mimeType: "image/png", size: 1, altText: "PNG preview" },
           ],
         },
       },
