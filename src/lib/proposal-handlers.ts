@@ -412,13 +412,19 @@ export async function createProjectProposal(request: Request, scope: { slug: str
     if (sameAppliedDocument(baseRevision, sourceRevision, baseBundle, sourceBundle)) return error("Proposal has no changes");
   }
   const relatedIssueId = input.relatedIssueId || undefined;
-  if (relatedIssueId) {
-    const relatedIssue = await prisma.issue.findFirst({ where: { id: relatedIssueId, projectId: project.id }, select: { id: true } });
-    if (!relatedIssue) return error("Related issue not found", 400);
-  }
-  const result = await prisma.$transaction(async (tx) => {
+  let result: { proposal: ProposalDetails; created: boolean };
+  try {
+    result = await prisma.$transaction(async (tx) => {
     const lockedProjects = await lockProjects(tx, [project.id, sourceRevision.project.id]);
     if (!lockedProjects.has(project.id) || !lockedProjects.has(sourceRevision.project.id)) throw new Error("Project not found");
+    if (relatedIssueId) {
+      // Lock order is projects (sorted) first, then the issue row. The issue
+      // close path takes no explicit locks, so this cannot deadlock with it:
+      // a concurrent close either commits first (we see CLOSED and reject) or
+      // blocks on this row until validation and create commit together.
+      const [lockedIssue] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "Issue" WHERE id = ${relatedIssueId} AND "projectId" = ${project.id} AND status = 'OPEN' FOR UPDATE`;
+      if (!lockedIssue) throw new Error("Related issue not found");
+    }
     const [lockedBase, lockedSource] = await Promise.all([
       tx.revision.findFirst({ where: { id: baseRevision.id, projectId: project.id, isPublished: true }, select: { id: true } }),
       tx.revision.findFirst({ where: { id: sourceRevision.id, projectId: sourceRevision.project.id, isPublished: true }, select: { id: true } }),
@@ -445,7 +451,11 @@ export async function createProjectProposal(request: Request, scope: { slug: str
       include: proposalDetails,
     });
     return { proposal, created: true };
-  });
+    });
+  } catch (cause) {
+    if (cause instanceof Error && cause.message === "Related issue not found") return error("Related issue not found", 400);
+    throw cause;
+  }
   return NextResponse.json(publicProposal(result.proposal), { status: result.created ? 201 : 200 });
 }
 
