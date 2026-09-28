@@ -73,7 +73,33 @@ describe("proposal creation route", () => {
     const response = await POST(request({ ...createBody(), relatedIssueId: "related-work" }), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(201);
+    expect(mocks.findIssue).toHaveBeenCalledWith({ where: { id: "related-work", projectId: "target", status: "OPEN" }, select: { id: true } });
     expect(mocks.createProposal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ relatedIssueId: "related-work" }) }));
+  });
+
+  it("rejects a related issue that closed after the contribution page loaded (stale open page)", async () => {
+    // Page loaded while OPEN, but the issue closed before submit: the submit-time
+    // lookup filters status OPEN, so it misses and no proposal is created.
+    mocks.findIssue.mockResolvedValue(null);
+    const response = await POST(request({ ...createBody(), relatedIssueId: "related-work" }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Related issue not found" });
+    expect(mocks.findIssue).toHaveBeenCalledWith({ where: { id: "related-work", projectId: "target", status: "OPEN" }, select: { id: true } });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.createProposal).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["unknown issue", null],
+    ["cross-project issue", null],
+  ])("rejects a %s reference", async (_label, found) => {
+    mocks.findIssue.mockResolvedValue(found);
+    const response = await POST(request({ ...createBody(), relatedIssueId: "related-work" }), { params: Promise.resolve({ slug: "target" }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Related issue not found" });
+    expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
   it("derives REPLACE_ASSET metadata from the published source bundle", async () => {
