@@ -63,17 +63,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
         },
       },
     },
-  }).catch(() => null);
-  if (!requests) {
-    return <div className={styles.page}>
-      <header className={styles.hero}>
-        <p className={styles.eyebrow}>Contribute</p>
-        <h1>Open design requests</h1>
-        <p>Find a project looking for help, then open its request to understand the context and propose a change.</p>
-      </header>
-      <div className={styles.empty} role="alert"><p>Requests couldn{"'"}t load. Try again.</p><TextLink href={pageHref({ query, tool, tag, license, cursor })}>Try again</TextLink></div>
-    </div>;
-  }
+  });
   const hasMore = requests.length > defaultPageSize;
   const items = requests.slice(0, defaultPageSize);
   const nextCursor = hasMore ? items.at(-1)?.id : undefined;
@@ -130,7 +120,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
                 {latestRevision?.tool && <Tag>{latestRevision.tool}</Tag>}
                 {latestRevision?.tags.slice(0, 3).map((value) => <Tag key={value}>{value}</Tag>)}
               </div>
-              <Link aria-hidden="true" className={styles.requestLink} href={requestHref} tabIndex={-1}>View request <span aria-hidden="true">→</span></Link>
+              <span aria-hidden="true" className={styles.requestLink}>View request <span aria-hidden="true">→</span></span>
             </div>
           </article>
         </li>;
