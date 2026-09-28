@@ -193,7 +193,7 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
 
   return <article className="detail proposal-page">
     <Stack gap={5}>
-      <PageHeader description="Prepare changes to propose back to this project." title={`Contribute to ${project.title}`} />
+      <PageHeader description="Design request → Fork → new Revision → Proposal → review. Prepare changes to propose back to this project." title={`Contribute to ${project.title}`} />
       <Panel aria-labelledby="target-project-heading">
         <Stack gap={3}>
           <SectionHeader id="target-project-heading" title="Target project" />
@@ -216,7 +216,7 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
       <Panel aria-busy={loading} aria-labelledby="changes-to-propose-heading">
         <Stack gap={3}>
           <SectionHeader id="changes-to-propose-heading" title="Changes to propose" />
-          <Field id="related-issue" label="Related issue"><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
+          <Field id="related-issue" label="Related issue" description="Choose the Design request you are answering. The project owner reviews your Proposal."><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
           {loadError && <Banner action={<Button onClick={() => { invalidateLoadedChanges(); setRetry((current) => current + 1); }} size="sm" variant="secondary">Retry</Button>} title="Could not load available changes." tone="error" />}
           {!loading && !loadError && changes.length > 0 && <ul className="history" aria-label="Available changes">{changes.map((change) => {
             const presentation = changeActionPresentation({ action: change.action, type: change.action });
@@ -229,7 +229,7 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
           {!loading && !loadError && changes.length === 0 && sourceRevision && canContinueWholeDocument && <Banner action={<Button onClick={continueToWholeDocumentProposal} size="sm">Continue with whole document</Button>} title="Whole-document proposal" tone="info">This format has no independently selectable units. The proposal submits the complete document; the server will reject it if it contains no applied change.</Banner>}
           {!loading && !loadError && changes.length === 0 && sourceRevision && !canContinueWholeDocument && (copiedBase ? <Banner title="This fork is still an unchanged copy" tone="warning">Forking alone does not create a change. Edit the source in an external design tool and publish a new revision before proposing.</Banner> : <EmptyState icon="file" title="No selectable changes found">Select another source revision, or edit the working project in an external design tool and publish a new revision.</EmptyState>)}
           {sourceRevision && !loading && !loadError && changes.length === 0 && <Stack gap={2}>{workingProjectHref && <TextLink href={workingProjectHref}>Open working project and publish a revision</TextLink>}{forkHref && <TextLink href={forkHref}>Fork the selected target revision</TextLink>}</Stack>}
-          {canContinueWholeDocument ? null : <Button disabled={!canContinue} onClick={continueToProposal} size="lg">Continue to proposal</Button>}
+          <p className="meta">Propose the changes in your new Revision to the original project. Its owner reviews the Proposal before any change is applied.</p>{canContinueWholeDocument ? null : <Button disabled={!canContinue} onClick={continueToProposal} size="lg">Continue to proposal</Button>}
         </Stack>
       </Panel>
     </Stack>

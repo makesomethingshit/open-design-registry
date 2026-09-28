@@ -448,6 +448,7 @@ export default function ProposalReview({ proposalId, projectSlug, baseRevision, 
     <aside aria-labelledby="changes-heading" className={styles.rail}>
       <header className={styles.railHeader}><h2 id="changes-heading">Changes</h2><span className={styles.count}>{effectiveChanges.length}</span></header>
       <p className={styles.railHint}>Checkboxes select approved changes for application; they are not review decisions. Click a row to review it.</p>
+      <p className={styles.railHint}>Changes requested means: edit the source in your design tool, then publish a new Revision and create a new Proposal. Approved means the owner approved the change, but it is not applied to the original yet. Applied means the owner added it to a new Revision of the original project.</p>
       <label className={styles.mobilePicker}>Change<select onChange={(event) => viewChange(event.target.value)} value={selectedChange?.id ?? ""}>{effectiveChanges.map((change) => <option key={change.id} value={change.id}>{changeDisplayName(change)}</option>)}</select></label>
       <ul className={styles.changeList}>{effectiveChanges.map((change) => {
         const showSelection = canSelectChanges && change.reviewStatus === "APPROVED" && !change.appliedRevision;

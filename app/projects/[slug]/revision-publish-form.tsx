@@ -172,6 +172,7 @@ export default function RevisionPublishForm({ slug, existingFiles, contributionR
 
   return <form className="form revision-publish-form" onSubmit={submit} aria-busy={submitting}>
     <h2>Publish a revision</h2>
+    <p className="meta">A Revision is a new, permanent record of changes in your work project. It does not send a Proposal yet.</p>
     <Field error={fieldErrors.title} id="publish-title" invalid={Boolean(fieldErrors.title)} label="Revision title" required><Input name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
     <Field error={fieldErrors.changeDescription} id="publish-description" invalid={Boolean(fieldErrors.changeDescription)} label="Change description" required><Textarea name="changeDescription" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.changeDescription; return next; })} required minLength={1} maxLength={500} /></Field>
     <Field error={fieldErrors.tool} id="publish-tool" invalid={Boolean(fieldErrors.tool)} label="Design tool"><Input name="tool" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.tool; return next; })} maxLength={80} placeholder="Figma, Penpot, or Photoshop" /></Field>
