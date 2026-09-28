@@ -55,7 +55,11 @@ describe("proposal creation route", () => {
     mocks.findBase.mockImplementation(({ where }: { where: { id: string } }) => Promise.resolve(where.id === "base" ? { id: "base", sourceKey: "base-bundle" } : { id: "source" }));
     mocks.findSource.mockResolvedValue({ id: "source", isPublished: true, sourceKey: "source-bundle", project: { id: "source-project", ownerId: "contributor" } });
     mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? baseBundle : sourceBundle));
-    mocks.lockProject.mockImplementation(async (_sql: unknown, projectId: string) => [{ id: projectId, ownerId: projectId === "target" ? "owner" : "contributor", license: "MIT", isPublic: true }]);
+    mocks.lockProject.mockImplementation(async (sql: unknown, idValue: string, projectValue: string) => {
+      const text = Array.isArray(sql) ? (sql as string[]).join("") : "";
+      if (text.includes('"Issue"')) return idValue === "related-work" && projectValue === "target" ? [{ id: idValue }] : [];
+      return [{ id: idValue, ownerId: idValue === "target" ? "owner" : "contributor", license: "MIT", isPublic: true }];
+    });
     mocks.findLatestProposal.mockImplementation(({ where }: { where: { requestId?: string } }) => Promise.resolve(where.requestId ? null : { proposalNumber: 14 }));
     mocks.count.mockResolvedValue(0);
     mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ $queryRaw: mocks.lockProject, revision: { findFirst: mocks.findBase }, proposal: { findFirst: mocks.findLatestProposal, create: mocks.createProposal } }));
@@ -68,34 +72,41 @@ describe("proposal creation route", () => {
     expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
-  it.each(["ISSUE", "DESIGN_REQUEST"] as const)("creates a proposal related to a %s in the same project", async (kind) => {
-    mocks.findIssue.mockResolvedValue({ id: "related-work", kind });
+  it("creates a proposal related to an open issue locked inside the transaction", async () => {
     const response = await POST(request({ ...createBody(), relatedIssueId: "related-work" }), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(201);
-    expect(mocks.findIssue).toHaveBeenCalledWith({ where: { id: "related-work", projectId: "target", status: "OPEN" }, select: { id: true } });
+    expect(mocks.findIssue).not.toHaveBeenCalled();
+    const rawCalls = mocks.lockProject.mock.calls.map((call: unknown[]) => (Array.isArray(call[0]) ? (call[0] as string[]).join("") : ""));
+    const issueLockIndex = rawCalls.findIndex((sql: string) => sql.includes('"Issue"'));
+    expect(issueLockIndex).toBeGreaterThan(-1);
+    expect(rawCalls.slice(0, issueLockIndex).every((sql: string) => sql.includes('"Project"'))).toBe(true);
+    expect(rawCalls[issueLockIndex]).toContain("FOR UPDATE");
+    expect(mocks.lockProject.mock.calls[issueLockIndex].slice(1)).toEqual(["related-work", "target"]);
     expect(mocks.createProposal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ relatedIssueId: "related-work" }) }));
   });
 
   it("rejects a related issue that closed after the contribution page loaded (stale open page)", async () => {
-    // Page loaded while OPEN, but the issue closed before submit: the submit-time
-    // lookup filters status OPEN, so it misses and no proposal is created.
-    mocks.findIssue.mockResolvedValue(null);
+    // Page loaded while OPEN, but the issue closed before submit: the in-transaction
+    // FOR UPDATE lookup misses, the transaction rolls back, nothing is created.
+    mocks.lockProject.mockImplementation(async (sql: unknown, idValue: string) => {
+      const text = Array.isArray(sql) ? (sql as string[]).join("") : "";
+      if (text.includes('"Issue"')) return [];
+      return [{ id: idValue, ownerId: idValue === "target" ? "owner" : "contributor", license: "MIT", isPublic: true }];
+    });
     const response = await POST(request({ ...createBody(), relatedIssueId: "related-work" }), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Related issue not found" });
-    expect(mocks.findIssue).toHaveBeenCalledWith({ where: { id: "related-work", projectId: "target", status: "OPEN" }, select: { id: true } });
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.createProposal).not.toHaveBeenCalled();
   });
 
   it.each([
-    ["unknown issue", null],
-    ["cross-project issue", null],
-  ])("rejects a %s reference", async (_label, found) => {
-    mocks.findIssue.mockResolvedValue(found);
-    const response = await POST(request({ ...createBody(), relatedIssueId: "related-work" }), { params: Promise.resolve({ slug: "target" }) });
+    ["unknown issue", "missing-issue"],
+    ["cross-project issue", "other-project-issue"],
+  ])("rejects a %s reference", async (_label, relatedIssueId) => {
+    const response = await POST(request({ ...createBody(), relatedIssueId }), { params: Promise.resolve({ slug: "target" }) });
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Related issue not found" });
