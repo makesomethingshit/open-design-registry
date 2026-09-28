@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ findMany: vi.fn() }));
 
-vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
+vi.mock("next/link", () => ({ default: ({ children, ...props }: { children?: unknown } & Record<string, unknown>) => createElement("a", props as never, children as never) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { issue: { findMany: mocks.findMany } } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
 
@@ -93,5 +93,51 @@ describe("Contribution Discovery", () => {
     expect(markup).toContain("No open design requests match those filters.");
     expect(markup).toMatch(/<a href="\/contribute" class="[^"]+">Clear filters<\/a>/);
     expect(markup).not.toContain("Next page");
+  });
+
+  it("shows the linked revision preview with its source and keeps one tab stop per request", async () => {
+    mocks.findMany.mockResolvedValue([{
+      ...request("request-9"),
+      body: "",
+      revision: { number: 4, isPublished: true, previews: [{ url: "previews/revision-4", altText: "" }] },
+    }]);
+    const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+
+    expect(markup).toContain("/asset/previews/revision-4");
+    expect(markup).toContain("Revision 4 preview");
+    expect(markup).toContain("linked to this request");
+    expect(markup).not.toContain("Project cover");
+    expect(markup).toContain("No summary provided");
+    expect(markup).toContain('href="/projects/design-system/issues/request-9"');
+    expect(markup).toMatch(/tabindex="-1"/);
+  });
+
+  it("labels the project cover when the request has no linked preview", async () => {
+    const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+
+    expect(markup).toContain("/asset/covers/design-system");
+    expect(markup).toContain("Project cover");
+    expect(markup).toContain("request image unavailable");
+    expect(markup).not.toContain("linked to this request");
+    expect(markup).toContain("Figma");
+
+    mocks.findMany.mockResolvedValue([{
+      ...request("request-9"),
+      revision: { number: 4, isPublished: false, previews: [{ url: "previews/revision-4", altText: "Revision 4" }] },
+    }]);
+    const unpublished = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+
+    expect(unpublished).not.toContain("linked to this request");
+    expect(unpublished).toContain("Project cover");
+  });
+
+  it("shows a retry state when the request query fails", async () => {
+    mocks.findMany.mockRejectedValue(new Error("db down"));
+    const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+
+    expect(markup).toContain("Requests couldn");
+    expect(markup).toContain("Try again");
+    expect(markup).toMatch(/<a href="\/contribute"[^>]*>Try again<\/a>/);
+    expect(markup).not.toContain("Open design requests</h2>");
   });
 });

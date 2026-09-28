@@ -5,6 +5,7 @@ import { defaultPageSize, pageCursor } from "@/src/lib/pagination";
 import { prisma } from "@/src/lib/prisma";
 import { projectActivityStatusPresentation } from "@/src/lib/ui/activity-status";
 import { publicAssetUrl } from "@/src/lib/storage";
+import { RequestCardImage } from "./request-card-image";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,13 @@ export default async function ContributePage({ searchParams }: { searchParams: P
       title: true,
       body: true,
       createdAt: true,
+      revision: {
+        select: {
+          number: true,
+          isPublished: true,
+          previews: { orderBy: { position: "asc" }, take: 1, select: { url: true, altText: true } },
+        },
+      },
       project: {
         select: {
           slug: true,
@@ -55,7 +63,17 @@ export default async function ContributePage({ searchParams }: { searchParams: P
         },
       },
     },
-  });
+  }).catch(() => null);
+  if (!requests) {
+    return <div className={styles.page}>
+      <header className={styles.hero}>
+        <p className={styles.eyebrow}>Contribute</p>
+        <h1>Open design requests</h1>
+        <p>Find a project looking for help, then open its request to understand the context and propose a change.</p>
+      </header>
+      <div className={styles.empty} role="alert"><p>Requests couldn{"'"}t load. Try again.</p><TextLink href="/contribute">Try again</TextLink></div>
+    </div>;
+  }
   const hasMore = requests.length > defaultPageSize;
   const items = requests.slice(0, defaultPageSize);
   const nextCursor = hasMore ? items.at(-1)?.id : undefined;
@@ -88,15 +106,23 @@ export default async function ContributePage({ searchParams }: { searchParams: P
       {items.length ? <ol aria-label="Open design requests" className={styles.requestList}>{items.map((request) => {
         const project = request.project;
         const latestRevision = project.revisions[0];
+        const linkedRevision = request.revision?.isPublished ? request.revision : undefined;
+        const linkedPreview = linkedRevision?.previews[0];
         const status = projectActivityStatusPresentation(project.activityStatus);
         const requestHref = `/projects/${project.slug}/issues/${request.id}`;
+        const image = linkedPreview
+          ? { src: publicAssetUrl(linkedPreview.url), alt: linkedPreview.altText || `${project.title} revision ${linkedRevision?.number} preview`, source: `Revision ${linkedRevision?.number} preview · linked to this request` }
+          : { src: publicAssetUrl(project.coverUrl), alt: `${project.title} cover`, source: "Project cover · request image unavailable" };
         return <li key={request.id}>
           <article className={styles.requestCard}>
-            <Link aria-label={`View ${project.title}`} className={styles.coverLink} href={`/projects/${project.slug}`}><img alt={`${project.title} cover`} loading="lazy" src={publicAssetUrl(project.coverUrl)} /></Link>
+            <figure className={styles.media}>
+              <RequestCardImage alt={image.alt} src={image.src} />
+              <figcaption className={styles.source}>{image.source}</figcaption>
+            </figure>
             <div className={styles.requestContent}>
               <div className={styles.requestHeading}><Badge>Design request</Badge><time dateTime={request.createdAt.toISOString()}>Opened {formatDate(request.createdAt)}</time></div>
               <h3><Link href={requestHref}>{request.title}</Link></h3>
-              {request.body && <p className={styles.body}>{request.body}</p>}
+              <p className={styles.body}>{request.body || "No summary provided"}</p>
               <p className={styles.projectLine}>For <Link href={`/projects/${project.slug}`}>{project.title}</Link> · by {project.owner.name}</p>
               <div className={styles.metadata}>
                 <StatusBadge icon={status.icon} tone={status.tone}>{status.label}</StatusBadge>
@@ -104,7 +130,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
                 {latestRevision?.tool && <Tag>{latestRevision.tool}</Tag>}
                 {latestRevision?.tags.slice(0, 3).map((value) => <Tag key={value}>{value}</Tag>)}
               </div>
-              <Link className={styles.requestLink} href={requestHref}>View request <span aria-hidden="true">→</span></Link>
+              <Link aria-hidden="true" className={styles.requestLink} href={requestHref} tabIndex={-1}>View request <span aria-hidden="true">→</span></Link>
             </div>
           </article>
         </li>;
