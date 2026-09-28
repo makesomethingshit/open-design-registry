@@ -167,8 +167,23 @@ describe("Contribution Discovery", () => {
     const css = readFileSync(new URL("./page.module.css", import.meta.url), "utf8");
     for (const name of ["titleLink", "projectLink"]) {
       const block = css.match(new RegExp(`\\.${name}[^{]*\\{[^}]*\\}`))?.[0] ?? "";
-      expect(block).toContain("min-height");
+    expect(block).toContain("min-height");
       expect(block).toContain("--odr-touch-target");
     }
+  });
+
+  it("selects the first image preview and skips text/html", async () => {
+    mocks.findMany.mockResolvedValue([{
+      ...request("request-9"),
+      revision: { number: 4, isPublished: true, previews: [{ url: "previews/revision-4.png", altText: "Revision 4", mimeType: "image/png" }] },
+    }]);
+    const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
+    const previewsArg = mocks.findMany.mock.calls[0][0].select.revision.select.previews;
+
+    expect(previewsArg).toMatchObject({ where: { mimeType: { in: ["image/png", "image/jpeg"] } }, orderBy: { position: "asc" }, take: 1 });
+    expect(markup).toContain("/asset/previews/revision-4.png");
+    expect(markup).toContain("Revision 4 preview");
+    expect(markup).toContain("linked to this request");
+    expect(markup).not.toContain("Project cover");
   });
 });

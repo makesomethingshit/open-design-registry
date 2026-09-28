@@ -48,7 +48,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
         select: {
           number: true,
           isPublished: true,
-          previews: { orderBy: { position: "asc" }, take: 1, select: { url: true, altText: true } },
+          previews: { where: { mimeType: { in: ["image/png", "image/jpeg"] } }, orderBy: { position: "asc" }, take: 1, select: { url: true, altText: true } },
         },
       },
       project: {
