@@ -19,7 +19,7 @@
 .requestCard { display: grid; grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr); gap: var(--odr-space-4); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-surface-panel); }
 .requestCard a:focus-visible { outline: var(--odr-focus-width) solid var(--odr-accent); outline-offset: var(--odr-focus-offset); }
 .media { display: grid; align-content: start; gap: var(--odr-space-2); margin: 0; min-width: 0; }
-.imageFrame { position: relative; overflow: hidden; border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-surface-subtle); }
+.imageFrame { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-surface-subtle); }
 .imageFrame img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; }
 .imageLoading { display: none; }
 .skeleton { position: absolute; inset: 0; background: var(--odr-surface-subtle); }

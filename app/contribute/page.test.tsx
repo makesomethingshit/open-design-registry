@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -139,5 +140,15 @@ describe("Contribution Discovery", () => {
     expect(markup).toContain("Try again");
     expect(markup).toMatch(/<a href="\/contribute"[^>]*>Try again<\/a>/);
     expect(markup).not.toContain("Open design requests</h2>");
+  });
+
+  it("reserves the 4:3 media area while the preview loads", async () => {
+    const { RequestCardImage } = await import("./request-card-image");
+    const markup = renderToStaticMarkup(createElement(RequestCardImage, { alt: "Design system cover", src: "/asset/covers/design-system" }));
+
+    expect(markup).toContain("<img");
+    expect(markup).toContain('aria-hidden="true"');
+    const frame = readFileSync(new URL("./page.module.css", import.meta.url), "utf8").match(/\.imageFrame\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(frame).toContain("aspect-ratio");
   });
 });
