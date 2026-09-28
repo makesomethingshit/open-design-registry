@@ -216,7 +216,7 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
       <Panel aria-busy={loading} aria-labelledby="changes-to-propose-heading">
         <Stack gap={3}>
           <SectionHeader id="changes-to-propose-heading" title="Changes to propose" />
-          <Field id="related-issue" label="Related issue" description="Choose the Design request you are answering. The project owner reviews your Proposal."><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
+          <Field id="related-issue" label="Related issue" description="Choose a related Design request or Issue, if any. The project owner reviews your Proposal."><Select onChange={(event) => setRelatedIssueId(event.target.value)} value={relatedIssueId}><option value="">None</option>{relatedIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.title}</option>)}</Select></Field>
           {loadError && <Banner action={<Button onClick={() => { invalidateLoadedChanges(); setRetry((current) => current + 1); }} size="sm" variant="secondary">Retry</Button>} title="Could not load available changes." tone="error" />}
           {!loading && !loadError && changes.length > 0 && <ul className="history" aria-label="Available changes">{changes.map((change) => {
             const presentation = changeActionPresentation({ action: change.action, type: change.action });
