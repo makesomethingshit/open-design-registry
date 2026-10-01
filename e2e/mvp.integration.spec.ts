@@ -6,6 +6,40 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
   test.setTimeout(120_000);
   test.skip(!process.env.E2E_INTEGRATION, "requires local PostgreSQL and S3-compatible services");
 
+  test("opens both document editor panels and focuses the field from Add and Edit links", async ({ page }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signUp(page, `Document owner ${suffix}`, `document-${suffix}@example.test`, "integration-password-123");
+    const response = await page.request.post("/api/projects", { multipart: {
+      title: `Document project ${suffix}`, license: "CC BY 4.0", isPublic: "true", rightsConfirmed: "on",
+      cover: { name: "cover.png", mimeType: "image/png", buffer: tinyPng },
+    } });
+    expect(response.status()).toBe(201);
+    const projectPath = `/projects/${(await response.json()).slug}`;
+    await page.goto(projectPath);
+    const field = page.getByLabel("Project document (Markdown)");
+
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#owner-tools")).not.toHaveAttribute("open", "");
+    await page.getByRole("link", { name: "Add one in Owner tools" }).click();
+    await expect(field).toBeFocused();
+    await expect(field).toBeInViewport();
+    await field.fill("# Saved document");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByText("Project settings saved.")).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(projectPath);
+    await page.waitForLoadState("networkidle");
+    const editLink = page.getByRole("link", { name: "Edit document" });
+    await editLink.press("Enter");
+    await expect(field).toBeFocused();
+    await expect(field).toBeInViewport();
+    await expect(field).toHaveValue("# Saved document");
+    await page.getByText("Project settings", { exact: true }).click();
+    await editLink.click();
+    await expect(field).toBeFocused();
+  });
+
   test("uploads, publishes, restores a revision, forks it, and delivers owner notifications", async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const password = "integration-password-123";
