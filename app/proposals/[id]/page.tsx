@@ -56,6 +56,10 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const unavailableConflictCount = new Set(changes.filter((change) => !change.appliedRevision && change.conflictStatus === "CHECK_UNAVAILABLE" && change.targetFileId).map((change) => change.targetFileId)).size;
   const isOwner = session?.user.id === proposal.project.ownerId;
   const canClose = Boolean(session && (isOwner || session.user.id === proposal.authorId));
+  const canRevise = Boolean(session && session.user.id === proposal.authorId && session.user.id === proposal.sourceRevision.project.ownerId);
+  const reviseContext = new URLSearchParams({ contributionTarget: proposal.project.slug, baseRevision: String(proposal.baseRevision.number) });
+  if (proposal.relatedIssue) reviseContext.set("relatedIssue", proposal.relatedIssue.id);
+  const reviseHref = canRevise ? `/projects/${encodeURIComponent(proposal.sourceRevision.project.slug)}?${reviseContext}#owner-tools` : undefined;
   const proposalStatus = proposalStatusPresentation(proposal.status, changes.filter((change) => change.appliedRevision).length, changes.length);
   return <article className={styles.page}>
     <header className={styles.header}>
@@ -71,6 +75,6 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       {proposal.appliedRevisions.length > 0 && <Banner tone="success" title="Applied changes">{proposal.appliedRevisions.map((revision) => <Link key={revision.id} href={`/projects/${proposal.project.slug}/revisions/${revision.number}`}>Revision {revision.number}</Link>)}</Banner>}
       {!proposal.sourceRevision.project.isPublic && session?.user.id === proposal.authorId && <Banner className={styles.privateNote} tone="warning" title="Private workspace">Visible to you. The project owner cannot review this proposal while its source is private.</Banner>}
     </header>
-    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} latestUnitCount={latestUnitCount} stale={stale} knownConflictCount={knownConflictCount} unavailableConflictCount={unavailableConflictCount} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} />
+    <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} latestUnitCount={latestUnitCount} stale={stale} knownConflictCount={knownConflictCount} unavailableConflictCount={unavailableConflictCount} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} reviseHref={reviseHref} />
   </article>;
 }

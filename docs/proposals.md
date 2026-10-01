@@ -25,9 +25,21 @@ flowchart LR
 5. 원 프로젝트 소유자가 시각 비교와 변경 내용을 확인해 각 Change를 승인하거나 수정을 요청합니다. 수정 요청에는 댓글이 필요합니다.
 6. 소유자가 승인된 변경을 선택하고 적용합니다. 원본 이력을 수정하지 않고 다음 번호의 Revision을 발행합니다.
 
-현재 Fork API는 **공개 프로젝트의 발행 Revision으로 공개 Fork**를 생성하고, 표시된 라이선스로 공개할 권리가 있는지 확인받습니다. `Create contribution workspace`라는 문구가 비공개 생성 보장을 뜻하지 않습니다. 기여 준비 화면은 Fork 직후 대상 프로젝트·base Revision·관련 Issue를 유지한 채 복제된 Revision 1로 돌아옵니다. Fork만으로는 변경이 생기지 않으므로 외부 제작 도구에서 원본을 수정한 뒤 새 Revision을 발행합니다. 발행이 끝나면 대상의 기여 준비 화면으로 돌아와 새 source Revision을 선택합니다. 유닛을 제공하지 않는 형식은 전체 문서 Proposal로 이어질 수 있으며, 실제 변경이 없으면 서버가 생성을 거부합니다.
+현재 Fork API는 **공개 프로젝트의 발행 Revision으로 공개 Fork**를 생성하고, 표시된 라이선스로 공개할 권리가 있는지 확인받습니다. 기여 준비와 독립 Fork 모두 `Create fork`로 같은 결과를 명시하며, 비공개 작업 사본을 보장하지 않습니다. 기여 준비 화면은 Fork 직후 대상 프로젝트·base Revision·관련 Issue를 유지한 채 복제된 Revision 1로 돌아옵니다. Fork만으로는 변경이 생기지 않으므로 외부 제작 도구에서 원본을 수정한 뒤 새 Revision을 발행합니다. 발행이 끝나면 대상의 기여 준비 화면으로 돌아와 새 source Revision을 선택합니다. 유닛을 제공하지 않는 형식은 전체 문서 Proposal로 이어질 수 있으며, 실제 변경이 없으면 서버가 생성을 거부합니다.
 
 리뷰어가 source 프로젝트를 읽을 수 있어야 합니다. 현재 비공개 프로젝트의 접근자는 소유자뿐이므로, 다른 소유자에게 제안하려면 source의 공개 여부를 먼저 확인해야 합니다. Proposal을 만든다고 접근 권한이 자동으로 생기지는 않습니다.
+
+### 첫 기여 화면의 안내와 다음 행동
+
+공개 `/contribute`에서 Design request를 고르면 요청 상세에서 Fork·Revision·Proposal의 결과와 검토 담당자를 확인할 수 있습니다. 첫 기여는 Fork → 외부 제작 도구에서 수정 → 새 Revision 발행 → Proposal 제출 순서이며, 이미 수정된 Revision을 소유하고 있다면 Fork 없이 바로 source로 선택할 수 있습니다. 관련 Design request나 Issue도 선택 사항입니다.
+
+기여 준비 화면은 source가 없을 때 Fork를, 복제된 Revision 1일 때 외부 수정·발행을, 수정본이 있을 때 변경 선택·제출을 안내합니다. 발행 화면은 원 프로젝트로 돌아갈 경로와 발행 후 새 source 선택을 설명하고, Proposal 폼은 제출 후 owner review로 이어지며 승인과 적용이 별개임을 명시합니다.
+
+리뷰 화면은 **선택한 변경의 실제 상태**에 따라 다음 행동을 표시합니다. `Changes requested`에서는 원 제출물을 보존한 채 수정·발행·새 Proposal을 만들도록 안내하며, 제출자에게만 자신의 작업 프로젝트로 돌아가는 `Prepare revised work` 링크를 제공합니다. `Approved`는 원본이 아직 바뀌지 않았음을, `Applied`는 원 프로젝트의 새 Revision과 결과 링크를 보여 줍니다. 일부 변경만 적용된 경우에도 나머지가 모두 적용됐다고 표시하지 않습니다.
+
+디자인 기준은 Penpot `Open Design Registry` 파일의 `PUCK-231 · First contribution` 페이지(1440/390 화면과 States and handoff)입니다. 기존 디자인 시스템의 Panel·Banner·Field를 사용하며 별도 튜토리얼이나 데이터 모델 개명은 추가하지 않습니다.
+
+`e2e/mvp.integration.spec.ts`의 first-contributor 시나리오는 실제 DB·스토리지에서 공개 요청 발견, 가입 복귀, Fork, 발행, 제출, 수정 요청, 새 Revision·새 Proposal, 승인, 적용 결과와 원 Revision 보존을 확인합니다. 이는 화면의 행동·결과 안내와 기능 경로를 검증하는 회귀 테스트이며, 실제 신규 디자이너 대상의 이해도 조사 결과를 의미하지는 않습니다.
 
 ## 변경 단위
 

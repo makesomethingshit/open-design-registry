@@ -12,7 +12,13 @@ export default async function NewProposalPage({ params, searchParams }: { params
   const { slug } = await params;
   const query = await searchParams;
   const session = await getSession();
-  if (!session) redirect(`/login?next=${encodeURIComponent(`/projects/${slug}/proposals/new`)}`);
+  if (!session) {
+    const context = new URLSearchParams();
+    for (const key of ["baseRevision", "sourceProject", "sourceRevision", "changes", "relatedIssue"] as const) {
+      if (query[key]) context.set(key, query[key]);
+    }
+    redirect(`/login?next=${encodeURIComponent(`/projects/${slug}/proposals/new${context.size ? `?${context}` : ""}`)}`);
+  }
   const project = await prisma.project.findUnique({ where: { slug }, include: { revisions: { where: { isPublished: true }, orderBy: { number: "desc" }, select: { id: true, number: true, title: true, sourceKey: true, sourceUrl: true, capabilityMode: true, capabilityUnitCount: true } }, issues: { where: { status: "OPEN" }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, kind: true } } } });
   if (!project || (!project.isPublic && project.ownerId !== session.user.id)) notFound();
   const requestedBase = Number(query.baseRevision);

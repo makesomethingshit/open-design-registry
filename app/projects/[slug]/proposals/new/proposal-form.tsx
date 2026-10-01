@@ -130,8 +130,8 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
   }
 
   return <form className="form proposal-form" noValidate onSubmit={submit} aria-busy={submitting}>
-    <p className="proposal-fixed"><span>Into</span>{slug} · Revision {baseRevision.number}</p>
-    <Field id="proposal-source" label="From" required><Select name="sourceRevisionId" value={sourceRevisionId} onChange={(event) => selectSourceRevision(event.target.value)} required>{sourceRevisions.map((revision) => <option value={revision.id} key={revision.id}>{revision.projectSlug} · Revision {revision.number} — {revision.title}</option>)}</Select></Field>
+    <p className="proposal-fixed"><span>Into original project</span>{slug} · Revision {baseRevision.number}</p>
+    <Field id="proposal-source" label="From" description="Your published Revision containing the changed work. You can use any eligible project you own; a Fork is optional." required><Select name="sourceRevisionId" value={sourceRevisionId} onChange={(event) => selectSourceRevision(event.target.value)} required>{sourceRevisions.map((revision) => <option value={revision.id} key={revision.id}>{revision.projectSlug} · Revision {revision.number} — {revision.title}</option>)}</Select></Field>
     <Field error={fieldErrors.title} id="proposal-title" invalid={Boolean(fieldErrors.title)} label="Title" required><Input name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required minLength={1} maxLength={200} placeholder="Improve mobile header typography" /></Field>
     <Field error={fieldErrors.whatChanged} id="proposal-what-changed" invalid={Boolean(fieldErrors.whatChanged)} label="What changed?" required><Textarea name="whatChanged" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.whatChanged; return next; })} required maxLength={4900} /></Field>
     <Field error={fieldErrors.why} id="proposal-why" invalid={Boolean(fieldErrors.why)} label="Why?" required><Textarea name="why" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.why; return next; })} required maxLength={4900} /></Field>
@@ -157,7 +157,7 @@ export default function ProposalForm({ slug, baseRevision, sourceRevisions, rela
       {changes.length > maxProposalChanges && <p className="error" role="alert">A proposal can include up to {maxProposalChanges} changes. Remove a change before creating the proposal.</p>}
       {changes.length > 0 && <p className="meta">Summary: {changes.map((change) => actionLabel(change.action).toLowerCase()).join(" · ")}</p>}
     </section>
-    <p className="meta">Propose the changes in your new Revision to the original project. Its owner reviews the Proposal before any change is applied.</p>
+    <Banner title="After you submit" tone="info">This Proposal sends your selected changes to the original project owner for review. You will open its review page to see feedback and results. Approval does not change the original; the owner applies approved changes in a new Revision.</Banner>
     <div className="dialog-actions"><Button disabled={submitting} onClick={() => router.back()} type="button" variant="secondary">Cancel</Button><Button loading={submitting} loadingLabel="Creating proposal" disabled={canChooseUnits && !changes.length} type="submit">Create proposal</Button></div>
     {error && <Banner tone="error" title="Could not create proposal">{error}</Banner>}
   </form>;

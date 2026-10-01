@@ -50,12 +50,13 @@ export default function ForkForm({ slug, number, license, signedIn }: { slug: st
   return <form className="form fork-form" onSubmit={submit} aria-busy={submitting}>
     <Stack gap={3}>
       <h2>{contribution ? "Start a contribution" : "Fork this revision"}</h2>
+      <p>Your Fork creates a public project linked to this original. You will edit your own copy; the original stays unchanged.</p>
       <p className="meta">License: {license}</p>
       <Field id="fork-title" label="Fork project title"><Input name="title" maxLength={120} placeholder="Fork project title (optional)" /></Field>
       <Checkbox label="I have the rights to publish this fork under the displayed license." name="rightsConfirmed" required />
       {error && <Banner tone="error" title="Could not fork revision">{error}</Banner>}
-      <p className="meta">Your Fork creates a public project linked to this original. You will edit your own copy; the original stays unchanged.</p>
-      <Button loading={submitting} loadingLabel={contribution ? "Creating workspace" : "Creating fork"} type="submit">{contribution ? "Create contribution workspace" : "Create fork"}</Button>
+      <p className="meta">Next: open the copied source in your design tool, make your changes, then publish a new Revision in your work project. Creating a Fork does not send a Proposal.</p>
+      <Button loading={submitting} loadingLabel="Creating fork" type="submit">Create fork</Button>
     </Stack>
   </form>;
 }

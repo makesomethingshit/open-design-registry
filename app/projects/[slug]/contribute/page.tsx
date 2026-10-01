@@ -25,7 +25,11 @@ export default async function ContributionPage({ params, searchParams }: { param
   });
   if (!project || (!project.isPublic && project.ownerId !== session?.user.id)) notFound();
   if (!session) {
-    const next = `/projects/${slug}/contribute${query.relatedIssue ? `?relatedIssue=${encodeURIComponent(query.relatedIssue)}` : ""}`;
+    const context = new URLSearchParams();
+    for (const key of ["baseRevision", "sourceProject", "sourceRevision", "relatedIssue"] as const) {
+      if (query[key]) context.set(key, query[key]);
+    }
+    const next = `/projects/${slug}/contribute${context.size ? `?${context}` : ""}`;
     redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
