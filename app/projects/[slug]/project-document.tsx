@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { renderProjectDocument } from "@/src/lib/project-document";
+import ProjectDocumentEditLink from "./project-document-edit-link";
 import styles from "./project.module.css";
 
 export default function ProjectDocument({
@@ -19,9 +19,9 @@ export default function ProjectDocument({
           <h2 id="project-document-heading">Project document</h2>
         </div>
         {isOwner && body && (
-          <Link className={styles.secondaryLink} href="#owner-tools">
+          <ProjectDocumentEditLink className={styles.secondaryLink}>
             Edit document
-          </Link>
+          </ProjectDocumentEditLink>
         )}
       </header>
       {body ? (
@@ -36,7 +36,7 @@ export default function ProjectDocument({
           {isOwner ? (
             <>
               {" "}
-              <Link href="#owner-tools">Add one in Owner tools</Link>.
+              <ProjectDocumentEditLink>Add one in Owner tools</ProjectDocumentEditLink>.
             </>
           ) : null}
         </p>
