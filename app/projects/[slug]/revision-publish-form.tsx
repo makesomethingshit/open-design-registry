@@ -4,7 +4,7 @@ import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import CapabilityBadge from "@/app/capability-badge";
 import { Banner } from "@/src/components/ui/banner";
-import { Button } from "@/src/components/ui/button";
+import { Button, TextLink } from "@/src/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
 import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 import { suggestFile, type AdapterSuggestion } from "@/src/lib/adapters";
@@ -172,6 +172,9 @@ export default function RevisionPublishForm({ slug, existingFiles, contributionR
 
   return <form className="form revision-publish-form" onSubmit={submit} aria-busy={submitting}>
     <h2>Publish a revision</h2>
+    <p className="meta">A Revision is a new, permanent record of changes in your work project. It does not send a Proposal yet.</p>
+    <Banner title="Before you publish" tone="info">Open the source in your design tool, make your changes, then publish the updated source and preview here.</Banner>
+    {contributionReturn && <TextLink href={`/projects/${encodeURIComponent(contributionReturn.targetSlug)}/contribute?${new URLSearchParams({ baseRevision: String(contributionReturn.baseRevision), ...(contributionReturn.relatedIssueId ? { relatedIssue: contributionReturn.relatedIssueId } : {}) })}`}>Back to the original contribution</TextLink>}
     <Field error={fieldErrors.title} id="publish-title" invalid={Boolean(fieldErrors.title)} label="Revision title" required><Input name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
     <Field error={fieldErrors.changeDescription} id="publish-description" invalid={Boolean(fieldErrors.changeDescription)} label="Change description" required><Textarea name="changeDescription" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.changeDescription; return next; })} required minLength={1} maxLength={500} /></Field>
     <Field error={fieldErrors.tool} id="publish-tool" invalid={Boolean(fieldErrors.tool)} label="Design tool"><Input name="tool" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.tool; return next; })} maxLength={80} placeholder="Figma, Penpot, or Photoshop" /></Field>
@@ -239,6 +242,7 @@ export default function RevisionPublishForm({ slug, existingFiles, contributionR
       </section>;
     })}
     {error && <Banner tone="error" title="Revision could not be published">{error}</Banner>}
+    <p className="meta">{contributionReturn ? "After publishing, you return to the original project's Contribute screen with this new Revision selected. Choose its changes, then create a Proposal for the owner to review." : "After publishing, you can view this Revision. To send changes to another project, select it in that project's Contribute screen and create a Proposal."}</p>
     <Button loading={submitting} loadingLabel="Publishing revision" type="submit">Publish revision</Button>
   </form>;
 }

@@ -107,7 +107,7 @@ npx playwright install chromium
 node --env-file=.env node_modules/@playwright/test/cli.js test
 ```
 
-기존 서버를 재사용하면 그 서버의 DB·스토리지 설정이 이번 테스트 설정과 같은지 확인합니다. 현재 `e2e/mvp.integration.spec.ts`의 통합 경로는 가입·프로젝트·Revision·복원·Issue·Fork 등 MVP 흐름입니다. **Proposal v0.5 전체가 브라우저 E2E로 검증된다고 확대 해석하지 않습니다.**
+기존 서버를 재사용하면 그 서버의 DB·스토리지 설정이 이번 테스트 설정과 같은지 확인합니다. `e2e/mvp.integration.spec.ts`는 가입·프로젝트·Revision·복원·Issue·Fork 외에 공개 Design request → 로그인 복귀 → Fork → 수정본 발행 → Proposal → 수정 요청 → 새 Proposal → 승인·적용을 실제 DB·스토리지로 검증합니다. 데스크톱·모바일에서 단계별 안내와 결과 링크도 확인합니다. **이 한 흐름으로 Proposal v0.5의 모든 충돌·부분 적용·동시성 조합이나 실제 신규 디자이너의 이해도까지 검증됐다고 확대 해석하지 않습니다.**
 
 ### 현재 CI에서 빠지는 것
 
@@ -134,6 +134,6 @@ node --env-file=.env node_modules/@playwright/test/cli.js test
 | HTML 미리보기가 일부 동작하지 않음 | 스크립트·네트워크 등을 제한하는 CSP와 미리보기 형식 |
 | 기여 경로 로그인 복귀 | contribute-dialog, `/contribute`, `/proposals/new`, Discussions의 로그인 유도는 원래 작업 경로를 `/login?next=...`로 전달하는지 확인 |
 
-기준 코드에서는 contribute-dialog, `/contribute`, `/proposals/new`, Discussions의 로그인 유도가 `/login?next=...`를 사용함을 확인했습니다. 이번 문서 작업에서는 로그인 흐름을 브라우저에서 실행하지 않았습니다.
+기여 준비와 Proposal 생성은 `/login?next=...`에 선택한 base·source Revision, 관련 요청과 선택 변경을 보존합니다. first-contributor 브라우저 시나리오에서 요청 링크의 가입 복귀와 준비된 Proposal의 재로그인 복귀를 검증합니다. Discussions 등 이 시나리오 밖의 로그인 경로는 별도 확인이 필요합니다.
 
 기준 코드: [CI](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/.github/workflows/ci.yml), [환경 예제](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/.env.example), [테스트 설정](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/playwright.config.ts).

@@ -3,7 +3,7 @@
 import { FormEvent } from "react";
 import { Banner } from "@/src/components/ui/banner";
 import { StatusBadge } from "@/src/components/ui/badge";
-import { Button } from "@/src/components/ui/button";
+import { Button, TextLink } from "@/src/components/ui/button";
 import { Dialog } from "@/src/components/ui/dialog";
 import { Field, Textarea } from "@/src/components/ui/field";
 import { changeActionPresentation, changeDisplayName, changeKindLabel, conflictStatusPresentation } from "./change-item";
@@ -39,18 +39,20 @@ type ReviewInspectorProps = {
   requestingChanges: boolean;
   draft: string;
   projectSlug: string;
+  reviseHref?: string;
+  proposalClosed?: boolean;
   onReview: (reviewStatus: "APPROVED" | "CHANGES_REQUESTED", comment?: string) => Promise<boolean>;
   onRetry: () => Promise<boolean>;
   onRequestingChangesChange: (requesting: boolean) => void;
   onDraftChange: (draft: string) => void;
 };
 
-export function ReviewInspector({ applying, canReview, change, draft, error, failedRequest, onDraftChange, onRequestingChangesChange, onRetry, onReview, pending, projectSlug, requestingChanges }: ReviewInspectorProps) {
+export function ReviewInspector({ applying, canReview, change, draft, error, failedRequest, onDraftChange, onRequestingChangesChange, onRetry, onReview, pending, projectSlug, requestingChanges, reviseHref, proposalClosed }: ReviewInspectorProps) {
 
   if (!change) return <section aria-labelledby="review-inspector-heading" className={styles.inspector}><h2 id="review-inspector-heading">Review inspector</h2><p className={styles.empty}>Select a change to inspect its actual review data.</p></section>;
 
   const action = changeActionPresentation(change);
-  const status = changeReviewStatusPresentation(change.reviewStatus);
+  const status = changeReviewStatusPresentation(change.reviewStatus, change.appliedRevision?.number);
   const conflict = conflictStatusPresentation(change.conflictStatus);
   const reviewDisabled = applying || pending || !canReview;
   const requestFormId = `request-changes-${change.id}`;
@@ -66,7 +68,7 @@ export function ReviewInspector({ applying, canReview, change, draft, error, fai
 
   function formatHistoryDate(value: ReviewChange["reviewHistory"][number]["createdAt"]) {
     const date = value instanceof Date ? value : new Date(value);
-    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? String(value) : `${date.toLocaleString("en-US", { timeZone: "UTC" })} UTC`;
   }
 
   return <section aria-labelledby="review-inspector-heading" className={styles.inspector}>
@@ -86,7 +88,16 @@ export function ReviewInspector({ applying, canReview, change, draft, error, fai
     {change.conflictReason && <p className={styles.note}>{change.conflictReason}</p>}
     {!change.latestAvailable && <Banner tone="warning" title="Not in the latest revision">This unit cannot be selected until the latest revision is reviewed.</Banner>}
     {change.reviewComment && <section className={styles.reviewComment}><h3>Latest review</h3><p>{change.reviewComment}</p></section>}
-    {change.appliedRevision && <Banner tone="success" title="Applied">Applied as <a href={`/projects/${projectSlug}/revisions/${change.appliedRevision.number}`}>Revision {change.appliedRevision.number}</a>.</Banner>}
+    <section aria-label="Next step for this change" className={styles.reviewComment}>
+      <h3>{change.appliedRevision ? "Applied to the original" : proposalClosed ? "Proposal closed" : change.reviewStatus === "CHANGES_REQUESTED" ? "Changes requested: revise your work" : change.reviewStatus === "APPROVED" ? "Approved, awaiting application" : canReview ? "Review this proposed change" : "Waiting for owner review"}</h3>
+      {change.appliedRevision ? <>
+        <p>The owner added this change to a new Revision of the original project. Other changes may still be awaiting review or application.</p>
+        <TextLink href={`/projects/${projectSlug}/revisions/${change.appliedRevision.number}`}>View Revision {change.appliedRevision.number}</TextLink>
+      </> : proposalClosed ? <p>This Proposal is closed. Its unapplied changes will not be added to the original through this Proposal.</p> : change.reviewStatus === "CHANGES_REQUESTED" ? <>
+        <p>Read the owner's feedback. Edit the source in your design tool, publish another Revision, then create a new Proposal. This Proposal keeps the original submitted work.</p>
+        {reviseHref && <TextLink href={reviseHref}>Prepare revised work</TextLink>}
+      </> : change.reviewStatus === "APPROVED" ? <p>The owner approved this change, but it has not changed the original yet. Only the owner can select and apply approved changes in a new Revision.</p> : <p>{canReview ? "Compare the proposed work with the original, then approve this change or request changes with feedback. Approval does not apply it yet." : "This Proposal is submitted. The original project owner reviews each change here; submitting does not change the original. Return to this page to check feedback and results."}</p>}
+    </section>
     <section className={styles.history} aria-label="Unit review history"><h3>Unit review history</h3>{change.reviewHistory.length > 0 ? <ol>{change.reviewHistory.map((entry) => <li key={entry.id}><strong>{historyLabel(entry)}</strong>{entry.author?.name && <span>{entry.author.name}</span>}{entry.comment && <p>{entry.comment}</p>}{entry.reason && <p>{entry.reason}</p>}{entry.causedByRevision && <span>Revision {entry.causedByRevision.number}</span>}<span>{formatHistoryDate(entry.createdAt)}</span></li>)}</ol> : <p className={styles.emptyHistory}>No unit reviews yet.</p>}</section>
     {canReview && <div className={styles.actions}>
       <Button disabled={reviewDisabled || change.conflictStatus === "CONFLICT" || change.conflictStatus === "CHECK_UNAVAILABLE"} loading={pending && !requestingChanges} loadingLabel="Saving review" onClick={() => { void onReview("APPROVED"); }} variant="secondary">Approve change</Button>

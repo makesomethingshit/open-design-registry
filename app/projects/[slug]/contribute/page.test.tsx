@@ -44,4 +44,12 @@ describe("contribution page request context", () => {
 
     expect(renderToStaticMarkup(page)).toContain('data-related-issue="request-1"');
   });
+
+  it("preserves the selected base, source, and request through sign-in", async () => {
+    mocks.getSession.mockResolvedValue(null);
+    const context = { baseRevision: "1", sourceProject: "my-work", sourceRevision: "2", relatedIssue: "request-1" };
+    const next = `/projects/demo/contribute?${new URLSearchParams(context)}`;
+    await expect(ContributionPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve(context) }))
+      .rejects.toThrow(`NEXT_REDIRECT:/login?next=${encodeURIComponent(next)}`);
+  });
 });

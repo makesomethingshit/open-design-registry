@@ -74,7 +74,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
     <header className={styles.hero}>
       <p className={styles.eyebrow}>Contribute</p>
       <h1>Open design requests</h1>
-      <p>Find a project looking for help, then open its request to understand the context and propose a change.</p>
+      <p>Find a project looking for help, then open its Design request to understand the work. Prepare your own copy, edit in your design tool, publish a Revision, and send a Proposal for the project owner to review.</p>
     </header>
     <section aria-labelledby="requests-heading" className={styles.results}>
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Public projects</p><h2 id="requests-heading">Design requests</h2></div><p>{items.length} {items.length === 1 ? "request" : "requests"} on this page</p></header>

@@ -52,7 +52,13 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
               <div><dt>Project</dt><dd><Link href={`/projects/${slug}`}>{issue.project.title}</Link></dd></div>
               <div><dt>Related revision</dt><dd>{issue.revision ? issue.revision.isPublished ? <Link href={`/projects/${slug}/revisions/${issue.revision.number}`}>Revision {issue.revision.number}</Link> : `Revision ${issue.revision.number}` : "None"}</dd></div>
             </dl>
-            {isOpen && <TextLink href={`/projects/${slug}/contribute?relatedIssue=${encodeURIComponent(issue.id)}`}>Contribute to this {isRequest ? "request" : "issue"}</TextLink>}
+            {isOpen && <>
+              <SectionHeader title="Before you contribute" />
+              <p>A Fork creates your own public work project. Edit its source in your design tool, then publish a Revision: a permanent record of your updated work.</p>
+              <p>A Proposal sends those changes to the original project owner for review. The original stays unchanged until the owner applies them.</p>
+              <p className="meta">Already have a changed Revision in a project you own? Select it in Contribute; another Fork is optional. This {isRequest ? "Design request" : "Issue"} stays linked through sign-in and submission.</p>
+              <TextLink href={`/projects/${slug}/contribute?relatedIssue=${encodeURIComponent(issue.id)}`}>Contribute to this {isRequest ? "request" : "issue"}</TextLink>
+            </>}
           </Stack>
         </Panel>
       </Stack>

@@ -187,7 +187,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.getByRole("button", { name: "Restore as new revision" })).toHaveCount(0);
     await page.getByLabel("Fork project title").fill(forkTitle);
     await page.locator('input[name="rightsConfirmed"]').check();
-    await page.getByRole("button", { name: "Create contribution workspace" }).click();
+    await page.getByRole("button", { name: "Create fork" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/projects/${slug}/contribute\\?`));
     const returnedToContribution = new URL(page.url());
@@ -207,6 +207,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.getByRole("heading", { name: forkTitle })).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "Prepare your working revision" })).toBeVisible();
     await expect(page.locator("#owner-tools")).toHaveAttribute("open", "");
+    await page.waitForLoadState("networkidle");
     await page.locator("form.revision-publish-form input[name=title]").fill("Contribution revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Revise the forked source for a proposal");
     await page.getByLabel("Source URL").fill("https://example.com/forked-source-v2.zip");
@@ -272,10 +273,176 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await signOut(page);
     expect((await page.request.get(forkSourceUrl)).status()).toBe(404);
   });
+  test("a first contributor follows a public request through feedback, resubmission, and application", async ({ page, browser }, testInfo) => {
+    test.setTimeout(300_000);
+    page.setDefaultTimeout(20_000);
+    const browserErrors: string[] = [];
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const password = "integration-password-123";
+    const contributorEmail = `first-contributor-${suffix}@example.test`;
+    const requestTitle = `Improve the mobile header ${suffix}`;
+    const ownerContext = await browser.newContext({ baseURL: testInfo.project.use.baseURL, viewport: { width: 1440, height: 900 } });
+    const owner = await ownerContext.newPage();
+    owner.on("pageerror", (error) => browserErrors.push(error.message));
+    owner.setDefaultTimeout(20_000);
+    const capture = async (name: string) => {
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await page.screenshot({ path: testInfo.outputPath(name), fullPage: true });
+    };
+    try {
+      await signUp(owner, "Project owner", `request-owner-${suffix}@example.test`, password);
+      const created = await owner.request.post("/api/projects", { multipart: {
+        title: `Open posters ${suffix}`, description: "A public poster design seeking a clearer mobile header", license: "CC BY 4.0", isPublic: "true", rightsConfirmed: "true",
+        cover: { name: "poster.png", mimeType: "image/png", buffer: tinyPng },
+      } });
+      expect(created.status()).toBe(201);
+      const { slug } = await created.json() as { slug: string };
+      const projectPath = `/projects/${slug}`;
+      await owner.goto(`${projectPath}?contributionTarget=${slug}&baseRevision=1#owner-tools`);
+      await publishWork(owner, "Initial design", `https://example.com/${suffix}/original.penpot`);
+      const revisions = await (await owner.request.get(`/api${projectPath}/revisions`)).json();
+      const opened = await owner.request.post(`/api${projectPath}/issues`, { data: { title: requestTitle, body: "Make the title easier to read on a phone.", kind: "DESIGN_REQUEST", revisionId: revisions[0].id } });
+      expect(opened.status()).toBe(201);
+      const { id: requestId } = await opened.json() as { id: string };
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`/contribute?q=${encodeURIComponent(requestTitle)}`);
+      await page.getByRole("link", { name: requestTitle }).click();
+      await expect(page.getByRole("heading", { name: "Before you contribute" })).toBeVisible();
+      await expect(page.getByText("A Fork creates your own public work project.", { exact: false })).toBeVisible();
+      await capture("01-request-mobile.png");
+      await page.getByRole("link", { name: "Contribute to this request" }).press("Enter");
+      await expect(page).toHaveURL(/\/login\?next=/);
+      expect(new URL(page.url()).searchParams.get("next")).toBe(`${projectPath}/contribute?relatedIssue=${requestId}`);
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "New here? Create an account" }).click();
+      await page.getByLabel("Name").fill("First contributor");
+      await page.getByLabel("Email").fill(contributorEmail);
+      await page.getByLabel("Password").fill(password);
+      await page.getByRole("button", { name: "Create account" }).click();
+      await expect(page).toHaveURL(new RegExp(`${projectPath}/contribute\\?`));
+      await expect(page.getByLabel("Related issue")).toHaveValue(requestId);
+      await expect(page.getByRole("heading", { name: "Start with your own work copy" })).toBeVisible();
+      await page.getByRole("link", { name: "Fork Revision 1 to start" }).click();
+      await expect(page.getByText("Your Fork creates a public project linked to this original.", { exact: false })).toBeVisible();
+      await page.getByLabel("Fork project title").fill(`My poster work ${suffix}`);
+      await page.locator('input[name="rightsConfirmed"]').check();
+      await page.getByRole("button", { name: "Create fork" }).click();
+      await expect(page.getByRole("heading", { name: "Your Fork is ready. Edit it next." })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Continue to proposal" })).toBeDisabled();
+      const forkUrl = new URL(page.url());
+      const forkSlug = forkUrl.searchParams.get("sourceProject")!;
+      expect(forkUrl.searchParams.get("relatedIssue")).toBe(requestId);
+      await capture("02-fork-next-step-mobile.png");
+      await page.getByRole("link", { name: "Open working project and publish a revision" }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Before you publish" })).toBeVisible();
+      await expect(page.getByText("After publishing, you return to the original project's Contribute screen", { exact: false })).toBeVisible();
+      await publishWork(page, "Readable mobile header", `https://example.com/${suffix}/edited.penpot`);
+      await expect(page).toHaveURL(new RegExp(`${projectPath}/contribute\\?`));
+      expect(new URL(page.url()).searchParams.get("sourceRevision")).toBe("2");
+      await page.getByRole("button", { name: "Continue with whole document" }).click();
+      await expect(page.getByRole("status").filter({ hasText: "After you submit" })).toBeVisible();
+      await page.getByLabel("Title").fill("Improve mobile header");
+      await page.getByLabel("What changed?").fill("Made the poster title larger on mobile.");
+      await page.getByLabel("Why?").fill("The Design request asks for a readable header.");
+      await page.getByRole("button", { name: "Create proposal" }).click();
+      await expect(page).toHaveURL(/\/proposals\/cm[a-z0-9]+$/);
+      await expect(page.getByRole("heading", { name: "Waiting for owner review" })).toBeVisible();
+      const firstProposalPath = new URL(page.url()).pathname;
+      const firstProposalId = firstProposalPath.split("/").at(-1)!;
+      await expect(page.getByRole("link", { name: "Prepare revised work" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Approve change" })).toHaveCount(0);
+
+      await owner.goto(firstProposalPath);
+      await expect(owner.getByRole("heading", { name: "Review this proposed change" })).toBeVisible();
+      await owner.getByRole("button", { name: "Request changes", exact: true }).click();
+      await owner.getByRole("textbox", { name: /^Feedback for/ }).fill("Increase the contrast of the title too.");
+      await owner.getByRole("button", { name: "Submit review" }).click();
+      await expect(owner.getByRole("heading", { name: "Changes requested: revise your work" })).toBeVisible();
+      await expect(owner.getByRole("link", { name: "Prepare revised work" })).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByText("Increase the contrast of the title too.").first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Changes requested: revise your work" })).toBeVisible();
+      await capture("03-feedback-mobile.png");
+      await page.getByRole("link", { name: "Prepare revised work" }).click();
+      const revisionReturn = new URL(page.url());
+      expect(revisionReturn.pathname).toBe(`/projects/${forkSlug}`);
+      expect(revisionReturn.searchParams.get("relatedIssue")).toBe(requestId);
+      expect(revisionReturn.searchParams.get("baseRevision")).toBe("1");
+      await publishWork(page, "Readable, high-contrast header", `https://example.com/${suffix}/revised.penpot`);
+      await page.getByRole("button", { name: "Continue with whole document" }).click();
+      await expect(page.getByRole("heading", { name: "Propose changes" })).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      const preparedProposalPath = new URL(page.url()).pathname + new URL(page.url()).search;
+      await signOut(page);
+      await expect(page).toHaveURL(/\/$/);
+      await page.goto(preparedProposalPath);
+      await expect(page).toHaveURL(/\/login\?next=/);
+      expect(new URL(page.url()).searchParams.get("next")).toBe(preparedProposalPath);
+      await page.waitForLoadState("networkidle");
+      await page.getByLabel("Email").fill(contributorEmail);
+      await page.getByLabel("Password").fill(password);
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await expect(page.getByLabel("Related issue")).toHaveValue(requestId);
+      await expect(page.getByLabel("From")).toContainText("Revision 3");
+      await page.getByLabel("Title").fill("Improve mobile header and contrast");
+      await page.getByLabel("What changed?").fill("Added the requested title contrast.");
+      await page.getByLabel("Why?").fill("Address the owner's feedback.");
+      await page.getByRole("button", { name: "Create proposal" }).click();
+      await expect(page).toHaveURL(/\/proposals\/cm[a-z0-9]+$/);
+      const revisedProposalPath = new URL(page.url()).pathname;
+      expect(revisedProposalPath).not.toBe(firstProposalPath);
+      expect((await (await page.request.get(`/api/proposals/${firstProposalId}`)).json()).status).toBe("CHANGES_REQUESTED");
+      await owner.goto(revisedProposalPath);
+      await owner.getByRole("button", { name: "Approve change" }).click();
+      await expect(owner.getByRole("heading", { name: "Approved, awaiting application" })).toBeVisible();
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Approved, awaiting application" })).toBeVisible();
+      expect(await (await page.request.get(`/api${projectPath}/revisions`)).json()).toHaveLength(1);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await capture("04-approved-desktop.png");
+      await owner.getByLabel("Select all eligible approved changes for application").check();
+      await owner.getByRole("button", { name: "Apply 1 selected changes", exact: true }).click();
+      await owner.getByRole("dialog").getByRole("button", { name: "Apply 1 selected changes", exact: true }).click();
+      await expect(owner.getByRole("heading", { name: "Applied to the original" })).toBeVisible();
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Applied to the original" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Review latest revision" })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "Next step for this change" })).toContainText("The owner added this change to a new Revision");
+      const appliedRevisions = await (await page.request.get(`/api${projectPath}/revisions`)).json();
+      expect(appliedRevisions).toHaveLength(2);
+      expect(appliedRevisions[0].sourceUrl).toBe(`https://example.com/${suffix}/original.penpot`);
+      expect(appliedRevisions[1].sourceUrl).toBe(`https://example.com/${suffix}/revised.penpot`);
+      await capture("05-applied-desktop.png");
+      await page.setViewportSize({ width: 390, height: 844 });
+      const nextStep = page.getByRole("region", { name: "Next step for this change" });
+      await expect(nextStep.getByRole("link", { name: "View Revision 2" })).toBeVisible();
+      expect(await nextStep.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await capture("06-applied-mobile.png");
+      await nextStep.getByRole("link", { name: "View Revision 2" }).click();
+      await expect(page).toHaveURL(new RegExp(`${projectPath}/revisions/2$`));
+      expect(browserErrors).toEqual([]);
+    } finally {
+      await ownerContext.close();
+    }
+  });
 });
+
+async function publishWork(page: Page, title: string, sourceUrl: string) {
+  await page.waitForLoadState("networkidle");
+  await page.locator("form.revision-publish-form input[name=title]").fill(title);
+  await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill(title);
+  await page.getByLabel("Source URL").fill(sourceUrl);
+  await page.locator('input[name="previews"]').setInputFiles({ name: "design.png", mimeType: "image/png", buffer: tinyPng });
+  await page.getByLabel("Alt text for design.png").fill(title);
+  await page.getByRole("button", { name: "Publish revision" }).click();
+  await expect(page).toHaveURL(/\/contribute\?/);
+}
 
 async function signUp(page: Page, name: string, email: string, password: string) {
   await page.goto("/login");
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "New here? Create an account" }).click();
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email").fill(email);
@@ -286,6 +453,7 @@ async function signUp(page: Page, name: string, email: string, password: string)
 
 async function signIn(page: Page, email: string, password: string) {
   await page.goto("/login");
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
