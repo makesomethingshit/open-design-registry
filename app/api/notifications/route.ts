@@ -15,6 +15,7 @@ const notificationSelect = {
   forkedProject: { select: { slug: true, title: true } },
   revision: { select: { id: true, number: true, title: true } },
   release: { select: { id: true, number: true, title: true } },
+  proposal: { select: { id: true, proposalNumber: true, title: true } },
 } as const;
 
 export async function GET(request: Request) {

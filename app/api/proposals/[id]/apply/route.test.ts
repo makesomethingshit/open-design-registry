@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), updateIssue: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn(), findWatchers: vi.fn(), createNotifications: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), createNotification: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), updateIssue: vi.fn(), findAffectedChanges: vi.fn(), findChangeSets: vi.fn(), createHistory: vi.fn(), readBundle: vi.fn(), putBundle: vi.fn(), deleteObject: vi.fn(), findWatchers: vi.fn(), createNotifications: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: mocks.deleteObject }));
@@ -32,7 +32,7 @@ function partialApplyChanges() {
 
 function proposal(overrides: Record<string, unknown> = {}) {
   return {
-    id: "proposal", proposalNumber: 22, projectId: "target", baseRevisionId: "base", title: "Improve header", body: "Better hierarchy", status: "APPROVED",
+    id: "proposal", proposalNumber: 22, projectId: "target", authorId: "contributor", baseRevisionId: "base", title: "Improve header", body: "Better hierarchy", status: "APPROVED",
     baseRevision: { id: "base", projectId: "target", isPublished: true, sourceKey: "base-bundle" },
     sourceRevision: { id: "source", projectId: "source", isPublished: true, sourceKey: "source-bundle", sourceUrl: null, tool: "figma", toolVersion: "1", tags: ["ui"], sourceChecksum: "a".repeat(64), previews: [{ position: 0, key: "source-a-preview", url: "source-a-preview", mimeType: "image/png", size: 12, altText: "A" }, { position: 1, key: "source-b-preview", url: "source-b-preview", mimeType: "image/png", size: 12, altText: "B" }] },
     changeSet: { id: "set", changes: changes() }, appliedRevisions: [],
@@ -82,8 +82,37 @@ describe("selective proposal apply route", () => {
       changeReview: { createMany: mocks.createHistory },
       changeSet: { findMany: mocks.findChangeSets },
       projectWatch: { findMany: mocks.findWatchers },
-      notification: { createMany: mocks.createNotifications },
+      notification: { create: mocks.createNotification, createMany: mocks.createNotifications },
     }));
+  });
+
+  it("notifies for each partial apply revision and skips already-applied replays", async () => {
+    const rows = changes();
+    mocks.findProposal.mockImplementation(async () => proposal({ changeSet: { id: "set", changes: rows.map((row) => ({ ...row })) } }));
+    mocks.updateChanges.mockImplementation(async ({ where, data }) => {
+      for (const row of rows) if (where.id.in.includes(row.id)) Object.assign(row, data);
+    });
+    mocks.publishRevision.mockResolvedValueOnce({ id: "revision-11", number: 11 }).mockResolvedValueOnce({ id: "revision-12", number: 12 });
+    expect((await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) })).status).toBe(201);
+    mocks.findRevision.mockResolvedValueOnce({ id: "revision-11", number: 11 });
+    expect((await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) })).status).toBe(200);
+    expect(mocks.createNotification).toHaveBeenCalledOnce();
+    const afterFirst = { ...latestBundle, files: [{ ...sourceBundle.files[0], id: "target-a", name: "old-a.ai" }, latestBundle.files[1]] };
+    mocks.findLatest.mockResolvedValue({ id: "revision-11", number: 11 });
+    mocks.findRevision.mockResolvedValue(latest("revision-11", 11));
+    mocks.readBundle.mockImplementation(async (key: string) => key === "source-bundle" ? sourceBundle : key === "current-bundle" ? afterFirst : latestBundle);
+    expect((await POST(request({ changeIds: ["change-b"], reviewedLatestRevisionId: "revision-11", reviewedChangeIds: ["change-b"] }), { params: Promise.resolve({ id: "proposal" }) })).status).toBe(201);
+    expect(mocks.createNotification.mock.calls.map(([call]) => call.data)).toEqual([
+      { recipientId: "contributor", actorId: "owner", type: "PROPOSAL_APPLIED", projectId: "target", proposalId: "proposal", revisionId: "revision-11" },
+      { recipientId: "contributor", actorId: "owner", type: "PROPOSAL_APPLIED", projectId: "target", proposalId: "proposal", revisionId: "revision-12" },
+    ]);
+  });
+
+  it("rolls back apply and removes the uploaded bundle when notification fails", async () => {
+    mocks.createNotification.mockRejectedValueOnce(new Error("notification unavailable"));
+    expect((await POST(request({ changeIds: ["change-a"] }), { params: Promise.resolve({ id: "proposal" }) })).status).toBe(500);
+    await expect(mocks.transaction.mock.results[0].value).rejects.toThrow("notification unavailable");
+    expect(mocks.deleteObject).toHaveBeenCalledWith(expect.stringMatching(/^revisions\/target\//));
   });
 
   it("publishes one bundle revision for selected approved files and preserves unapplied review state", async () => {
