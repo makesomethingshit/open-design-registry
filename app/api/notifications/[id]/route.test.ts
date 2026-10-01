@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findFirst: vi.fn(), updat
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { notification: { findFirst: mocks.findFirst, update: mocks.update } } }));
 
+const { visibleNotificationWhere } = await import("@/src/lib/notification-visibility");
 const { PATCH } = await import("./route");
 
 function request(body: unknown) {
@@ -30,7 +31,7 @@ describe("notification read route", () => {
     const response = await PATCH(request({ read: true }), { params: Promise.resolve({ id: "notification-1" }) });
     expect(response.status).toBe(404);
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(mocks.findFirst).toHaveBeenCalledWith({ where: { id: "notification-1", recipientId: "owner" }, select: { id: true } });
+    expect(mocks.findFirst).toHaveBeenCalledWith({ where: { id: "notification-1", ...visibleNotificationWhere("owner") }, select: { id: true } });
   });
 
   it("marks an owned notification as read", async () => {

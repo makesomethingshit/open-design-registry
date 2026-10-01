@@ -387,6 +387,10 @@ enum NotificationType {
   FORK_CREATED
   REVISION_PUBLISHED
   RELEASE_PUBLISHED
+  PROPOSAL_CREATED
+  PROPOSAL_CHANGES_REQUESTED
+  PROPOSAL_APPROVED
+  PROPOSAL_APPLIED
 }
 
 model Discussion {
@@ -491,6 +495,7 @@ model Proposal {
   changeSet        ChangeSet?
   comments         ProposalComment[]
   appliedRevisions Revision[]     @relation("ProposalAppliedRevisions")
+  notifications    Notification[]
 
   @@unique([projectId, proposalNumber])
   @@unique([projectId, authorId, requestId])
@@ -603,6 +608,7 @@ model Notification {
   forkedProjectId String?
   revisionId      String?
   releaseId       String?
+  proposalId      String?
   readAt          DateTime?
   createdAt       DateTime         @default(now())
   recipient       User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
@@ -613,6 +619,7 @@ model Notification {
   forkedProject   Project?         @relation("NotificationForkedProject", fields: [forkedProjectId], references: [id], onDelete: SetNull)
   revision        Revision?        @relation("NotificationRevision", fields: [revisionId], references: [id], onDelete: SetNull)
   release         Release?         @relation("NotificationRelease", fields: [releaseId], references: [id], onDelete: SetNull)
+  proposal        Proposal?        @relation(fields: [proposalId], references: [id], onDelete: SetNull)
 
   @@index([recipientId, readAt, createdAt])
   @@index([actorId])
@@ -622,4 +629,5 @@ model Notification {
   @@index([forkedProjectId])
   @@index([revisionId])
   @@index([releaseId])
+  @@index([proposalId])
 }

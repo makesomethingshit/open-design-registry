@@ -450,6 +450,10 @@ export async function createProjectProposal(request: Request, scope: { slug: str
       },
       include: proposalDetails,
     });
+    const ownerId = lockedProjects.get(project.id)!.ownerId;
+    if (ownerId !== session.user.id) {
+      await tx.notification.create({ data: { recipientId: ownerId, actorId: session.user.id, type: "PROPOSAL_CREATED", projectId: project.id, proposalId: proposal.id } });
+    }
     return { proposal, created: true };
     });
   } catch (cause) {
@@ -536,6 +540,9 @@ export async function reviewProposalChange(request: Request, scope: { id: string
       await tx.changeReview.create({ data: { changeId: change.id, authorId: session.user.id, status: parsed.data.status, eventType: "REVIEW", comment: parsed.data.comment || null, checkedLatestRevisionId: latest.id, createdAt: reviewedAt } });
       const changes = await tx.change.findMany({ where: { changeSetId: proposal.changeSet.id }, select: { reviewStatus: true, appliedRevisionId: true } });
       const status = proposalStatusForChanges(changes.map((item) => item.reviewStatus), changes.filter((item) => item.appliedRevisionId).length);
+      if (status !== proposal.status && (status === "CHANGES_REQUESTED" || status === "APPROVED") && proposal.authorId !== session.user.id) {
+        await tx.notification.create({ data: { recipientId: proposal.authorId, actorId: session.user.id, type: status === "APPROVED" ? "PROPOSAL_APPROVED" : "PROPOSAL_CHANGES_REQUESTED", projectId: proposal.projectId, proposalId: proposal.id } });
+      }
       await tx.proposal.update({ where: { id: proposal.id }, data: { status, reviewerId: session.user.id } });
       return reviewed;
     });
@@ -723,6 +730,9 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         await tx.change.update({ where: { id: selected[0].id }, data: { appliedRevisionId: revision.id } });
         if (beforeBundle && afterBundle) await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, beforeBundle, afterBundle, null, revision);
         await tx.proposal.update({ where: { id: proposal.id }, data: { status: "ACCEPTED", acceptedById: session.user.id } });
+        if (proposal.authorId !== session.user.id) {
+          await tx.notification.create({ data: { recipientId: proposal.authorId, actorId: session.user.id, type: "PROPOSAL_APPLIED", projectId: initial.projectId, proposalId: proposal.id, revisionId: revision.id } });
+        }
         if (lockedProject.isPublic) await notifyRevisionWatchers(tx, initial.projectId, session.user.id, revision.id);
         return { revision, alreadyApplied: false };
       }
@@ -784,6 +794,9 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       await invalidateUpstreamApprovals(tx, initial.projectId, proposal.id, latestBundle, bundle, selected.map((change) => change.targetFileId).filter((id): id is string => Boolean(id)), revision);
       const appliedCount = proposal.changeSet.changes.filter((change) => change.appliedRevisionId).length + selected.length;
       await tx.proposal.update({ where: { id: proposal.id }, data: { status: proposalStatusForChanges(proposal.changeSet.changes.map((change) => change.reviewStatus), appliedCount), acceptedById: session.user.id } });
+      if (proposal.authorId !== session.user.id) {
+        await tx.notification.create({ data: { recipientId: proposal.authorId, actorId: session.user.id, type: "PROPOSAL_APPLIED", projectId: initial.projectId, proposalId: proposal.id, revisionId: revision.id } });
+      }
       if (lockedProject.isPublic) await notifyRevisionWatchers(tx, initial.projectId, session.user.id, revision.id);
       return { revision, alreadyApplied: false };
     });

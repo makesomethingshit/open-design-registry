@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findMany: vi.fn(), count:
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { notification: { findMany: mocks.findMany, count: mocks.count } } }));
 
+const { visibleNotificationWhere } = await import("@/src/lib/notification-visibility");
 const { GET } = await import("./route");
 
 describe("notification list route", () => {
@@ -25,9 +26,9 @@ describe("notification list route", () => {
     const response = await GET(new Request("http://localhost/api/notifications"));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ unreadCount: 1, notifications: [{ id: "notification", type: "ISSUE_CREATED" }] });
-    const visibility = { recipientId: "owner", OR: [{ type: { notIn: ["REVISION_PUBLISHED", "RELEASE_PUBLISHED"] } }, { project: { isPublic: true } }] };
+    const visibility = visibleNotificationWhere("owner");
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: visibility, orderBy: { createdAt: "desc" }, take: 50 }));
-    expect(mocks.findMany.mock.calls[0][0].select).toHaveProperty("discussion");
+    expect(mocks.findMany.mock.calls[0][0].select).toHaveProperty("proposal");
     expect(mocks.count).toHaveBeenCalledWith({ where: { ...visibility, readAt: null } });
   });
 });

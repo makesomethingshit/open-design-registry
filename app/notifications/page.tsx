@@ -28,6 +28,7 @@ export default async function NotificationsPage() {
         forkedProject: { select: { slug: true, title: true } },
         revision: { select: { id: true, number: true, title: true } },
         release: { select: { id: true, number: true, title: true } },
+        proposal: { select: { id: true, proposalNumber: true, title: true } },
       },
     }),
     prisma.notification.count({ where: { ...where, readAt: null } }),
@@ -35,7 +36,7 @@ export default async function NotificationsPage() {
 
   return <PageGrid aria-labelledby="notifications-heading">
     <ReadingColumn>
-      <PageHeader description="Track Issues, Discussions, and Forks in your projects, plus Revisions and Releases from projects you watch." eyebrow="ACTIVITY" id="notifications-heading" title="Notifications" />
+      <PageHeader description="Track Issues, Discussions, Forks, and Proposal submissions, reviews, and applied changes, plus Revisions and Releases from projects you watch." eyebrow="ACTIVITY" id="notifications-heading" title="Notifications" />
       <NotificationList notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} unreadCount={unreadCount} />
     </ReadingColumn>
   </PageGrid>;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), findChanges: vi.fn(), createHistory: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), findWatchers: vi.fn(), createNotifications: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), createNotification: vi.fn(), findInitial: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findProposal: vi.fn(), updateProposal: vi.fn(), updateChange: vi.fn(), updateChanges: vi.fn(), findChanges: vi.fn(), createHistory: vi.fn(), findLatest: vi.fn(), findRevision: vi.fn(), createRevision: vi.fn(), publishRevision: vi.fn(), findWatchers: vi.fn(), createNotifications: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { proposal: { findUnique: mocks.findInitial }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value, deleteObject: vi.fn() }));
@@ -27,7 +27,7 @@ function patchRequest(path: string, body: Record<string, unknown>) {
   return new Request(`http://localhost${path}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
 function close() { return closeProposal(patchRequest("/api/proposals/proposal", { status: "CLOSED" }), { id: "proposal" }); }
-function review() { return reviewProposalChange(patchRequest("/api/proposals/proposal/changes/change", { status: "APPROVED" }), { id: "proposal", changeId: "change" }); }
+function review(status = "APPROVED", changeId = "change") { return reviewProposalChange(patchRequest(`/api/proposals/proposal/changes/${changeId}`, { status, comment: "Review note" }), { id: "proposal", changeId }); }
 function apply() { return applyProposal(new Request("http://localhost/api/proposals/proposal/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changeIds: ["change"] }) }), { id: "proposal" }); }
 
 describe("proposal transition serialization", () => {
@@ -55,8 +55,48 @@ describe("proposal transition serialization", () => {
       changeReview: { create: mocks.createHistory },
       revision: { findFirst: mocks.findLatest, findUnique: mocks.findRevision, create: mocks.createRevision, update: mocks.publishRevision },
       projectWatch: { findMany: mocks.findWatchers },
-      notification: { createMany: mocks.createNotifications },
+      notification: { create: mocks.createNotification, createMany: mocks.createNotifications },
     }));
+  });
+
+  it("notifies once per aggregate review transition, including a later change request", async () => {
+    state = proposal("OPEN", "PENDING", null);
+    state.changeSet.changes.push({ ...state.changeSet.changes[0], id: "other-change" });
+    mocks.updateChange.mockImplementation(async ({ where, data }) => Object.assign(state.changeSet.changes.find((change) => change.id === where.id)!, data));
+    expect((await review("CHANGES_REQUESTED")).status).toBe(200);
+    expect((await review("CHANGES_REQUESTED", "other-change")).status).toBe(200);
+    expect(mocks.createNotification).toHaveBeenCalledOnce();
+    expect(mocks.createNotification).toHaveBeenLastCalledWith({ data: { recipientId: "contributor", actorId: "owner", type: "PROPOSAL_CHANGES_REQUESTED", projectId: "target", proposalId: "proposal" } });
+    expect((await review()).status).toBe(200);
+    expect(mocks.createNotification).toHaveBeenCalledOnce();
+    expect((await review("APPROVED", "other-change")).status).toBe(200);
+    expect((await review("APPROVED", "other-change")).status).toBe(200);
+    expect(mocks.createNotification).toHaveBeenCalledTimes(2);
+    expect(mocks.createNotification).toHaveBeenLastCalledWith({ data: { recipientId: "contributor", actorId: "owner", type: "PROPOSAL_APPROVED", projectId: "target", proposalId: "proposal" } });
+    expect((await review("CHANGES_REQUESTED")).status).toBe(200);
+    expect(mocks.createNotification).toHaveBeenCalledTimes(3);
+  });
+
+  it("notifies the author once for whole-document apply and skips its replay", async () => {
+    expect((await apply()).status).toBe(201);
+    expect((await apply()).status).toBe(200);
+    expect(mocks.createNotification).toHaveBeenCalledOnce();
+    expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "contributor", actorId: "owner", type: "PROPOSAL_APPLIED", projectId: "target", proposalId: "proposal", revisionId: "revision-11" } });
+  });
+
+  it("skips review and apply self-notifications", async () => {
+    state = proposal("OPEN", "PENDING", null);
+    state.authorId = "owner";
+    expect((await review()).status).toBe(200);
+    expect((await apply()).status).toBe(201);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("rejects the review transaction if its notification fails", async () => {
+    state = proposal("OPEN", "PENDING", null);
+    mocks.createNotification.mockRejectedValueOnce(new Error("notification unavailable"));
+    expect((await review()).status).toBe(500);
+    await expect(mocks.transaction.mock.results[0].value).rejects.toThrow("notification unavailable");
   });
 
   it("keeps ACCEPTED and one revision when apply wins before close", async () => {

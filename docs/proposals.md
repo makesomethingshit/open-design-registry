@@ -155,3 +155,9 @@ Contribution scope is shown beside the project action and recalculated for each 
 Apply·Approve가 `409`이면 UI는 최신 상태를 다시 조회하고 비교 확인·모달을 초기화합니다. 응답에 유효한 `conflictChangeIds`가 있으면 그 선택을 해제합니다. payload가 없거나 잘못되었다고 무조건 전체 선택을 없애거나 자동 재적용하지 않습니다. API 소비자도 최신 데이터와 승인·선택 가능 여부를 다시 확인해야 합니다.
 
 관련 코드: [Proposal 처리](../src/lib/proposal-handlers.ts), [충돌 판정](../src/lib/proposal-conflicts.ts), [번들·의존성](../src/lib/revision-bundle.ts), [입력 스키마](../src/lib/project-validation.ts).
+
+## Proposal lifecycle notifications
+
+A new Proposal notifies the target project owner. Aggregate transitions into `CHANGES_REQUESTED` or `APPROVED` notify the author, and each actual apply notifies the author with the new Revision. Self-notifications, request-ID creation replays, repeated reviews with the same aggregate status, and `alreadyApplied` replays do not create notifications. Notification writes share the domain transaction; a failure rolls back the mutation.
+
+Notifications link to `/proposals/[id]` and remain visible only while the recipient can read the target project, published base Revision, and published source Revision and its project. They use the existing unread count and mark-as-read actions. Project Watch continues to notify only about Revision and Release publication; Proposal lifecycle notifications go only to the direct parties.

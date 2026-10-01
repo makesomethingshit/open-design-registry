@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), findBase: vi.fn(), findSource: vi.fn(), findIssue: vi.fn(), createProposal: vi.fn(), findMany: vi.fn(), count: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findLatestProposal: vi.fn(), readBundle: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), createNotification: vi.fn(), findProject: vi.fn(), findBase: vi.fn(), findSource: vi.fn(), findIssue: vi.fn(), createProposal: vi.fn(), findMany: vi.fn(), count: vi.fn(), transaction: vi.fn(), lockProject: vi.fn(), findLatestProposal: vi.fn(), readBundle: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findFirst: mocks.findBase, findUnique: mocks.findSource }, issue: { findFirst: mocks.findIssue }, proposal: { create: mocks.createProposal, findMany: mocks.findMany, count: mocks.count }, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
@@ -62,8 +62,26 @@ describe("proposal creation route", () => {
     });
     mocks.findLatestProposal.mockImplementation(({ where }: { where: { requestId?: string } }) => Promise.resolve(where.requestId ? null : { proposalNumber: 14 }));
     mocks.count.mockResolvedValue(0);
-    mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ $queryRaw: mocks.lockProject, revision: { findFirst: mocks.findBase }, proposal: { findFirst: mocks.findLatestProposal, create: mocks.createProposal } }));
+    mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ $queryRaw: mocks.lockProject, revision: { findFirst: mocks.findBase }, proposal: { findFirst: mocks.findLatestProposal, create: mocks.createProposal }, notification: { create: mocks.createNotification } }));
     mocks.createProposal.mockResolvedValue(visibleProposal());
+  });
+
+  it("notifies only the target owner for a newly created proposal", async () => {
+    expect((await POST(request(createBody()), { params: Promise.resolve({ slug: "target" }) })).status).toBe(201);
+    expect(mocks.createNotification).toHaveBeenCalledOnce();
+    expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "owner", actorId: "contributor", type: "PROPOSAL_CREATED", projectId: "target", proposalId: "proposal" } });
+  });
+
+  it("does not notify the author when they own the target project", async () => {
+    mocks.lockProject.mockImplementation(async (_sql: unknown, id: string) => [{ id, ownerId: "contributor", license: "MIT", isPublic: true }]);
+    expect((await POST(request(createBody()), { params: Promise.resolve({ slug: "target" }) })).status).toBe(201);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("propagates notification failure through the creation transaction", async () => {
+    mocks.createNotification.mockRejectedValueOnce(new Error("notification unavailable"));
+    await expect(POST(request(createBody()), { params: Promise.resolve({ slug: "target" }) })).rejects.toThrow("notification unavailable");
+    await expect(mocks.transaction.mock.results[0].value).rejects.toThrow("notification unavailable");
   });
 
   it("validates title, body, and the selected file list before creating a proposal", async () => {
@@ -409,6 +427,7 @@ describe("proposal creation route", () => {
     const response = await POST(request({ baseRevisionId: "base", sourceRevisionId: "source", title: "Retry", body: "Explain", requestId: "3466d7a0-007d-4a11-b1ee-393d16ef1a34", changes: [{ action: "ADD_UNIT", sourceFileId: "source-file" }] }), { params: Promise.resolve({ slug: "target" }) });
     expect(response.status).toBe(200);
     expect(mocks.createProposal).not.toHaveBeenCalled();
+    expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
   it("returns lightweight cursor summaries without change assets", async () => {
