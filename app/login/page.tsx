@@ -53,7 +53,7 @@ export default function LoginPage() {
   return <PageGrid aria-labelledby="login-heading">
     <FormColumn>
       <Panel>
-        <PageHeader id="login-heading" title={signIn ? "Sign in" : "Create account"} description="Access your Open Design Registry account or create one." />
+        <PageHeader id="login-heading" title={signIn ? "Sign in" : "Create account"} description={safeNextPath(searchParams.get("next")) === "/projects/new" ? "Sign in or create an account before starting your project. You will return to the project form." : "Access your Open Design Registry account or create one."} />
         <form className="form" noValidate onSubmit={submit} aria-busy={submitting}>
           <Stack gap={4}>
             {!signIn && <Field error={fieldErrors.name} id="login-name" invalid={Boolean(fieldErrors.name)} label="Name" required><Input name="name" autoComplete="name" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.name; return next; })} required /></Field>}
