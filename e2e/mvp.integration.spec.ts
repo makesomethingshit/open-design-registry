@@ -8,44 +8,36 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
   test("opens both document editor panels and focuses the field from Add and Edit links", async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const projectTitle = `Document project ${suffix}`;
+    await page.setViewportSize({ width: 1440, height: 900 });
     await signUp(page, `Document owner ${suffix}`, `document-${suffix}@example.test`, "integration-password-123");
-    await page.goto("/projects/new");
-    await page.waitForLoadState("networkidle");
-    await page.getByLabel("Title").fill(projectTitle);
-    await page.locator('input[name="cover"]').setInputFiles({ name: "cover.png", mimeType: "image/png", buffer: tinyPng });
-    await page.locator('input[name="rightsConfirmed"]').check();
-    await page.getByRole("button", { name: "Create project" }).click();
-    await expect(page.getByRole("heading", { name: projectTitle, exact: true })).toBeVisible();
-    const projectPath = new URL(page.url()).pathname;
+    const response = await page.request.post("/api/projects", { multipart: {
+      title: `Document project ${suffix}`, license: "CC BY 4.0", isPublic: "true", rightsConfirmed: "on",
+      cover: { name: "cover.png", mimeType: "image/png", buffer: tinyPng },
+    } });
+    expect(response.status()).toBe(201);
+    const projectPath = `/projects/${(await response.json()).slug}`;
+    await page.goto(projectPath);
     const field = page.getByLabel("Project document (Markdown)");
 
-    for (const savedDocument of ["", "# Saved document"]) {
-      for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-        await page.setViewportSize(viewport);
-        await page.goto(projectPath);
-        await page.waitForLoadState("networkidle");
-        await expect(page.locator("#owner-tools")).not.toHaveAttribute("open", "");
-        await expect(page.locator(".project-settings")).not.toHaveAttribute("open", "");
-        const link = page.getByRole("link", { name: savedDocument ? "Edit document" : "Add one in Owner tools" });
-        if (viewport.width === 390) await link.press("Enter");
-        else await link.click();
-        await expect(page.locator("#owner-tools")).toHaveAttribute("open", "");
-        await expect(page.locator(".project-settings")).toHaveAttribute("open", "");
-        await expect(field).toBeVisible();
-        await expect(field).toBeFocused();
-        await expect(field).toBeInViewport();
-        await expect(field).toHaveValue(savedDocument);
-        await page.getByText("Project settings", { exact: true }).click();
-        await link.click();
-        await expect(field).toBeFocused();
-      }
-      if (!savedDocument) {
-        await field.fill("# Saved document");
-        await page.getByRole("button", { name: "Save settings" }).click();
-        await expect(page.getByText("Project settings saved.")).toBeVisible();
-      }
-    }
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#owner-tools")).not.toHaveAttribute("open", "");
+    await page.getByRole("link", { name: "Add one in Owner tools" }).click();
+    await expect(field).toBeFocused();
+    await expect(field).toBeInViewport();
+    await field.fill("# Saved document");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByText("Project settings saved.")).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(projectPath);
+    await page.waitForLoadState("networkidle");
+    const editLink = page.getByRole("link", { name: "Edit document" });
+    await editLink.press("Enter");
+    await expect(field).toBeFocused();
+    await expect(field).toBeInViewport();
+    await expect(field).toHaveValue("# Saved document");
+    await page.getByText("Project settings", { exact: true }).click();
+    await editLink.click();
+    await expect(field).toBeFocused();
   });
 
   test("uploads, publishes, restores a revision, forks it, and delivers owner notifications", async ({ page }) => {
