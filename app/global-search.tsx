@@ -1,20 +1,23 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Icon } from "@/src/components/ui/icon";
 
 export function ProjectSearchInput({ id, placeholder }: { id?: string; placeholder: string }) {
   const pathname = usePathname();
   const query = useSearchParams().get("q")?.trim() ?? "";
-  const [value, setValue] = useState(query);
+  const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const syncQuery = () => setValue(new URLSearchParams(window.location.search).get("q")?.trim() ?? "");
-    setValue(query);
+    const historyNavigation = performance.getEntriesByType("navigation").some((entry) => (entry as PerformanceNavigationTiming).type === "back_forward");
+    const syncQuery = (event?: PageTransitionEvent) => {
+      if ((event?.persisted || historyNavigation) && input.current) input.current.value = new URLSearchParams(window.location.search).get("q")?.trim() ?? "";
+    };
+    syncQuery();
     window.addEventListener("pageshow", syncQuery);
     return () => window.removeEventListener("pageshow", syncQuery);
-  }, [pathname, query]);
-  return <input id={id} name="q" onChange={(event) => setValue(event.target.value)} placeholder={placeholder} type="search" value={value} />;
+  }, []);
+  return <input key={`${pathname}?${query}`} ref={input} id={id} name="q" placeholder={placeholder} type="search" defaultValue={query} />;
 }
 
 export default function GlobalSearch() {

@@ -61,8 +61,11 @@ test("keeps landing, public Explore, and My projects distinct on desktop and mob
       await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
 
       await page.goto("/feed");
+      await page.waitForLoadState("networkidle");
       const search = page.locator("#global-search-input");
       await search.fill(title);
+      await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false })));
+      await expect(search).toHaveValue(title);
       await search.press("Enter");
       await expect(page).toHaveURL(new RegExp(`/explore\\?q=${encodeURIComponent(title).replace(/%20/g, "\\+")}`));
       await expect(search).toHaveValue(title);
