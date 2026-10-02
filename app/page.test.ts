@@ -1,28 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { expect, it } from "vitest";
+import HomePage from "./page";
 
-const mocks = vi.hoisted(() => ({ projectFindMany: vi.fn() }));
-
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany } } }));
-vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value }));
-
-const { default: HomePage } = await import("./page");
-
-describe("home project sorting", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.projectFindMany.mockResolvedValue([]);
-  });
-
-  it("uses updatedAt for recent sorting while keeping every public filter", async () => {
-    await HomePage({ searchParams: Promise.resolve({ q: "kit", license: "MIT", sort: "recent", tool: "Penpot", tag: "UI" }) });
-    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        isPublic: true,
-        OR: [{ title: { contains: "kit", mode: "insensitive" } }, { description: { contains: "kit", mode: "insensitive" } }],
-        license: "MIT",
-        revisions: { some: { tool: { equals: "penpot" }, tags: { hasEvery: ["ui"] } } },
-      },
-      orderBy: { updatedAt: "desc" },
-    }));
-  });
+it("introduces the product and links to public Explore", () => {
+  const markup = renderToStaticMarkup(HomePage());
+  expect(markup).toContain("Design projects you can trace and build on.");
+  expect(markup).toContain('href="/explore"');
+  expect(markup).not.toContain('id="projects"');
 });

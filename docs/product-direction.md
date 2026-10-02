@@ -34,6 +34,12 @@ ODR의 장기 목표는 [Vision](../VISION.md), 그 목표를 지탱하는 관�
 
 전역 Feed는 조용하게 유지하고 Revision·Release처럼 프로젝트에 실질적인 변화가 생긴 결과를 주로 보여 준다. 프로젝트 상세에서는 Proposal·Discussion·Issue·Design Request·Review까지 과정과 맥락을 볼 수 있게 한다. 게시물이나 활동도 가능하면 Project·Revision·Release·Proposal과 연결한다. 목적은 콘텐츠 소비보다 프로젝트 발견·이해·참여다.
 
+## 공개 탐색과 개인 작업 공간
+
+`/`는 제품 소개, `/explore`는 공개 프로젝트 탐색, `/projects`는 로그인 사용자의 My projects다. 로그인 여부가 공개 URL의 역할을 바꾸지 않는다. Explore 링크와 전역 검색은 `/explore`로 연결한다.
+
+Explore는 제목, 한 문장 설명, 검색·필터, 실제 프로젝트 목록, 보조 행동 순서로 구성한다. 프로젝트의 원본·Revision·기여 맥락은 유지한다.
+
 ## 제품 경계
 
 ODR은 완성작 인기 경쟁을 위한 포트폴리오 SNS, 사람 Follow와 개인 브랜딩 중심의 일반 SNS, 자체 디자인 편집기, 단순 파일 저장소를 목표로 하지 않는다. 도구가 달라도 프로젝트의 원본·변경·출처·기여를 이어 갈 수 있어야 한다.

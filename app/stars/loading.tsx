@@ -1,4 +1,4 @@
-import exploreStyles from "../page.module.css";
+import exploreStyles from "../explore/page.module.css";
 import styles from "./stars.module.css";
 
 export default function LoadingStars() {

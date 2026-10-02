@@ -29,7 +29,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <p className={styles.detail}>{item.type === "RELEASE" ? `Release ${item.number}` : `Revision ${item.number}`} · {item.publisher ? `Published by ${item.publisher}` : "Publisher not recorded"}</p>
         {item.description && <p className={styles.description}>{item.description}</p>}
       </li>;
-    })}</ol> : <EmptyState action={<Link href="/">Explore projects</Link>} title="No public changes yet.">Published revisions and releases will appear here.</EmptyState>}
+    })}</ol> : <EmptyState action={<Link href="/explore">Explore projects</Link>} title="No public changes yet.">Published revisions and releases will appear here.</EmptyState>}
     {nextCursor && <nav aria-label="Feed pages" className={styles.pagination}><Link href={`/feed?cursor=${encodeURIComponent(nextCursor)}`}>Older changes</Link></nav>}
   </ReadingColumn></PageGrid>;
 }
