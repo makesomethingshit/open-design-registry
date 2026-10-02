@@ -39,7 +39,9 @@ test("keeps landing, public Explore, and My projects distinct on desktop and mob
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Design projects you can trace and build on." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Good design. Built in the open." })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`landing-${signedIn}-${viewport.width}.png`), fullPage: true });
       await expect(page.locator("#projects")).toHaveCount(0);
       await page.getByRole("link", { name: "Explore projects", exact: true }).click();
       await expect(page).toHaveURL(/\/explore$/);
