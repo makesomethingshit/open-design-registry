@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Icon } from "@/src/components/ui/icon";
 import buttonStyles from "@/src/components/ui/button.module.css";
 import styles from "./page.module.css";
@@ -9,44 +10,71 @@ const secondaryLink = `${buttonStyles.button} ${buttonStyles.secondary} ${button
 export default function HomePage() {
   return <div className={styles.landing}>
     <section aria-labelledby="landing-heading" className={styles.hero}>
-      <div className={styles.heroCopy}>
-        <p className={styles.eyebrow}>Design belongs in the open</p>
-        <h1 id="landing-heading">Good design.<br /><span>Built in the open.</span></h1>
-        <p className={styles.intro}>Discover the source. Follow the changes.<br />Make something of your own.</p>
-        <div className={styles.heroActions}>
-          <Link className={primaryLink} href="/explore">Explore projects</Link>
-          <Link className={secondaryLink} href="/projects/new">Create a project</Link>
-        </div>
-        <p className={styles.heroNote}>Open files. Shared history. Your next starting point.</p>
+      <p className={styles.eyebrow}>Open source. Open possibilities.</p>
+      <h1 id="landing-heading">Good design.<br /><span>Built in the open.</span></h1>
+      <p className={styles.intro}>A home for design you can open, understand, and build on.<br className={styles.desktopBreak} /> Source files, shared history, and a place to make your next move.</p>
+      <div className={styles.heroActions}>
+        <Link className={primaryLink} href="/explore">Explore projects <span aria-hidden="true">↗</span></Link>
+        <Link className={secondaryLink} href="/projects/new">Create a project</Link>
       </div>
-      <figure className={styles.showcase}>
-        <figcaption className={styles.eyebrow}>An open project, from the inside</figcaption>
-        <div className={styles.projectPreview}>
-          <div className={styles.previewHeading}><strong>Common Ground</strong><span>Example project</span></div>
-          <svg className={styles.artwork} viewBox="0 0 560 192" aria-hidden="true">
-            <text x="24" y="66">COMMON</text><text x="24" y="121">GROUND</text>
-            <rect x="368" y="24" width="112" height="112" className={styles.artSquare} />
-            <circle cx="480" cy="128" r="56" className={styles.artCircle} />
-          </svg>
+      <p className={styles.heroNote}>Browse freely. Start with what inspires you.</p>
+    </section>
+
+    <div className={styles.stage}>
+      <figure className={styles.projectWindow}>
+        <figcaption className={styles.sampleLabel}>Example project / illustrative content</figcaption>
+        <div className={styles.projectHeading}><div><h2><span>studio /</span> Aster coffee identity</h2><p><Icon name="globe" size={16} /> Public <span>·</span> Active <span>·</span> CC BY 4.0</p></div><span className={styles.projectMark} aria-hidden="true">a*</span></div>
+        <div className={styles.projectSections} aria-hidden="true"><span>Overview</span><span>Revisions</span><span>Releases</span><span>Proposals</span><span>Discussions</span></div>
+        <div className={styles.projectBody}>
+          <Image className={styles.projectArtwork} src="/landing-aster.svg" width={960} height={600} unoptimized alt="Original Aster sample identity: green and cream coffee packaging with a botanical print." />
+          <aside className={styles.context} aria-label="Example source and revision history">
+            <p className={styles.panelLabel}>Published source</p>
+            <strong className={styles.sourceName}><Icon name="file" />aster-identity.penpot</strong>
+            <p className={styles.contextNote}>Editable files, with their origin attached.</p>
+            <div className={styles.history}><p className={styles.panelLabel}>Revision history</p><ol>
+              <li><span>r3</span><div><strong>Packaging exploration</strong><small>A new direction, same project.</small></div></li>
+              <li><span>r2</span><div>Color and typography</div></li>
+              <li><span>r1</span><div>Initial identity</div></li>
+            </ol></div>
+            <p className={styles.contextNote}>Every revision keeps a starting point.</p>
+          </aside>
         </div>
-        <dl className={styles.projectContext}>
-          <div><dt><Icon name="file" size={16} />Source</dt><dd><strong>common-ground.penpot</strong><p>The editable starting point.</p></dd></div>
-          <div><dt><Icon name="clock" size={16} />Revision history</dt><dd><p><span>r1</span> Initial design</p><p><span>r2</span> Refined typography</p></dd></div>
-        </dl>
       </figure>
+    </div>
+
+    <div className={styles.tools}><p className={styles.panelLabel}>Your tool. Your files. A shared place to build.</p><ul aria-label="Examples of design tools and source formats"><li>Penpot</li><li>Figma</li><li>SVG</li><li>Source files</li></ul></div>
+
+    <section aria-labelledby="workflow-heading" className={styles.features}>
+      <p className={styles.eyebrow}>The work, and everything behind it.</p>
+      <h2 id="workflow-heading">A file is only the beginning.</h2>
+      <div className={styles.featureGrid}>
+        <article className={styles.progress}>
+          <p className={styles.panelLabel}>01 / Keep the work moving</p>
+          <h3>One idea.<br />Room for the next.</h3>
+          <p className={styles.featureDescription}>Fork the source. Explore a direction. Propose a change.<br className={styles.desktopBreak} /> The project carries the context forward.</p>
+          <div className={styles.contributionExample}>
+            <Image src="/landing-aster.svg" width={960} height={600} unoptimized alt="" loading="lazy" />
+            <div className={styles.proposal}><Icon name="fork" /><strong>Packaging exploration</strong><span>Fork → Proposal → Review</span><p>A new revision, with its origin intact.</p></div>
+          </div>
+          <p className={styles.sampleLabel}>Illustrative workflow</p>
+        </article>
+        <article className={styles.files}>
+          <p className={styles.panelLabel}>02 / Open the source</p>
+          <h3>Look beyond the preview.</h3>
+          <ul><li><Icon name="file" /><span>aster-identity.penpot</span><small>Source</small></li><li><Icon name="image" /><span>packaging.svg</span><small>Asset</small></li></ul>
+        </article>
+        <article className={styles.contribute}>
+          <p className={styles.panelLabel}>03 / Create in your own tool</p>
+          <h3>Different tools.<br />Shared progress.</h3>
+          <p className={styles.featureDescription}>Publish your source and propose the next revision.</p>
+          <Link href="/contribute">Find a design request <span aria-hidden="true">→</span></Link>
+        </article>
+      </div>
     </section>
-    <section aria-labelledby="workflow-heading" className={styles.workflow}>
-      <p className={styles.eyebrow}>From inspiration to contribution</p>
-      <h2 id="workflow-heading">More than a finished picture.</h2>
-      <ol className={styles.steps}>
-        <li><span>01 / Source</span><h3>Start with the source</h3><p>Inspect the published files and understand where the design began.</p></li>
-        <li><span>02 / History</span><h3>Keep the context</h3><p>Follow published revisions, releases, and the decisions behind the work.</p></li>
-        <li><span>03 / Contribution</span><h3>Make the next move</h3><p>Fork a project, edit in your own tool, and propose a revision for review.</p></li>
-      </ol>
-    </section>
+
     <section aria-labelledby="start-heading" className={styles.start}>
-      <div><h2 id="start-heading">Find your next starting point.</h2><p>Browse public work. Build on what inspires you.</p></div>
-      <Link className={primaryLink} href="/explore">Find a project</Link>
+      <div><h2 id="start-heading">Your next idea<br />has a starting point.</h2><p>Discover open work. Make it your own.</p></div>
+      <Link className={primaryLink} href="/explore">Find a project <span aria-hidden="true">↗</span></Link>
     </section>
   </div>;
 }

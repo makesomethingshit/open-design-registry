@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600">
+  <rect width="960" height="600" fill="#D8E4DC"/>
+  <path d="M0 466 960 302V600H0Z" fill="#BCCFC4"/>
+  <ellipse cx="671" cy="514" rx="223" ry="35" fill="#163E32" opacity=".14"/>
+  <g fill="#173E32" font-family="Arial,sans-serif">
+    <text x="54" y="72" font-size="13" letter-spacing="3">AN EVERYDAY RITUAL, REIMAGINED.</text>
+    <text x="46" y="244" font-size="143" letter-spacing="-9">aster</text>
+    <text x="54" y="281" font-size="15" letter-spacing="4">COFFEE &amp; COMMON GROUND</text>
+    <text x="54" y="540" font-size="12" letter-spacing="2">IDENTITY / PACKAGING / PRINT</text>
+  </g>
+  <g transform="translate(626 57) rotate(9)">
+    <rect width="214" height="270" rx="3" fill="#FAF4DA"/>
+    <path d="M36 233C99 188 66 136 120 69M120 69C120 132 168 141 171 177M85 158C40 131 43 99 38 88C92 91 100 120 85 158M126 111C151 67 180 65 193 65C175 112 153 121 126 111" fill="none" stroke="#173E32" stroke-width="4"/>
+    <text x="20" y="34" fill="#173E32" font-family="Arial,sans-serif" font-size="22">Grow something good.</text>
+  </g>
+  <g transform="translate(462 240) rotate(-7)">
+    <path d="M11 0H183L198 28V258H0V28Z" fill="#173E32"/>
+    <path d="M11 0H183L171 18H23Z" fill="#416452"/>
+    <rect x="17" y="44" width="164" height="181" rx="2" fill="#EBD688"/>
+    <text x="29" y="101" fill="#173E32" font-family="Arial,sans-serif" font-size="49" letter-spacing="-3">aster</text>
+    <path d="M33 131H165" stroke="#173E32"/>
+    <text x="29" y="154" fill="#173E32" font-family="Arial,sans-serif" font-size="11" letter-spacing="1">HOUSE BLEND / 01</text>
+    <text x="29" y="194" fill="#173E32" font-family="Arial,sans-serif" font-size="10">A little brighter, every day.</text>
+    <text x="29" y="211" fill="#173E32" font-family="Arial,sans-serif" font-size="9">250G / WHOLE BEAN COFFEE</text>
+  </g>
+  <g transform="translate(740 369) rotate(6)">
+    <ellipse cx="62" cy="139" rx="62" ry="18" fill="#244A3D"/>
+    <path d="M0 6H124L107 135Q62 155 17 135Z" fill="#FAF4DA"/>
+    <ellipse cx="62" cy="6" rx="62" ry="18" fill="#173E32"/>
+    <ellipse cx="62" cy="4" rx="51" ry="11" fill="#416452"/>
+    <text x="20" y="81" fill="#173E32" font-family="Arial,sans-serif" font-size="32" letter-spacing="-2">aster</text>
+  </g>
+  <g transform="translate(72 369)" fill="#173E32">
+    <path d="M36 0C76 0 74 44 43 43C71 71 34 100 19 61C8 91-26 65 2 43C-35 40-21 0 8 19C-6-18 30-27 36 0Z"/>
+    <circle cx="18" cy="35" r="10" fill="#EBD688"/>
+    <text x="73" y="39" font-family="Arial,sans-serif" font-size="13">Made for the moments</text>
+    <text x="73" y="60" font-family="Arial,sans-serif" font-size="13">between everything else.</text>
+  </g>
+</svg>
