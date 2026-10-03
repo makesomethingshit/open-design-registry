@@ -20,6 +20,7 @@ import { ProjectStarButton } from "./project-star-button";
 import { ProjectWatchButton } from "./project-watch-button";
 import IssueBoard from "./issue-board";
 import ProjectDocument from "./project-document";
+import ProjectAbout from "./project-about";
 import ProjectSettingsForm from "./project-settings-form";
 import ProposalList, { type ProposalListItem } from "./proposal-list";
 import RevisionPublishForm from "./revision-publish-form";
@@ -114,7 +115,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           <figcaption>{latestRevision ? `Revision ${latestRevision.number}` : "Project cover"}</figcaption>
         </figure>
         <aside className={styles.infoRail}>
-          <section><p className={styles.eyebrow}>Project information</p><h2 id="overview-heading">About</h2>{project.description ? <p className={styles.prose}>{project.description}</p> : <p className={styles.muted}>No project description has been added.</p>}</section>
+          <ProjectAbout activityStatus={project.activityStatus} description={project.description} isOwner={session?.user.id === project.ownerId} license={project.license} slug={project.slug} title={project.title} />
           <dl className={styles.infoList}>
             <div><dt>License</dt><dd>{project.license}</dd></div>
             <div><dt>Owner</dt><dd>{project.owner.name}</dd></div>
@@ -150,7 +151,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     </section>
 
     {session?.user.id === project.ownerId && contributionReturn && <Banner title="Prepare your working revision" tone="info">Edit the source in an external design tool, then publish a new revision here. Publishing returns to the target contribution workspace.</Banner>}
-    {session?.user.id === project.ownerId && <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} document={project.document ?? ""} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
+    {session?.user.id === project.ownerId && <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} key={JSON.stringify([project.title, project.description, project.license, project.activityStatus, project.isPublic])} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
 
     <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>

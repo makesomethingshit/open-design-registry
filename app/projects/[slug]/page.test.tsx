@@ -281,11 +281,13 @@ describe("Project Document section", () => {
   it("shows the empty state with an owner edit CTA only to the owner", async () => {
     const ownerMarkup = await renderProjectPage({ user: { id: "owner" } });
     expect(ownerMarkup).toContain("No project document has been added yet.");
-    expect(ownerMarkup).toContain("Add one in Owner tools");
+    expect(ownerMarkup).toContain("Add document");
+    expect(ownerMarkup).toContain("Edit About");
 
     const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } });
     expect(visitorMarkup).toContain("No project document has been added yet.");
-    expect(visitorMarkup).not.toContain("Add one in Owner tools");
+    expect(visitorMarkup).not.toContain("Add document");
+    expect(visitorMarkup).not.toContain("Edit About");
     expect(visitorMarkup).toContain("A revision has not been published yet.");
     expect(visitorMarkup).not.toContain('href="#revisions">Revisions</a>');
   });
