@@ -128,7 +128,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           </dl>
           {!project.isPublic && session?.user.id === project.ownerId && <p className={styles.privateNote}>Private workspace visible to you.</p>}
         </aside>
-        <ProjectDocument document={project.document ?? ""} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
+        <ProjectDocument document={project.document ?? ""} hasRevision={Boolean(latestRevision)} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
         <div className={styles.activityGrid}>
           <section className={styles.activity}>
             <header><h2>Looking for contributions</h2><Link href="#issues">View issues</Link></header>

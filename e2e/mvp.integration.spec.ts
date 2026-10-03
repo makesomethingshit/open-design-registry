@@ -26,8 +26,19 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await visitor.goto(projectPath);
       const document = visitor.locator("#overview #project-document");
       await expect(document).toContainText("Read About for a short summary");
-      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveAttribute("href", "#revisions");
+      await expect(document).toContainText("A revision has not been published yet.");
+      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveCount(0);
       await expect(document.getByRole("link", { name: "Add one in Owner tools" })).toHaveCount(0);
+
+      const published = await page.request.post(`/api${projectPath}/revisions`, { multipart: {
+        title: "Initial design", changeDescription: "Publish the first design", sourceUrl: "https://example.test/design.fig",
+        previews: { name: "design.png", mimeType: "image/png", buffer: tinyPng }, altTexts: "Initial design preview",
+      } });
+      expect(published.status()).toBe(201);
+      await visitor.reload();
+      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveAttribute("href", "#revisions");
+      await expect(document).toContainText("for the current design.");
+      await expect(document).not.toContainText("A revision has not been published yet.");
 
       const saved = await page.request.patch(`/api${projectPath}`, { data: { document: "# Design principles\n\nKeep the work open and explain how to contribute." } });
       expect(saved.status()).toBe(200);

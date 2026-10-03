@@ -286,6 +286,8 @@ describe("Project Document section", () => {
     const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } });
     expect(visitorMarkup).toContain("No project document has been added yet.");
     expect(visitorMarkup).not.toContain("Add one in Owner tools");
+    expect(visitorMarkup).toContain("A revision has not been published yet.");
+    expect(visitorMarkup).not.toContain('href="#revisions">Revisions</a>');
   });
 
   it("never renders raw HTML from the document", async () => {

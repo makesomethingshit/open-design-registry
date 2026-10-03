@@ -5,9 +5,11 @@ import styles from "./project.module.css";
 export default function ProjectDocument({
   document,
   isOwner,
+  hasRevision,
 }: {
   document: string;
   isOwner: boolean;
+  hasRevision: boolean;
   slug: string;
 }) {
   const body = document.trim();
@@ -38,8 +40,10 @@ export default function ProjectDocument({
               {" "}Share the project's goals, design principles and ways to contribute.{" "}
               <ProjectDocumentEditLink>Add one in Owner tools</ProjectDocumentEditLink>.
             </>
-          ) : (
+          ) : hasRevision ? (
             <> Read About for a short summary and browse <a href="#revisions">Revisions</a> for the current design.</>
+          ) : (
+            <> Read About for a short summary. A revision has not been published yet.</>
           )}
         </p>
       )}
