@@ -135,7 +135,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       } });
       expect(published.status()).toBe(201);
       await visitor.reload();
-      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveAttribute("href", "#revisions");
+      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveAttribute("href", `${projectPath}/revisions`);
       await expect(document).toContainText("for the current design.");
       await expect(document).not.toContainText("A revision has not been published yet.");
 
@@ -171,7 +171,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     const projectPath = `/projects/${(await response.json()).slug}`;
     await page.goto(projectPath);
     await page.waitForLoadState("networkidle");
-    await expect(page.locator("#owner-tools")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#owner-tools")).toHaveCount(0);
     await page.getByRole("button", { name: "Add document", exact: true }).click();
     const field = page.getByLabel("Project document (Markdown)");
     await expect(field).toBeFocused();
@@ -259,7 +259,9 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await page.goto(`/explore?q=${encodeURIComponent("Real storage integration flow")}`);
     await expect(page.getByRole("link", { name: projectTitle, exact: true })).toBeVisible();
     await page.goto(projectPath);
-    await page.getByText("Owner tools", { exact: true }).click();
+    await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: /^Revisions/ }).click();
+    await page.waitForLoadState("networkidle");
+    await page.locator("#owner-tools > summary").click();
 
     await page.locator("form.revision-publish-form input[name=title]").fill("Initial revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Upload the first source and previews");
@@ -317,7 +319,9 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
     await page.goto(`/projects/${slug}`);
     await expect(page.getByRole("heading", { name: projectTitle })).toBeVisible();
-    await page.getByText("Owner tools", { exact: true }).click();
+    await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: /^Revisions/ }).click();
+    await page.waitForLoadState("networkidle");
+    await page.locator("#owner-tools > summary").click();
     await page.locator("form.revision-publish-form input[name=title]").fill("Second revision");
     await page.locator("form.revision-publish-form textarea[name=changeDescription]").fill("Make a second revision before restoring the first");
     await page.locator('input[name="sources"]').setInputFiles({ name: "source-v2.zip", mimeType: "application/zip", buffer: Buffer.from("PK\\x03\\x04changed-integration-source") });
@@ -362,6 +366,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await signUp(page, `Forker ${suffix}`, `forker-${suffix}@example.test`, password);
     await page.goto(projectPath);
+    await page.goto(`${projectPath}/issues/new`);
     await page.getByLabel("Issue title").fill(issueTitle);
     await page.getByLabel("Issue description").fill("A real user found a problem");
     await page.getByRole("button", { name: "Open issue" }).click();
@@ -386,8 +391,8 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.getByRole("button", { name: "Continue to proposal" })).toBeDisabled();
     const workingProjectLink = page.getByRole("link", { name: "Open working project and publish a revision" });
     const workingProjectUrl = new URL(await workingProjectLink.getAttribute("href") as string, page.url());
-    const forkPath = workingProjectUrl.pathname;
-    const forkSlug = forkPath.split("/").at(-1)!;
+    const forkSlug = workingProjectUrl.pathname.split("/")[2];
+    const forkPath = `/projects/${forkSlug}`;
     expect(workingProjectUrl.searchParams.get("contributionTarget")).toBe(slug);
     expect(workingProjectUrl.searchParams.get("baseRevision")).toBe("3");
     expect(workingProjectUrl.searchParams.get("relatedIssue")).toBe(relatedIssueId);
@@ -487,7 +492,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       expect(created.status()).toBe(201);
       const { slug } = await created.json() as { slug: string };
       const projectPath = `/projects/${slug}`;
-      await owner.goto(`${projectPath}?contributionTarget=${slug}&baseRevision=1#owner-tools`);
+      await owner.goto(`${projectPath}/revisions?contributionTarget=${slug}&baseRevision=1#owner-tools`);
       await publishWork(owner, "Initial design", `https://example.com/${suffix}/original.penpot`);
       const revisions = await (await owner.request.get(`/api${projectPath}/revisions`)).json();
       const opened = await owner.request.post(`/api${projectPath}/issues`, { data: { title: requestTitle, body: "Make the title easier to read on a phone.", kind: "DESIGN_REQUEST", revisionId: revisions[0].id } });
@@ -555,7 +560,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await capture("03-feedback-mobile.png");
       await page.getByRole("link", { name: "Prepare revised work" }).click();
       const revisionReturn = new URL(page.url());
-      expect(revisionReturn.pathname).toBe(`/projects/${forkSlug}`);
+      expect(revisionReturn.pathname).toBe(`/projects/${forkSlug}/revisions`);
       expect(revisionReturn.searchParams.get("relatedIssue")).toBe(requestId);
       expect(revisionReturn.searchParams.get("baseRevision")).toBe("1");
       await publishWork(page, "Readable, high-contrast header", `https://example.com/${suffix}/revised.penpot`);
@@ -573,7 +578,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await page.getByLabel("Password").fill(password);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page.getByLabel("Related issue")).toHaveValue(requestId);
-      await expect(page.getByLabel("From")).toContainText("Revision 3");
+      await expect(page.getByRole("combobox", { name: /^From/ })).toContainText("Revision 3");
       await page.getByLabel("Title").fill("Improve mobile header and contrast");
       await page.getByLabel("What changed?").fill("Added the requested title contrast.");
       await page.getByLabel("Why?").fill("Address the owner's feedback.");

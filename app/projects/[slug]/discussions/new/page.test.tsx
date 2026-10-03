@@ -28,7 +28,7 @@ describe("new discussion page", () => {
 
   it("provides a Cancel link back to the Project section", async () => {
     const html = renderToStaticMarkup(await NewDiscussionPage({ params: Promise.resolve({ slug: "demo" }) }));
-    expect(html).toContain('href="/projects/demo#discussions"');
+    expect(html).toContain('href="/projects/demo/discussions"');
     expect(html).toContain("Cancel");
   });
 

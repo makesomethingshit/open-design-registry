@@ -20,7 +20,7 @@ export default async function NewDiscussionPage({ params }: { params: Promise<{ 
   return <PageGrid aria-labelledby="new-discussion-heading">
     <WideColumn className={styles.discussionCreatePage}>
       <Stack gap={5}>
-        <Link className={styles.secondaryLink} href={`/projects/${slug}#discussions`}>← {project.title}</Link>
+        <Link className={styles.secondaryLink} href={`/projects/${slug}/discussions`}>← {project.title}</Link>
         <PageHeader description="Share an idea or question about this project." id="new-discussion-heading" title="Start a discussion" />
         <Panel><DiscussionCreateForm slug={slug} /></Panel>
       </Stack>
