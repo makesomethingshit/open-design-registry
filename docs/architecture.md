@@ -1,6 +1,6 @@
 # 구조와 데이터 모델
 
-[README](../README.md) · [제품 방향](product-direction.md) · [Proposal 협업](proposals.md) · [개발과 운영](operations.md)
+[문서 목차](README.md) · [제품 방향](product-direction.md) · [Proposal 협업](proposals.md) · [Proposal API](proposal-api.md) · [개발과 운영](operations.md)
 
 이 문서는 저장소 코드의 동작을 설명합니다. 배포 환경의 현재 상태를 확인한 문서는 아닙니다.
 
@@ -22,7 +22,7 @@ flowchart LR
   X --> S
 ```
 
-잠금 파일의 주요 버전은 Next.js `16.3.3`, Better Auth `1.7.2`, Prisma·Prisma Client `6.19.3`입니다. 실제 설치 버전은 `package-lock.json`을 기준으로 확인합니다.
+직접 의존성과 실행 명령은 [package.json](../package.json), 설치 버전은 [package-lock.json](../package-lock.json)을 기준으로 확인합니다.
 
 ## 코드를 찾는 순서
 
@@ -56,7 +56,7 @@ flowchart LR
 | ChangeSet / Change | Proposal의 변경 묶음과 실제 리뷰·적용 단위. `appliedRevisionId`로 채택 결과 추적 |
 | ChangeReview | 사용자 리뷰와 시스템 승인 해제·재검토 이력 |
 | Discussion / DiscussionComment · Issue / IssueComment | 프로젝트 Discussion과 댓글은 별도 엔티티다. Issue는 별도 작업 항목이며 `IssueKind.DESIGN_REQUEST`로 Design Request를 구분하고 `sourceDiscussionId`로 시작한 Discussion을 연결한다. |
-| Report / Notification | 신고 검토, Issue 생성·Fork 생성 알림 |
+| Report / Notification | 신고 검토와 개인 알림. Issue·Discussion·Fork·Proposal의 직접 당사자 알림, Watch 대상 Revision·Release 발행 알림 |
 
 **별도 `ChangeUnit` 테이블이나 Dependency 테이블은 없습니다.** 현재 유닛과 유닛 간 의존성은 S3에 저장된 Revision 번들의 `files[]` 항목에 기록합니다. Change의 `targetFileId`가 유닛의 stable ID를 가리킵니다.
 
@@ -71,9 +71,26 @@ Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 �
 
 발행 후 Revision·Preview의 변경·삭제와 Preview 추가를 SQL 트리거로 제한합니다. 복원·Fork·Proposal 적용은 기존 Revision을 고치는 대신 새 Revision을 만듭니다. 원본은 `sourceKey`와 `sourceUrl` 중 정확히 하나를 가져야 하며 DB의 XOR 제약도 이를 검사합니다.
 
-발행 시 프로젝트 라이선스를 Revision에 고정합니다. 과거 라이선스·checksum이 기록되지 않은 데이터는 추정해서 채우지 않습니다. 외부 URL 방식은 링크를 보존하지만 외부 파일 자체의 불변성까지 보장하지 않습니다.
+과거 checksum이 기록되지 않은 데이터는 추정해서 채우지 않습니다. 생성 경로별 라이선스와 자산 보존 규칙은 아래를 따릅니다.
 
-발행 API는 `POST /api/projects/{slug}/revisions`의 multipart 입력을 사용합니다. 제목·변경 설명·각 미리보기의 대체 텍스트가 필요합니다. 원본 파일의 합계는 100 MiB, 미리보기는 1~10개·각 10 MiB·합계 50 MiB까지입니다. 미리보기 형식은 PNG/JPG/HTML이며, 대표 이미지는 PNG/JPG만 허용합니다. 직접 `sourceKey`를 지정하는 입력은 받지 않습니다.
+발행 API는 `POST /api/projects/{slug}/revisions`의 multipart 입력을 사용합니다. 제목·변경 설명·각 미리보기의 대체 텍스트가 필요합니다. 원본 파일의 합계는 100 MiB, 미리보기는 1~10개·각 10 MiB·합계 50 MiB까지입니다. 미리보기 형식은 PNG/JPG/HTML이며, 대표 이미지는 PNG/JPG만 허용하고 최대 10 MiB입니다. 직접 `sourceKey`를 지정하는 입력은 받지 않습니다.
+
+## 라이선스·Fork·자산 보존
+
+| 생성 경로 | 새 Revision의 라이선스 |
+| --- | --- |
+| 직접 발행·Proposal 적용 | 대상 프로젝트의 현재 라이선스 고정 |
+| 복원 | 선택한 원본 Revision의 라이선스 보존. `null`도 그대로 유지 |
+| Fork | 선택한 Revision의 라이선스 사용. 기록이 없으면 권리 확인 후 원 프로젝트의 현재 라이선스로 새로 발행하고, 출처의 과거 라이선스는 기록 없음으로 보존 |
+
+프로젝트 설정 변경으로 과거 Revision의 라이선스를 바꾸지 않습니다. 기록되지 않은 과거 라이선스는 추정해 채우지 않습니다.
+
+- Fork의 첫 Revision은 선택한 Revision의 원본, 미리보기, 도구·태그·체크섬을 이어받습니다.
+- 업로드된 파일은 불변 저장 객체를 공유하되 각 프로젝트가 독립적으로 참조합니다. 원본 프로젝트가 비공개로 바뀌어도 공개 Fork의 파일은 열립니다. 모든 참조 프로젝트가 비공개이면 소유자만 접근할 수 있습니다.
+- 외부 원본 링크는 URL을 보존합니다. 외부 서비스 파일의 변경·삭제·접근 권한까지 보장하지는 않습니다.
+- Fork 프로젝트, 첫 Revision, 소유자 알림은 하나의 DB 트랜잭션으로 저장됩니다. 하나라도 실패하면 모두 취소됩니다. 커밋 후 응답 유실에 대한 중복 요청 방지는 별도 후속 과제입니다.
+- 새 마이그레이션은 기존 Fork를 소급해 채우지 않습니다. 기존 빈 Fork의 복구에는 별도 절차가 필요합니다.
+
 
 ## Release v0
 
@@ -83,7 +100,7 @@ Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 �
 
 번들은 `{ version: 1 | 2 | 3, files: [...] }` 형태입니다. 각 파일은 `id`, `name`, `mimeType`, `size`, `assetKey`, `previewKeys`를 가지며 `kind`와 `checksum`은 이전 데이터 호환을 위해 선택 필드입니다. 새 파일 발행은 유닛별 `sourceDependencies`가 제출되면 v3, 없으면 v2를 만듭니다. v3의 모든 파일은 의존하는 유닛의 stable ID 목록인 `dependencies` 배열을 가지며, 의존성이 없으면 빈 배열입니다. v1/v2에는 이 필드가 없습니다.
 
-- 새 유닛 ID는 서버가 생성합니다. 다음 발행에서 기존 파일을 `sourceFileIds`로 연결하면 stable ID를 유지합니다. 파일명만 같다고 같은 유닛으로 판단하지 않습니다.
+- 새 발행의 유닛 ID는 업로드 파일별 `sourceBundleFileIds`가 있으면 그 값을 사용하고, 비어 있거나 생략되면 서버가 UUID를 생성합니다. 요청에서 중복 bundle ID는 거부합니다. 다음 발행에서 기존 파일을 `sourceFileIds`로 연결하면 기존 stable ID를 유지합니다. 파일명만 같다고 같은 유닛으로 판단하지 않습니다. Proposal의 `ADD_UNIT` 적용에서 새 target ID를 만드는 동작과 구분합니다.
 - 새 유닛의 kind는 `artboard`, `component`, `asset`, `token` 중 선택합니다. 기존 유닛을 연결하면 기존 kind를 유지합니다.
 - 각 파일 checksum은 서버가 원본 바이트로 계산한 SHA-256입니다. `Revision.sourceChecksum`은 번들 발행에서 **번들 JSON 전체의 해시**이므로 파일 내용 해시와 구분합니다.
 - v3 발행은 각 의존 ID가 같은 번들에 존재하는지, 자기 자신을 가리키거나 중복되지 않는지 검사합니다. `dependencyClosure()` 헬퍼는 선택한 유닛에서 연결된 의존 유닛 전체를 구합니다. 유닛 변경 Proposal 생성·선택 적용은 결과 번들에 필요한 유닛이 모두 남는지 검사합니다.

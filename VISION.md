@@ -1,10 +1,10 @@
 # ODR 비전
 
-[README](README.md) · [Philosophy](PHILOSOPHY.md) · [제품 방향](docs/product-direction.md)
+[문서 목차](docs/README.md) · [Philosophy](PHILOSOPHY.md) · [제품 방향](docs/product-direction.md)
 
 > **한 문장 비전** — ODR은 디자인을 완성된 결과물이 아니라 계속 해석·변경·기여되는 프로젝트로 취급하는 **오픈소스 디자인 생태계의 허브**이자, 그 프로젝트들을 중심으로 모이는 **오픈 디자인 커뮤니티**를 지향한다.
 
-"디자인계의 GitHub"은 이 방향을 짧게 이해시키는 표현일 뿐, ODR의 최종 정의는 아니다. ODR이 GitHub의 복제품이 되는 것은 목표가 아니다. 아래에서 설명하는 것은 ODR이 장기적으로 만들려는 디자인 생태계이며, 현재 코드가 지원하는 범위는 아니다. 실제 지원 범위는 [README의 현재 지원 범위](README.md#현재-지원-범위)와 [로드맵](ROADMAP.md)에서 확인한다.
+"디자인계의 GitHub"은 이 방향을 짧게 이해시키는 표현일 뿐, ODR의 최종 정의는 아니다. ODR이 GitHub의 복제품이 되는 것은 목표가 아니다. 아래에서 설명하는 것은 ODR이 장기적으로 만들려는 디자인 생태계이며, 현재 코드가 지원하는 범위는 아니다. 실제 지원 범위는 [현재 기능과 제품 경계](docs/current-capabilities.md)에서 확인한다.
 
 ## 현재 디자인 협업의 문제
 
@@ -26,7 +26,7 @@ ODR의 기본 단위는 **Repository형 Project**다. Project는 파일을 보�
 - **Review** — 제안에 대한 검토
 - **Provenance / Contributors** — 출처와 기여자 기록
 
-위 개념이 모두 현재 구현되어 있다는 뜻은 아니다. 여기서 설명하는 것은 목적 모델이다. 지금 실제로 사용할 수 있는 범위는 [README](README.md#현재-지원-범위)와 [로드맵](ROADMAP.md)이 authoritative source다.
+위 개념이 모두 현재 구현되어 있다는 뜻은 아니다. 여기서 설명하는 것은 목적 모델이다. 지금 실제로 사용할 수 있는 범위는 [현재 기능과 제품 경계](docs/current-capabilities.md)가 기준 문서다.
 
 ## 핵심 사용자
 
@@ -69,7 +69,7 @@ ODR은 디자인을 최종 산출물(final artifact)로 정의하지 않는다. 
 
 ODR의 커뮤니티 모델은 **person graph보다 project graph**에 가깝다. 사람을 따라다니는 네트워크가 아니라, 프로젝트를 중심으로 만나고 흩어지는 구조다. 장기 방향은 다음과 같다.
 
-- 사람 Follow보다 **Project Watch/Follow**를 중심에 둔다.
+- 사람 Follow보다 **Project Watch**를 중심에 둔다.
 - **Star**는 관심, 응원, 다시 보기의 표현으로 둔다. Star 수를 품질 점수나 강한 인기 랭킹으로 만들지 않는다.
 - **Feed**는 콘텐츠 소비보다 프로젝트의 실제 변화를 중심으로 둔다.
 - 전역 발견(discovery)의 중심에는 Revision, Release와 같은 의미 있는 변화가 있다.

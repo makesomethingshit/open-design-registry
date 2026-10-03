@@ -1,8 +1,8 @@
 # 제품 방향
 
-[Vision](../VISION.md) · [Philosophy](../PHILOSOPHY.md) · [로드맵](../ROADMAP.md)
+[문서 목차](README.md) · [Vision](../VISION.md) · [Philosophy](../PHILOSOPHY.md) · [로드맵](../ROADMAP.md)
 
-ODR의 장기 목표는 [Vision](../VISION.md), 그 목표를 지탱하는 관점은 [Philosophy](../PHILOSOPHY.md)를 참고한다. 이 문서는 이를 제품 결정으로 번역한 현재의 원칙을 설명한다. 기능의 구현 여부는 [README의 현재 지원 범위](../README.md#현재-지원-범위)와 로드맵에서 구분한다.
+ODR의 장기 목표는 [Vision](../VISION.md), 그 목표를 지탱하는 관점은 [Philosophy](../PHILOSOPHY.md)를 참고한다. 이 문서는 이를 제품 결정으로 번역한 현재의 원칙을 설명한다. 기능의 구현 여부는 [현재 기능과 제품 경계](current-capabilities.md)에서 확인하고 남은 작업은 로드맵에서 구분한다.
 
 ## 핵심 사용자
 
@@ -30,7 +30,7 @@ ODR의 장기 목표는 [Vision](../VISION.md), 그 목표를 지탱하는 관�
 
 ## 발견과 커뮤니티
 
-사람 사이의 관계보다 **사람과 프로젝트의 관계**를 중심에 둔다. Star는 관심·응원·다시 보기의 표현으로 두되, Star 수로 강한 인기 순위나 품질 점수를 만들지 않는다. 사람 Follow 대신 프로젝트 Follow/Watch로 Revision·Release·Proposal 등의 변화를 따라가게 한다.
+사람 사이의 관계보다 **사람과 프로젝트의 관계**를 중심에 둔다. Star는 관심·응원·다시 보기의 표현으로 두되, Star 수로 강한 인기 순위나 품질 점수를 만들지 않는다. 사람 Follow 대신 프로젝트 Watch를 중심에 둔다. 현재 Watch는 새 Revision·Release 발행을 알린다. Proposal의 제출·리뷰·적용 알림은 Watch가 아니라 직접 당사자에게 전달되며, 세부 조건은 [Proposal 협업 가이드](proposals.md#proposal-알림)를 따른다.
 
 전역 Feed는 조용하게 유지하고 Revision·Release처럼 프로젝트에 실질적인 변화가 생긴 결과를 주로 보여 준다. 프로젝트 상세에서는 Proposal·Discussion·Issue·Design Request·Review까지 과정과 맥락을 볼 수 있게 한다. 게시물이나 활동도 가능하면 Project·Revision·Release·Proposal과 연결한다. 목적은 콘텐츠 소비보다 프로젝트 발견·이해·참여다.
 

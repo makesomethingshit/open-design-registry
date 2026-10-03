@@ -1,8 +1,8 @@
 # 개발과 운영
 
-[README](../README.md) · [구조와 데이터 모델](architecture.md) · [Proposal 협업](proposals.md)
+[문서 목차](README.md) · [구조와 데이터 모델](architecture.md) · [Proposal 협업](proposals.md)
 
-기준: 2026-09-24, main `5d5e0fbb215e7b823f65ca6b42c206d65f7c498c`. 명령은 저장소 루트에서 실행합니다. 기존 코드·설정과 대조한 절차이며, 이번 문서 작업에서 서버 기동·DB 마이그레이션·배포를 수행하지는 않았습니다.
+명령은 저장소 루트에서 실행합니다. 환경 변수는 [.env.example](../.env.example), 실행 명령은 [package.json](../package.json), CI의 서비스·검증 구성은 [ci.yml](../.github/workflows/ci.yml)을 기준으로 확인합니다. 아래는 코드·설정에 따른 절차이며 서버 기동·DB 마이그레이션·배포를 수행한 결과가 아닙니다.
 
 ## 로컬 준비
 
@@ -93,7 +93,7 @@ npm test -- prisma/revision.integration.test.ts src/lib/proposal-concurrency.int
 
 ### 브라우저 통합 검사
 
-`.env`에 테스트 DB·스토리지 설정을 맞추고 앱 기준 URL도 테스트 호스트와 일치시킵니다. Playwright 기본 주소는 `http://127.0.0.1:3000`입니다.
+`.env`에 테스트 DB·스토리지 설정을 맞춥니다. [Playwright 설정](../playwright.config.ts)의 기본 주소는 `http://127.0.0.1:3000`이므로 브라우저 통합 검사에서는 `BETTER_AUTH_URL`도 이 값으로 맞춥니다. `.env.example`의 로컬 개발 기본값인 `http://localhost:3000`을 그대로 두지 않습니다. `PLAYWRIGHT_BASE_URL`로 기존 서버를 지정하면 인증 URL과 서버의 DB·스토리지 설정도 해당 서버에 맞춥니다.
 
 ```sh
 npx prisma migrate deploy
@@ -107,11 +107,17 @@ npx playwright install chromium
 node --env-file=.env node_modules/@playwright/test/cli.js test
 ```
 
-기존 서버를 재사용하면 그 서버의 DB·스토리지 설정이 이번 테스트 설정과 같은지 확인합니다. `e2e/mvp.integration.spec.ts`는 가입·프로젝트·Revision·복원·Issue·Fork 외에 공개 Design request → 로그인 복귀 → Fork → 수정본 발행 → Proposal → 수정 요청 → 새 Proposal → 승인·적용을 실제 DB·스토리지로 검증합니다. 데스크톱·모바일에서 단계별 안내와 결과 링크도 확인합니다. **이 한 흐름으로 Proposal v0.5의 모든 충돌·부분 적용·동시성 조합이나 실제 신규 디자이너의 이해도까지 검증됐다고 확대 해석하지 않습니다.**
+기존 서버를 재사용하면 그 서버의 DB·스토리지 설정이 이번 테스트 설정과 같은지 확인합니다. [MVP 통합 시나리오](../e2e/mvp.integration.spec.ts)는 가입·프로젝트·Revision·복원·Issue·Fork 외에 공개 Design request → 로그인 복귀 → Fork → 수정본 발행 → Proposal → 수정 요청 → 새 Proposal → 승인·적용을 실제 DB·스토리지로 검증합니다. 데스크톱·모바일에서 단계별 안내와 결과 링크도 확인합니다. **이 한 흐름으로 모든 충돌·부분 적용·동시성 조합이나 실제 신규 디자이너의 이해도까지 검증됐다고 확대 해석하지 않습니다.**
 
-### 현재 CI에서 빠지는 것
+### 실제 서비스 검사와 fixture 검사
 
-`.github/workflows/ci.yml`은 test·typecheck·build·e2e 작업을 정의합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화됩니다. **test 작업에는 `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`이 설정되어 있어 Proposal 경합 테스트도 CI에서 실행됩니다.**
+`E2E_INTEGRATION=1`은 [인증](../e2e/auth.spec.ts), [Landing·Explore](../e2e/landing-explore.integration.spec.ts), [MVP 협업](../e2e/mvp.integration.spec.ts)의 실제 DB·스토리지 시나리오를 활성화합니다. 다른 UI 회귀 파일은 fixture·요청 mock·정적 화면 등을 사용합니다. 같은 Playwright 명령으로 실행하더라도 fixture 통과와 실제 서비스 통합 검증을 구별합니다.
+
+### CI 구성과 확인할 범위
+
+CI는 PR 제목 형식, test·typecheck·build·e2e를 검사합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화되며, `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`로 Proposal 경합 테스트도 실행합니다. e2e 작업은 테스트 스토리지와 버킷을 준비하고 `E2E_INTEGRATION=1`로 실행합니다.
+
+CI가 구성한 검사 범위와 특정 커밋에서 실제 통과한 결과를 구분합니다. UI fixture나 잠금 경합 테스트의 통과만으로 모든 실제 Apply 요청의 동시 실행·DB 롤백·브라우저 상태가 검증됐다고 판단하지 않습니다.
 
 ## 운영 전 확인
 
@@ -136,4 +142,4 @@ node --env-file=.env node_modules/@playwright/test/cli.js test
 
 기여 준비와 Proposal 생성은 `/login?next=...`에 선택한 base·source Revision, 관련 요청과 선택 변경을 보존합니다. first-contributor 브라우저 시나리오에서 요청 링크의 가입 복귀와 준비된 Proposal의 재로그인 복귀를 검증합니다. Discussions 등 이 시나리오 밖의 로그인 경로는 별도 확인이 필요합니다.
 
-기준 코드: [CI](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/.github/workflows/ci.yml), [환경 예제](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/.env.example), [테스트 설정](https://github.com/makesomethingshit/open-design-registry/blob/5d5e0fbb215e7b823f65ca6b42c206d65f7c498c/playwright.config.ts).
+관련 설정: [CI](../.github/workflows/ci.yml), [환경 예제](../.env.example), [Playwright](../playwright.config.ts), [Vitest](../vitest.config.ts), [테스트 스토리지 준비](../scripts/prepare-test-storage.mjs).

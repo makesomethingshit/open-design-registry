@@ -1,6 +1,6 @@
 # ODR 철학
 
-[README](README.md) · [Vision](VISION.md) · [제품 방향](docs/product-direction.md)
+[문서 목차](docs/README.md) · [Vision](VISION.md) · [제품 방향](docs/product-direction.md)
 
 Vision이 무엇을 만들 것인가를 설명한다면, 이 문서는 **왜 디자인을 이렇게 다뤄야 한다고 보는가**를 설명한다. 제품 기능의 설명이 아니라, 디자인·저자성·타자·출처·공개성에 관한 프로젝트의 기본 태도를 기록한다. 프로젝트 자체의 언어로 쓰며, 아래 각 항목은 ODR의 provenance, fork, proposal, revision 모델과 연결되는 구체적인 의미를 가진다.
 
