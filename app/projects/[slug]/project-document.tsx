@@ -12,10 +12,10 @@ export default function ProjectDocument({
 }) {
   const body = document.trim();
   return (
-    <section aria-labelledby="project-document-heading" className={styles.section} id="project-document">
+    <section aria-labelledby="project-document-heading" className={`${styles.section} ${styles.projectDocument}`} id="project-document">
       <header className={styles.sectionHeader}>
         <div>
-          <p className={styles.eyebrow}>Overview</p>
+          <p className={styles.eyebrow}>Project guide</p>
           <h2 id="project-document-heading">Project document</h2>
         </div>
         {isOwner && body && (
@@ -35,10 +35,12 @@ export default function ProjectDocument({
           No project document has been added yet.
           {isOwner ? (
             <>
-              {" "}
+              {" "}Share the project's goals, design principles and ways to contribute.{" "}
               <ProjectDocumentEditLink>Add one in Owner tools</ProjectDocumentEditLink>.
             </>
-          ) : null}
+          ) : (
+            <> Read About for a short summary and browse <a href="#revisions">Revisions</a> for the current design.</>
+          )}
         </p>
       )}
     </section>

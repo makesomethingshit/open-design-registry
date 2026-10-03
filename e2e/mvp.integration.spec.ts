@@ -6,6 +6,49 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
   test.setTimeout(120_000);
   test.skip(!process.env.E2E_INTEGRATION, "requires local PostgreSQL and S3-compatible services");
 
+  test("reads the project document after artwork and About, before contribution activity", async ({ page, browser }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await signUp(page, `Guide owner ${suffix}`, `guide-${suffix}@example.test`, "integration-password-123");
+    const response = await page.request.post("/api/projects", { multipart: {
+      title: `Guide project ${suffix}`, description: "A short project summary", license: "CC BY 4.0", isPublic: "true", rightsConfirmed: "on",
+      cover: { name: "cover.png", mimeType: "image/png", buffer: tinyPng },
+    } });
+    expect(response.status()).toBe(201);
+    const projectPath = `/projects/${(await response.json()).slug}`;
+    await page.goto(projectPath);
+    await expect(page.locator("#project-document")).toContainText("Share the project's goals, design principles and ways to contribute.");
+    await expect(page.getByRole("link", { name: "Add one in Owner tools" })).toBeVisible();
+
+    const visitorContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
+    try {
+      const visitor = await visitorContext.newPage();
+      await visitor.setViewportSize({ width: 390, height: 844 });
+      await visitor.goto(projectPath);
+      const document = visitor.locator("#overview #project-document");
+      await expect(document).toContainText("Read About for a short summary");
+      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveAttribute("href", "#revisions");
+      await expect(document.getByRole("link", { name: "Add one in Owner tools" })).toHaveCount(0);
+
+      const saved = await page.request.patch(`/api${projectPath}`, { data: { document: "# Design principles\n\nKeep the work open and explain how to contribute." } });
+      expect(saved.status()).toBe(200);
+      for (const width of [1440, 390]) {
+        await visitor.setViewportSize({ width, height: 900 });
+        await visitor.goto(projectPath);
+        await expect(document.getByRole("heading", { name: "Design principles" })).toBeVisible();
+        const artwork = await visitor.locator("#preview").boundingBox();
+        const about = await visitor.locator("#overview aside").boundingBox();
+        const guide = await document.boundingBox();
+        const activity = await visitor.getByRole("heading", { name: "Looking for contributions" }).boundingBox();
+        expect(guide!.y).toBeGreaterThanOrEqual(Math.max(artwork!.y + artwork!.height, about!.y + about!.height));
+        expect(guide!.y + guide!.height).toBeLessThanOrEqual(activity!.y);
+        expect(guide!.x).toBeGreaterThanOrEqual(0);
+        expect(guide!.x + guide!.width).toBeLessThanOrEqual(width);
+      }
+    } finally {
+      await visitorContext.close();
+    }
+  });
+
   test("opens both document editor panels and focuses the field from Add and Edit links", async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await page.setViewportSize({ width: 1440, height: 900 });

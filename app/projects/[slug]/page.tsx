@@ -128,6 +128,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           </dl>
           {!project.isPublic && session?.user.id === project.ownerId && <p className={styles.privateNote}>Private workspace visible to you.</p>}
         </aside>
+        <ProjectDocument document={project.document ?? ""} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
         <div className={styles.activityGrid}>
           <section className={styles.activity}>
             <header><h2>Looking for contributions</h2><Link href="#issues">View issues</Link></header>
@@ -147,8 +148,6 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         </section>}
       </div>
     </section>
-
-    <ProjectDocument document={project.document ?? ""} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
 
     {session?.user.id === project.ownerId && contributionReturn && <Banner title="Prepare your working revision" tone="info">Edit the source in an external design tool, then publish a new revision here. Publishing returns to the target contribution workspace.</Banner>}
     {session?.user.id === project.ownerId && <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Owner tools</summary><div><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} document={project.document ?? ""} isPublic={project.isPublic} license={project.license} slug={project.slug} title={project.title} /></FormColumn><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>}
