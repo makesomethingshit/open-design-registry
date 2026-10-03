@@ -54,7 +54,7 @@ describe("AuthNav Contribute link", () => {
   it("shows Contribution Discovery to visitors and marks it current", () => {
     const markup = renderNav("/contribute", false);
     expect(markup).toMatch(/<a aria-current="page" href="\/contribute" class="nav-link">Contribute<\/a>/);
-    expect(markup).toContain('href="/#projects"');
+    expect(markup).toContain('href="/explore"');
   });
 
   it("keeps Contribute and Feed available to visitors and members", () => {
@@ -63,5 +63,15 @@ describe("AuthNav Contribute link", () => {
       expect(markup).toContain('href="/contribute"');
       expect(markup).toMatch(/<a aria-current="page" href="\/feed" class="nav-link">Feed<\/a>/);
     }
+  });
+});
+
+
+describe("AuthNav public Explore", () => {
+  it("keeps Explore available and current for visitors and members", () => {
+    for (const signedIn of [false, true]) {
+      expect(renderNav("/explore", signedIn)).toMatch(/<a aria-current="page" href="\/explore" class="nav-link">Explore<\/a>/);
+    }
+    expect(renderNav("/projects")).toMatch(/<a aria-current="page" href="\/projects" class="nav-link">My projects<\/a>/);
   });
 });

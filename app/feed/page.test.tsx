@@ -13,7 +13,7 @@ describe("feed page", () => {
     mocks.getFeedPage.mockResolvedValue({ items: [], nextCursor: null });
     const markup = renderToStaticMarkup(await FeedPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toContain("No public changes yet.");
-    expect(markup).toContain('href="/"');
+    expect(markup).toContain('href="/explore"');
     expect(markup).not.toContain("Older changes");
   });
 });
