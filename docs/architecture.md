@@ -62,6 +62,12 @@ flowchart LR
 
 Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 작성자·리뷰어·채택자를 통해 연결합니다. Fork 출처는 프로젝트의 `forkedFromProjectId`·`forkedFromRevisionId`·`forkedFromLicense`로 보존합니다.
 
+## Overview 편집과 문서 이미지
+
+About은 짧은 설명·제목·라이선스·활동 상태를, Project document는 긴 Markdown 문서를 담당합니다. 소유자는 Overview에서 각각 편집·저장·취소하며 기존 `PATCH /api/projects/{slug}`를 사용합니다. 문서 편집기는 작성·미리보기, 이미지 파일 선택·붙여넣기·드롭, 표 셀과 행·열 편집·제거를 지원합니다. 표를 포함한 Markdown은 같은 allowlist renderer로 표시하고 원시 HTML은 이스케이프합니다.
+
+이미지는 소유자 전용 `POST /api/projects/{slug}/document-images`에서 PNG/JPG 파일의 크기와 시그니처를 검사한 뒤 비공개 S3의 `project-documents/{projectId}/{uuid}.png|jpg`에 저장합니다. 별도 테이블이나 공개 버킷은 추가하지 않습니다. 응답은 `/api/assets?key=...` 프록시 URL이며 이미지의 공개 여부는 키가 가리키는 프로젝트의 현재 공개 설정과 저장된 문서의 실제 이미지 참조로 판정합니다. 미저장·제거된 이미지와 비공개 프로젝트의 이미지는 소유자만 조회할 수 있습니다. 문서에서 이미지를 제거하고 저장하면 방문자 접근을 닫으며, S3 객체 자체의 영구 삭제는 수행하지 않습니다.
+
 ## 발행과 불변성
 
 1. 입력·소유권을 확인하고 원본·미리보기를 새 저장 객체로 업로드합니다.

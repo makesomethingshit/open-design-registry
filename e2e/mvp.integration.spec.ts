@@ -6,7 +6,160 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
   test.setTimeout(120_000);
   test.skip(!process.env.E2E_INTEGRATION, "requires local PostgreSQL and S3-compatible services");
 
-  test("opens both document editor panels and focuses the field from Add and Edit links", async ({ page }) => {
+  test("edits About and adds, edits, previews and removes document images and tables", async ({ page, browser }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await signUp(page, `Editor owner ${suffix}`, `editor-${suffix}@example.test`, "integration-password-123");
+    const created = await page.request.post("/api/projects", { multipart: {
+      title: `Editor project ${suffix}`, description: "Original short description", license: "CC BY 4.0", isPublic: "true", rightsConfirmed: "on",
+      cover: { name: "cover.png", mimeType: "image/png", buffer: tinyPng },
+    } });
+    expect(created.status()).toBe(201);
+    const projectPath = `/projects/${(await created.json()).slug}`;
+    await page.goto(projectPath);
+    await page.getByRole("button", { name: "Edit About", exact: true }).click();
+    const about = page.getByRole("form", { name: "Edit About", exact: true });
+    await about.getByLabel("Short description").fill("A clearer project introduction");
+    await about.getByRole("button", { name: "Save About", exact: true }).click();
+    await expect(page.getByText("About saved.", { exact: true })).toBeVisible();
+    await expect(page.locator("#overview aside")).toContainText("A clearer project introduction");
+    await page.getByRole("button", { name: "Edit About", exact: true }).click();
+    await about.getByLabel("Short description").fill("Discarded About change");
+    await about.getByRole("button", { name: "Cancel About changes", exact: true }).click();
+    await expect(page.locator("#overview aside")).not.toContainText("Discarded About change");
+    await page.getByRole("button", { name: "Add document", exact: true }).click();
+    const document = page.locator("#project-document");
+    const source = document.getByLabel("Project document (Markdown)");
+    await expect(source).toBeFocused();
+    await source.fill("# Project guide\n\nHow to contribute.");
+    await source.press("Control+End");
+    await document.getByRole("button", { name: "Insert table", exact: true }).click();
+    const table = document.getByRole("region", { name: "Table editor", exact: true });
+    await table.getByLabel("Header 1", { exact: true }).fill("Tool");
+    await table.getByLabel("Header 2", { exact: true }).fill("Access");
+    await table.getByLabel("Row 1, column 1", { exact: true }).fill("Penpot");
+    await table.getByLabel("Row 1, column 2", { exact: true }).fill("Open");
+    await table.getByRole("button", { name: "Add row", exact: true }).click();
+    await table.getByLabel("Row 2, column 1", { exact: true }).fill("Figma");
+    await table.getByLabel("Row 2, column 2", { exact: true }).fill("Community");
+    await table.getByRole("button", { name: "Apply table", exact: true }).click();
+    await document.getByRole("button", { name: "Edit table 1", exact: true }).click();
+    await table.getByLabel("Row 1, column 2", { exact: true }).fill("Open source");
+    await table.getByRole("button", { name: "Apply table", exact: true }).click();
+    await document.locator('input[type="file"]').setInputFiles({ name: "sketch.png", mimeType: "image/png", buffer: tinyPng });
+    await expect(source).toHaveValue(/!\[sketch\]\(\/api\/assets\?key=/);
+    const imageUrl = (await source.inputValue()).match(/!\[sketch\]\(([^)]+)\)/)![1];
+    await expect(source).toBeEnabled();
+    await source.evaluate((element, bytes) => {
+      const data = new DataTransfer(); data.items.add(new File([new Uint8Array(bytes)], "pasted.png", { type: "image/png" }));
+      element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, [...tinyPng]);
+    await expect(source).toHaveValue(/!\[pasted\]\(\/api\/assets\?key=/);
+    await expect(source).toBeEnabled();
+    await source.evaluate((element, bytes) => {
+      const data = new DataTransfer(); data.items.add(new File([new Uint8Array(bytes)], "dropped.png", { type: "image/png" }));
+      element.dispatchEvent(new DragEvent("drop", { dataTransfer: data, bubbles: true, cancelable: true }));
+    }, [...tinyPng]);
+    await expect(source).toHaveValue(/!\[dropped\]\(\/api\/assets\?key=/);
+    await document.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(document.getByRole("columnheader", { name: "Tool", exact: true })).toBeVisible();
+    await expect(document.getByRole("cell", { name: "Open source", exact: true })).toBeVisible();
+    await expect(document.getByRole("img", { name: "sketch", exact: true })).toBeVisible();
+    const visitorContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
+    try {
+      const visitor = await visitorContext.newPage();
+      expect((await visitor.request.get(imageUrl)).status()).toBe(404);
+      expect((await page.request.get(imageUrl)).status()).toBe(200);
+      await document.getByRole("button", { name: "Save document", exact: true }).click();
+      await expect(document.getByText("Project document saved.", { exact: true })).toBeVisible();
+      expect((await visitor.request.get(imageUrl)).status()).toBe(200);
+      expect((await page.request.patch(`/api${projectPath}`, { data: { isPublic: false } })).status()).toBe(200);
+      expect((await visitor.request.get(imageUrl)).status()).toBe(404);
+      expect((await page.request.get(imageUrl)).status()).toBe(200);
+      expect((await page.request.patch(`/api${projectPath}`, { data: { isPublic: true, rightsConfirmed: true } })).status()).toBe(200);
+      await page.reload();
+      await visitor.goto(projectPath);
+      await expect(visitor.locator("#project-document").getByRole("cell", { name: "Open source", exact: true })).toBeVisible();
+      await expect(visitor.getByRole("button", { name: "Edit About", exact: true })).toHaveCount(0);
+      await expect(visitor.getByRole("button", { name: "Edit document", exact: true })).toHaveCount(0);
+      const forbidden = await visitor.request.post(`/api${projectPath}/document-images`, { multipart: { image: { name: "forbidden.png", mimeType: "image/png", buffer: tinyPng } } });
+      expect(forbidden.status()).toBe(401);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await document.getByRole("button", { name: "Edit document", exact: true }).press("Enter");
+      while (await document.getByRole("button", { name: "Remove image 1", exact: true }).count()) await document.getByRole("button", { name: "Remove image 1", exact: true }).click();
+      await document.getByRole("button", { name: "Remove table 1", exact: true }).click();
+      await document.getByRole("button", { name: "Cancel document changes", exact: true }).click();
+      await expect(document.getByRole("img", { name: "sketch", exact: true })).toBeVisible();
+      await expect(document.getByRole("columnheader", { name: "Tool", exact: true })).toBeVisible();
+      await document.getByRole("button", { name: "Edit document", exact: true }).click();
+      while (await document.getByRole("button", { name: "Remove image 1", exact: true }).count()) await document.getByRole("button", { name: "Remove image 1", exact: true }).click();
+      await document.getByRole("button", { name: "Remove table 1", exact: true }).click();
+      await document.getByRole("button", { name: "Save document", exact: true }).click();
+      await expect(document.getByText("Project document saved.", { exact: true })).toBeVisible();
+      expect((await visitor.request.get(imageUrl)).status()).toBe(404);
+      await page.reload();
+      await expect(document.getByRole("img", { name: "sketch", exact: true })).toHaveCount(0);
+      await expect(document.locator("table")).toHaveCount(0);
+      await expect(document.getByRole("heading", { name: "Project guide", exact: true })).toBeVisible();
+      const bounds = await document.boundingBox();
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    } finally { await visitorContext.close(); }
+  });
+
+  test("reads the project document after artwork and About, before contribution activity", async ({ page, browser }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await signUp(page, `Guide owner ${suffix}`, `guide-${suffix}@example.test`, "integration-password-123");
+    const response = await page.request.post("/api/projects", { multipart: {
+      title: `Guide project ${suffix}`, description: "A short project summary", license: "CC BY 4.0", isPublic: "true", rightsConfirmed: "on",
+      cover: { name: "cover.png", mimeType: "image/png", buffer: tinyPng },
+    } });
+    expect(response.status()).toBe(201);
+    const projectPath = `/projects/${(await response.json()).slug}`;
+    await page.goto(projectPath);
+    await expect(page.locator("#project-document")).toContainText("Share the project's goals, design principles and ways to contribute.");
+    await expect(page.getByRole("button", { name: "Add document", exact: true })).toBeVisible();
+
+    const visitorContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
+    try {
+      const visitor = await visitorContext.newPage();
+      await visitor.setViewportSize({ width: 390, height: 844 });
+      await visitor.goto(projectPath);
+      const document = visitor.locator("#overview #project-document");
+      await expect(document).toContainText("Read About for a short summary");
+      await expect(document).toContainText("A revision has not been published yet.");
+      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveCount(0);
+      await expect(document.getByRole("button", { name: "Add document", exact: true })).toHaveCount(0);
+
+      const published = await page.request.post(`/api${projectPath}/revisions`, { multipart: {
+        title: "Initial design", changeDescription: "Publish the first design", sourceUrl: "https://example.test/design.fig",
+        previews: { name: "design.png", mimeType: "image/png", buffer: tinyPng }, altTexts: "Initial design preview",
+      } });
+      expect(published.status()).toBe(201);
+      await visitor.reload();
+      await expect(document.getByRole("link", { name: "Revisions", exact: true })).toHaveAttribute("href", "#revisions");
+      await expect(document).toContainText("for the current design.");
+      await expect(document).not.toContainText("A revision has not been published yet.");
+
+      const saved = await page.request.patch(`/api${projectPath}`, { data: { document: "# Design principles\n\nKeep the work open and explain how to contribute." } });
+      expect(saved.status()).toBe(200);
+      for (const width of [1440, 390]) {
+        await visitor.setViewportSize({ width, height: 900 });
+        await visitor.goto(projectPath);
+        await expect(document.getByRole("heading", { name: "Design principles" })).toBeVisible();
+        const artwork = await visitor.locator("#preview").boundingBox();
+        const about = await visitor.locator("#overview aside").boundingBox();
+        const guide = await document.boundingBox();
+        const activity = await visitor.getByRole("heading", { name: "Looking for contributions" }).boundingBox();
+        expect(guide!.y).toBeGreaterThanOrEqual(Math.max(artwork!.y + artwork!.height, about!.y + about!.height));
+        expect(guide!.y + guide!.height).toBeLessThanOrEqual(activity!.y);
+        expect(guide!.x).toBeGreaterThanOrEqual(0);
+        expect(guide!.x + guide!.width).toBeLessThanOrEqual(width);
+      }
+    } finally {
+      await visitorContext.close();
+    }
+  });
+
+  test("edits the project document in Overview with keyboard access and cancellation", async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await page.setViewportSize({ width: 1440, height: 900 });
     await signUp(page, `Document owner ${suffix}`, `document-${suffix}@example.test`, "integration-password-123");
@@ -17,27 +170,28 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(response.status()).toBe(201);
     const projectPath = `/projects/${(await response.json()).slug}`;
     await page.goto(projectPath);
-    const field = page.getByLabel("Project document (Markdown)");
-
     await page.waitForLoadState("networkidle");
     await expect(page.locator("#owner-tools")).not.toHaveAttribute("open", "");
-    await page.getByRole("link", { name: "Add one in Owner tools" }).click();
+    await page.getByRole("button", { name: "Add document", exact: true }).click();
+    const field = page.getByLabel("Project document (Markdown)");
     await expect(field).toBeFocused();
     await expect(field).toBeInViewport();
     await field.fill("# Saved document");
-    await page.getByRole("button", { name: "Save settings" }).click();
-    await expect(page.getByText("Project settings saved.")).toBeVisible();
+    await page.getByRole("button", { name: "Save document", exact: true }).click();
+    await expect(page.getByText("Project document saved.")).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(projectPath);
     await page.waitForLoadState("networkidle");
-    const editLink = page.getByRole("link", { name: "Edit document" });
+    const editLink = page.getByRole("button", { name: "Edit document", exact: true });
     await editLink.press("Enter");
     await expect(field).toBeFocused();
     await expect(field).toBeInViewport();
     await expect(field).toHaveValue("# Saved document");
-    await page.getByText("Project settings", { exact: true }).click();
+    await field.fill("Unsaved changes");
+    await page.getByRole("button", { name: "Cancel document changes", exact: true }).click();
     await editLink.click();
     await expect(field).toBeFocused();
+    await expect(field).toHaveValue("# Saved document");
   });
 
   test("uploads, publishes, restores a revision, forks it, and delivers owner notifications", async ({ page }) => {

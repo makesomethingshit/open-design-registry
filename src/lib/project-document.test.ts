@@ -25,6 +25,28 @@ describe("renderProjectDocument", () => {
     expect(html).toContain('<img src="https://example.com/a.png" alt="alt" loading="lazy">');
   });
 
+  it("renders uploaded document images but rejects arbitrary relative paths", () => {
+    const url = "/api/assets?key=project-documents%2Fproject1%2F00000000-0000-4000-8000-000000000000.png";
+    expect(renderProjectDocument(`![Design](${url})`)).toContain(`<img src="${url}" alt="Design" loading="lazy">`);
+    expect(renderProjectDocument("![Bad](/api/assets?key=private-source.zip)")).not.toContain("<img");
+    expect(renderProjectDocument("![Bad](/settings)")).not.toContain("<img");
+  });
+
+  it("renders tables with escaped content and inline formatting", () => {
+    const html = renderProjectDocument("| Tool | Notes |\n| --- | --- |\n| **Penpot** | <script>x</script> |\n| Figma | A \\| B |\n\nAfter table");
+    expect(html).toContain('<th scope="col">Tool</th>');
+    expect(html).toContain("<td><strong>Penpot</strong></td>");
+    expect(html).toContain("&lt;script&gt;x&lt;/script&gt;");
+    expect(html).toContain("<td>A | B</td>");
+    expect(html).toContain("</table></div>\n<p>After table</p>");
+    expect(html).not.toContain("<script>");
+  });
+
+  it("keeps invalid tables and tables in code blocks inert", () => {
+    expect(renderProjectDocument("| Tool | Notes |\n| --- |\n| Penpot | Open |")).not.toContain("<table>");
+    expect(renderProjectDocument("```\n| Tool |\n| --- |\n``` ")).not.toContain("<table>");
+  });
+
   it("renders headings, lists, and code without raw HTML", () => {
     const html = renderProjectDocument("# Title\n\n- one\n- two\n\n\u0060\u0060\u0060\n<script>\n\u0060\u0060\u0060");
     expect(html).toContain("<h1>Title</h1>");

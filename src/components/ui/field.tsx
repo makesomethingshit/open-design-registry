@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from "react";
+import { cloneElement, isValidElement, type ComponentPropsWithoutRef, type ComponentPropsWithRef, type ReactElement, type ReactNode } from "react";
 import styles from "./field.module.css";
 
 type ControlElementProps = { id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean | "true" | "false" };
@@ -41,7 +41,7 @@ export function Input({ className, invalid, ...props }: InputProps) {
   return <input {...props} aria-invalid={invalid || props["aria-invalid"] || undefined} className={`${styles.control}${className ? ` ${className}` : ""}`} />;
 }
 
-type TextareaProps = ComponentPropsWithoutRef<"textarea"> & { invalid?: boolean };
+type TextareaProps = ComponentPropsWithRef<"textarea"> & { invalid?: boolean };
 
 export function Textarea({ className, invalid, ...props }: TextareaProps) {
   return <textarea {...props} aria-invalid={invalid || props["aria-invalid"] || undefined} className={`${styles.control} ${styles.textarea}${className ? ` ${className}` : ""}`} />;
