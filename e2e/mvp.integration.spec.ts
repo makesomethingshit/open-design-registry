@@ -335,7 +335,11 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       const projectPath = `/projects/${slug}`;
       await owner.goto(`${projectPath}?contributionTarget=${slug}&baseRevision=1#owner-tools`);
       await publishWork(owner, "Initial design", `https://example.com/${suffix}/original.penpot`);
-      const revisions = await (await owner.request.get(`/api${projectPath}/revisions`)).json();
+      // This read intermittently receives ECONNRESET in CI.
+      // Retry transport resets only; HTTP failures must still fail the test.
+      const initialRevisionsResponse = await owner.request.get(`/api${projectPath}/revisions`, { maxRetries: 2 });
+      expect(initialRevisionsResponse.status()).toBe(200);
+      const revisions = await initialRevisionsResponse.json();
       const opened = await owner.request.post(`/api${projectPath}/issues`, { data: { title: requestTitle, body: "Make the title easier to read on a phone.", kind: "DESIGN_REQUEST", revisionId: revisions[0].id } });
       expect(opened.status()).toBe(201);
       const { id: requestId } = await opened.json() as { id: string };
