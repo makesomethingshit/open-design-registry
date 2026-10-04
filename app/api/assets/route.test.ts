@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   projectFindMany: vi.fn(),
+  documentProject: vi.fn(),
   previewFindMany: vi.fn(),
   revisionFindMany: vi.fn(),
   getObject: vi.fn(),
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: {
-  project: { findMany: mocks.projectFindMany },
+  project: { findMany: mocks.projectFindMany, findUnique: mocks.documentProject },
   preview: { findMany: mocks.previewFindMany },
   revision: { findMany: mocks.revisionFindMany },
 } }));
@@ -33,6 +34,7 @@ describe("asset proxy route", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue(null);
     mocks.projectFindMany.mockResolvedValue([]);
+    mocks.documentProject.mockResolvedValue(null);
     mocks.previewFindMany.mockResolvedValue([]);
     mocks.revisionFindMany.mockResolvedValue([]);
     mocks.getObject.mockResolvedValue({ Body: body, ContentType: "image/png", ContentLength: 5 });
@@ -84,5 +86,42 @@ describe("asset proxy route", () => {
     expect(response.headers.get("content-disposition")).toBe("attachment");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("content-security-policy")).toContain("script-src 'none'");
+  });
+
+  it("does not authorize document uploads through unrelated public cover, preview or revision references", async () => {
+    const key = "project-documents/project1/00000000-0000-4000-8000-000000000000.png";
+    const publicProject = { isPublic: true, ownerId: "other-owner" };
+    mocks.projectFindMany.mockResolvedValue([publicProject]);
+    mocks.previewFindMany.mockResolvedValue([{ revision: { project: publicProject } }]);
+    mocks.revisionFindMany.mockResolvedValue([{ project: publicProject }]);
+    mocks.documentProject.mockResolvedValue({ isPublic: false, ownerId: "owner", document: "" });
+    for (const query of [`key=${encodeURIComponent(key)}`, `url=${encodeURIComponent(`https://open-design-registry.s3.us-east-1.amazonaws.com/${key}`)}`]) {
+      expect((await GET(request(query))).status).toBe(404);
+    }
+    mocks.getSession.mockResolvedValue({ user: { id: "other-owner" } });
+    expect((await GET(request(`key=${encodeURIComponent(key)}`))).status).toBe(404);
+    expect(mocks.getObject).not.toHaveBeenCalled();
+  });
+
+  it("keeps draft document uploads private until they are rendered in a public project's saved document", async () => {
+    const key = "project-documents/project1/00000000-0000-4000-8000-000000000000.png";
+    const query = `key=${encodeURIComponent(key)}`;
+    const image = `![Design](/api/assets?${query})`;
+    mocks.documentProject.mockResolvedValue({ isPublic: true, ownerId: "owner", document: "" });
+    expect((await GET(request(query))).status).toBe(404);
+    expect(mocks.getObject).not.toHaveBeenCalled();
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    expect((await GET(request(query))).status).toBe(200);
+    mocks.getSession.mockResolvedValue(null);
+    for (const document of [`\u0060${image}\u0060`, `\u0060\u0060\u0060\n${image}\n\u0060\u0060\u0060`, `/api/assets?${query}`, `[Design](/api/assets?${query})`]) {
+      mocks.documentProject.mockResolvedValue({ isPublic: true, ownerId: "owner", document });
+      expect((await GET(request(query))).status).toBe(404);
+    }
+    mocks.documentProject.mockResolvedValue({ isPublic: true, ownerId: "owner", document: image });
+    expect((await GET(request(query))).status).toBe(200);
+    mocks.documentProject.mockResolvedValue({ isPublic: false, ownerId: "owner", document: image });
+    expect((await GET(request(query))).status).toBe(404);
+    mocks.getSession.mockResolvedValue({ user: { id: "other-owner" } });
+    expect((await GET(request(query))).status).toBe(404);
   });
 });

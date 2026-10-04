@@ -6,6 +6,12 @@
 
 ## 전체 구조
 
+### 프로젝트 화면
+
+`app/projects/[slug]/project-shell.tsx`가 프로젝트 헤더와 탭을 공유한다. Overview에는 작업물/About/Project document와 최대 3개의 요청·제안 및 최신 Revision 요약을 둔다. 전체 목록은 프로젝트 URL 아래 `/revisions`, `/releases`, `/issues`, `/proposals`, `/discussions`, `/contributors`, `/forks`에서 제공한다. Settings는 소유자만 접근한다. 기존 상세 URL은 유지하며 상위 탭을 활성 표시한다.
+
+Issues는 Open/Closed 목록, `/issues/new` 작성 화면, 본문·댓글·관련 제안·소유자 상태 변경을 제공하는 상세 화면으로 나눈다. 발행 폼은 Revisions에 있고 기여 복귀 query를 보존한다. 상세로 이동하는 생성/복원 동작은 공통 헤더도 refresh한다. 이전 project hash와 루트의 `proposalStatus` query는 해당 탭으로 연결하고, 개별 이슈 hash는 닫힌 이슈도 읽을 수 있는 상세로 연결한다. 각 서버 페이지는 기존 공개/비공개 및 소유자 권한 검사를 유지한다.
+
 ODR은 Next.js App Router 애플리케이션입니다. 화면과 HTTP API가 같은 저장소에 있으며, Prisma를 통해 PostgreSQL에 메타데이터를 저장하고 S3 호환 저장소에 원본·미리보기·번들을 저장합니다.
 
 ```mermaid
@@ -29,7 +35,8 @@ flowchart LR
 | 위치 | 책임 |
 | --- | --- |
 | `app/projects/[slug]/page.tsx` | 작품·About·프로젝트 가이드와 기여 요약을 읽는 Overview |
-| `app/projects/[slug]/project-shell.tsx`, `project-navigation.tsx` | 공통 프로젝트 헤더, 탭 경로와 기존 hash 링크 이동 |
+| `app/projects/[slug]/project-screen.tsx` | Overview와 기능별 목록·설정·발행 화면. 각 하위 `page.tsx`가 표시할 기능을 선택 |
+| `app/projects/[slug]/project-shell.tsx`, `project-navigation.tsx` | 공통 헤더·탭 경로·공개/비공개 권한과 기존 hash 링크 이동. 프로젝트 layout 및 Proposal 상세에서 재사용 |
 | `app/projects/[slug]/{revisions,releases,discussions,issues,proposals,contributors,forks}/` | 기능별 목록·생성·상세 화면을 독립 경로로 제공 |
 | `app/projects/[slug]/settings/page.tsx`, `project-settings-form.tsx` | 소유자의 프로젝트 정보·공개 여부 설정 |
 | `app/projects/[slug]/revision-publish-form.tsx` | 원본·미리보기·유닛 정보 발행 입력 |
@@ -64,6 +71,12 @@ flowchart LR
 **별도 `ChangeUnit` 테이블이나 Dependency 테이블은 없습니다.** 현재 유닛과 유닛 간 의존성은 S3에 저장된 Revision 번들의 `files[]` 항목에 기록합니다. Change의 `targetFileId`가 유닛의 stable ID를 가리킵니다.
 
 Proposal 출처는 `Revision.sourceProposalId`, 적용된 Change, Proposal의 작성자·리뷰어·채택자를 통해 연결합니다. Fork 출처는 프로젝트의 `forkedFromProjectId`·`forkedFromRevisionId`·`forkedFromLicense`로 보존합니다.
+
+## Overview 편집과 문서 이미지
+
+About은 짧은 설명·제목·라이선스·활동 상태를, Project document는 긴 Markdown 문서를 담당합니다. 소유자는 Overview에서 각각 편집·저장·취소하며 기존 `PATCH /api/projects/{slug}`를 사용합니다. 문서 편집기는 작성·미리보기, 이미지 파일 선택·붙여넣기·드롭, 표 셀과 행·열 편집·제거를 지원합니다. 표를 포함한 Markdown은 같은 allowlist renderer로 표시하고 원시 HTML은 이스케이프합니다.
+
+이미지는 소유자 전용 `POST /api/projects/{slug}/document-images`에서 PNG/JPG 파일의 크기와 시그니처를 검사한 뒤 비공개 S3의 `project-documents/{projectId}/{uuid}.png|jpg`에 저장합니다. 별도 테이블이나 공개 버킷은 추가하지 않습니다. 응답은 `/api/assets?key=...` 프록시 URL이며 이미지의 공개 여부는 키가 가리키는 프로젝트의 현재 공개 설정과 저장된 문서의 실제 이미지 참조로 판정합니다. 미저장·제거된 이미지와 비공개 프로젝트의 이미지는 소유자만 조회할 수 있습니다. 문서에서 이미지를 제거하고 저장하면 방문자 접근을 닫으며, S3 객체 자체의 영구 삭제는 수행하지 않습니다.
 
 ## 발행과 불변성
 

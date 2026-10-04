@@ -12,21 +12,29 @@ body:
 
         Describe the problem or desired outcome before focusing on implementation.
 
-        Replace P? in the title with one priority: P0, P1, P2, or P3.
+        Replace P? in the title with one review level: P0, P1, P2, or P3.
 
   - type: dropdown
     id: priority
     attributes:
       label: Priority
-      description: Select the current priority of this issue.
+      description: Estimate the human review needed. P1 needs a decision before implementation; P2 needs review of the result; P3 has explicit acceptance criteria that automated checks can verify. See CONTRIBUTING.md. P0 is reserved for critical incidents.
       options:
-        - P0 - Critical
-        - P1 - High
-        - P2 - Normal
-        - P3 - Low
+        - P0 - Critical incident
+        - P1 - Human decision before implementation
+        - P2 - Human review of the result
+        - P3 - Automated verification sufficient
       default: 2
     validations:
       required: true
+
+  - type: textarea
+    id: human-review
+    attributes:
+      label: Human review
+      description: For P1, name the decision needed; for P2, what a person must inspect; for P3, the acceptance criteria and automated checks. This is an estimate; each PR is classified by its actual changes.
+    validations:
+      required: false
 
   - type: textarea
     id: problem

@@ -57,8 +57,8 @@ describe("discussion detail page", () => {
     expect(html).toContain("Explore compact header");
     expect(html).toContain("OPEN");
     expect(html).toContain("CLOSED");
-    expect(html).toContain('href="/projects/demo#issue-issue-1"');
-    expect(html).toContain('href="/projects/demo#issue-request-1"');
+    expect(html).toContain('href="/projects/demo/issues/issue-1"');
+    expect(html).toContain('href="/projects/demo/issues/request-1"');
     expect(html.indexOf("Keep the primary action visible.")).toBeLessThan(html.indexOf("Resulting work"));
     expect(html.indexOf("Resulting work")).toBeLessThan(html.indexOf("Comments"));
   });

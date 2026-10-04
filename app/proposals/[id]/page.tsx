@@ -10,6 +10,7 @@ import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import { Banner } from "@/src/components/ui/banner";
 import { StatusBadge } from "@/src/components/ui/badge";
 import CapabilityBadge from "@/app/capability-badge";
+import ProjectLayout from "@/app/projects/[slug]/project-shell";
 import ProposalReview from "./proposal-review";
 import styles from "./proposal-page.module.css";
 
@@ -59,11 +60,11 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   const canRevise = Boolean(session && session.user.id === proposal.authorId && session.user.id === proposal.sourceRevision.project.ownerId);
   const reviseContext = new URLSearchParams({ contributionTarget: proposal.project.slug, baseRevision: String(proposal.baseRevision.number) });
   if (proposal.relatedIssue) reviseContext.set("relatedIssue", proposal.relatedIssue.id);
-  const reviseHref = canRevise ? `/projects/${encodeURIComponent(proposal.sourceRevision.project.slug)}?${reviseContext}#owner-tools` : undefined;
+  const reviseHref = canRevise ? `/projects/${encodeURIComponent(proposal.sourceRevision.project.slug)}/revisions?${reviseContext}#owner-tools` : undefined;
   const proposalStatus = proposalStatusPresentation(proposal.status, changes.filter((change) => change.appliedRevision).length, changes.length);
-  return <article className={styles.page}>
+  const content = <article className={styles.page}>
     <header className={styles.header}>
-      <p className={styles.breadcrumb}><Link href={`/projects/${proposal.project.slug}`}>{proposal.project.title}</Link> - Proposal #{proposal.proposalNumber}</p>
+      <p className={styles.breadcrumb}><Link href={`/projects/${proposal.project.slug}/proposals`}>← Proposals</Link> - Proposal #{proposal.proposalNumber}</p>
       <div className={styles.titleRow}><h1 id="proposal-heading">{proposal.title}</h1><StatusBadge icon={proposalStatus.icon} tone={proposalStatus.tone}>{proposalStatus.label}</StatusBadge></div>
       <p className={styles.meta}>{proposal.author.name} proposes {proposal.sourceRevision.project.title} Revision {proposal.sourceRevision.number} to {proposal.project.title} Revision {proposal.baseRevision.number}</p>
       <div className={styles.capabilities}>
@@ -71,10 +72,11 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
         <CapabilityBadge mode={proposal.sourceRevision.capabilityMode} unitCount={proposal.sourceRevision.capabilityUnitCount} label={`Source Revision ${proposal.sourceRevision.number}`} adapterId={proposal.sourceRevision.adapterId} adapterVersion={proposal.sourceRevision.adapterVersion} adapterConfidence={proposal.sourceRevision.adapterConfidence} adapterMaturity={proposal.sourceRevision.adapterMaturity} />
       </div>
       <p className={styles.summary}>{proposal.body}</p>
-      {proposal.relatedIssue && <><p className={styles.meta}>Origin</p><p className={styles.meta}>{proposal.relatedIssue.sourceDiscussion && <>Discussion: <Link href={`/projects/${proposal.project.slug}/discussions/${proposal.relatedIssue.sourceDiscussion.id}`}>{proposal.relatedIssue.sourceDiscussion.title}</Link><br /></>}{proposal.relatedIssue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}: <Link href={`/projects/${proposal.project.slug}#issue-${proposal.relatedIssue.id}`}>{proposal.relatedIssue.title}</Link></p></>}
+      {proposal.relatedIssue && <><p className={styles.meta}>Origin</p><p className={styles.meta}>{proposal.relatedIssue.sourceDiscussion && <>Discussion: <Link href={`/projects/${proposal.project.slug}/discussions/${proposal.relatedIssue.sourceDiscussion.id}`}>{proposal.relatedIssue.sourceDiscussion.title}</Link><br /></>}{proposal.relatedIssue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}: <Link href={`/projects/${proposal.project.slug}/issues/${proposal.relatedIssue.id}`}>{proposal.relatedIssue.title}</Link></p></>}
       {proposal.appliedRevisions.length > 0 && <Banner tone="success" title="Applied changes">{proposal.appliedRevisions.map((revision) => <Link key={revision.id} href={`/projects/${proposal.project.slug}/revisions/${revision.number}`}>Revision {revision.number}</Link>)}</Banner>}
       {!proposal.sourceRevision.project.isPublic && session?.user.id === proposal.authorId && <Banner className={styles.privateNote} tone="warning" title="Private workspace">Visible to you. The project owner cannot review this proposal while its source is private.</Banner>}
     </header>
     <ProposalReview proposalId={proposal.id} projectSlug={proposal.project.slug} baseRevision={baseRevision} sourceRevision={sourceRevision} latestRevision={latestRevision} latestUnitCount={latestUnitCount} stale={stale} knownConflictCount={knownConflictCount} unavailableConflictCount={unavailableConflictCount} status={proposal.status} changes={changes} comments={proposal.comments} signedIn={Boolean(session)} isOwner={isOwner} canClose={canClose} reviseHref={reviseHref} />
   </article>;
+  return ProjectLayout({ params: Promise.resolve({ slug: proposal.project.slug }), children: content, proposalDetail: true });
 }

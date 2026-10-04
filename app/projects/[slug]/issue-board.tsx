@@ -16,7 +16,7 @@ type Revision = { id: string; number: number; title?: string };
 type Proposal = { id: string; proposalNumber: number; title: string; status: string; appliedRevisions: Revision[] };
 type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; revision: { number: number } | null; sourceDiscussion?: { id: string; title: string } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
 
-export default function IssueBoard({ slug, issues, revisions, canManage, signedIn }: { slug: string; issues: Issue[]; revisions: Revision[]; canManage: boolean; signedIn: boolean }) {
+export default function IssueBoard({ slug, issues, revisions, canManage, signedIn, mode = "board" }: { slug: string; issues: Issue[]; revisions: Revision[]; canManage: boolean; signedIn: boolean; mode?: "board" | "conversation" | "create" }) {
   const router = useRouter();
   const [createError, setCreateError] = useState("");
   const [commentErrors, setCommentErrors] = useState<Record<string, string>>({});
@@ -48,6 +48,12 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
       const response = await fetch(`/api/projects/${slug}/issues`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.get("title"), body: form.get("body"), kind: canManage ? form.get("kind") || "ISSUE" : "ISSUE", revisionId: form.get("revisionId") || undefined }) });
       if (!response.ok) {
         setCreateError((await response.json().catch(() => null))?.error ?? "Could not create issue");
+        return;
+      }
+      if (mode === "create") {
+        const { id } = await response.json();
+        router.push(`/projects/${slug}/issues/${id}`);
+        router.refresh();
         return;
       }
       formElement.reset();
@@ -112,16 +118,18 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     }
   }
 
-  return <section id="issues" className="repo-panel" aria-labelledby="issues-heading">
+  return <section id="issues" className="repo-panel" aria-label={mode === "conversation" ? "Issue conversation" : mode === "create" ? "Open an issue" : undefined} aria-labelledby={mode === "board" ? "issues-heading" : undefined}>
     <PageGrid className="issue-grid">
-    <ReadingColumn>
-    <div className="section-heading"><h2 id="issues-heading">Issues</h2><Badge>{issues.length}</Badge></div>
+    {mode !== "create" && <ReadingColumn>
+    {mode !== "conversation" && <div className="section-heading"><h2 id="issues-heading">Issues</h2><Badge>{issues.length}</Badge></div>}
     {issues.length ? <div className="issues">{issues.map((issue) => <article className="issue" id={`issue-${issue.id}`} key={issue.id}>
       <Stack gap={3}>
+        {mode !== "conversation" && <>
         <div className="issue-heading"><h3><Link href={`/projects/${slug}/issues/${issue.id}`}>{issue.title}</Link></h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></span></div>
         <p>{issue.body}</p>
         <p className="meta">Opened by {issue.author.name}{issue.revision ? ` · Revision ${issue.revision.number}` : ""}</p>
         {issue.sourceDiscussion && <p className="meta"><Link href={`/projects/${slug}/discussions/${issue.sourceDiscussion.id}`}>From discussion: {issue.sourceDiscussion.title}</Link></p>}
+        </>}
         {issue.proposals?.length ? <section aria-labelledby={`issue-${issue.id}-proposals`}><p className="meta" id={`issue-${issue.id}-proposals`}>Related proposals</p><ul className="issue-proposals">{issue.proposals.map((proposal) => {
           const presentation = proposalStatusPresentation(proposal.status);
           return <li key={proposal.id}><Link href={`/proposals/${proposal.id}`}>#{proposal.proposalNumber} · {proposal.title}</Link> <StatusBadge tone={presentation.tone}>{presentation.label}</StatusBadge>{proposal.appliedRevisions.length > 0 && <span className="meta"> · Applied in {proposal.appliedRevisions.map((revision, index) => <span key={revision.id}>{index > 0 ? ", " : ""}<Link href={`/projects/${slug}/revisions/${revision.number}`}>Revision {revision.number}</Link></span>)}</span>}</li>;
@@ -138,8 +146,8 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         {toggleSuccesses[issue.id] && <Banner tone="success" title="Issue updated">{toggleSuccesses[issue.id]}</Banner>}
       </Stack>
     </article>)}</div> : <p className="empty-state">No issues yet.</p>}
-    </ReadingColumn>
-    {signedIn ? <FormColumn><Panel className="issue-form">
+    </ReadingColumn>}
+    {mode !== "conversation" && (signedIn ? <FormColumn><Panel className="issue-form">
       <form noValidate onSubmit={(event) => { void create(event); }} aria-busy={creating}>
         <Stack gap={3}>
           <h3>Open an issue</h3>
@@ -152,7 +160,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
           <Button loading={creating} loadingLabel="Opening issue" type="submit">Open issue</Button>
         </Stack>
       </form>
-    </Panel></FormColumn> : <FormColumn><p className="meta">Sign in to open issues or comment.</p></FormColumn>}
+    </Panel></FormColumn> : <FormColumn><p className="meta">Sign in to open issues or comment.</p></FormColumn>)}
     </PageGrid>
   </section>;
 }

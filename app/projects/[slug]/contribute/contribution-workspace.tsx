@@ -140,7 +140,7 @@ export default function ContributionWorkspace({ baseRevisions, initialBaseRevisi
   const forkHref = baseRevision ? `/projects/${encodeURIComponent(project.slug)}/revisions/${baseRevision.number}?${forkParams}` : null;
   const workingParams = baseRevision ? new URLSearchParams({ contributionTarget: project.slug, baseRevision: String(baseRevision.number) }) : null;
   if (relatedIssueId) workingParams?.set("relatedIssue", relatedIssueId);
-  const workingProjectHref = sourceRevision && workingParams ? `/projects/${encodeURIComponent(sourceRevision.projectSlug)}?${workingParams}#owner-tools` : null;
+  const workingProjectHref = sourceRevision && workingParams ? `/projects/${encodeURIComponent(sourceRevision.projectSlug)}/revisions?${workingParams}#owner-tools` : null;
 
   function invalidateLoadedChanges() {
     activeRequest.current = null;

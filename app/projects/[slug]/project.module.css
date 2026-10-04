@@ -2,6 +2,10 @@
 .navCount { display: inline-grid; min-width: 1.25rem; place-items: center; padding: 0 var(--odr-space-1); border-radius: var(--odr-radius-pill); background: var(--odr-surface-subtle); color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }
 .section { display: grid; gap: var(--odr-space-5); scroll-margin-top: calc(var(--odr-header-height) + var(--odr-space-4)); }
 .overviewGrid { display: grid; grid-template-columns: minmax(0, 1fr) 18rem; gap: var(--odr-space-6) var(--odr-space-6); }
+.projectDocument { grid-column: 1 / -1; min-width: 0; padding-top: var(--odr-space-5); border-top: var(--odr-border-width) solid var(--odr-border-subtle); }
+.aboutHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--odr-space-2); }
+.aboutForm, .documentForm { display: grid; gap: var(--odr-space-4); margin-top: var(--odr-space-3); min-width: 0; }
+.editActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--odr-space-2); }
 .artwork { display: grid; min-width: 0; min-height: clamp(24rem, 48vw, 44rem); place-items: center; overflow: hidden; padding: var(--odr-space-5); margin: 0; border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-canvas-bg); }
 .artwork img { display: block; max-width: 100%; max-height: 42rem; object-fit: contain; }
 .artwork figcaption { justify-self: start; align-self: end; margin-top: var(--odr-space-3); color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }

@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   headerActions: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: vi.fn(), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ notFound: vi.fn(), usePathname: () => "/projects/demo", useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
@@ -39,7 +39,7 @@ vi.mock("@/app/reports/report-form", () => ({ default: () => null }));
 vi.mock("@/src/components/design/project-header", () => ({ ProjectHeader: ({ actions }: { actions?: unknown }) => { mocks.headerActions(actions); return null; } }));
 vi.mock("@/src/components/design/revision-item", () => ({ RevisionItem: () => null }));
 vi.mock("@/src/components/ui/badge", () => ({ Badge: ({ children }: { children: unknown }) => createElement("span", null, children as never), StatusBadge: () => null }));
-vi.mock("@/src/components/ui/section-nav", () => ({ SectionNav: (props: unknown) => { mocks.sectionNav(props); return null; } }));
+vi.mock("@/src/components/ui/section-nav", () => ({ RouteNav: (props: unknown) => { mocks.sectionNav(props); return null; } }));
 vi.mock("./contribute-dialog", () => ({ default: () => null }));
 vi.mock("./project-star-button", () => ({ ProjectStarButton: () => null }));
 vi.mock("./issue-board", () => ({ default: (props: unknown) => { mocks.issueBoard(props); return null; } }));
@@ -47,7 +47,8 @@ vi.mock("./project-settings-form", () => ({ default: () => null }));
 vi.mock("./proposal-list", () => ({ default: () => null }));
 vi.mock("./revision-publish-form", () => ({ default: () => null }));
 
-const { default: ProjectPage } = await import("./page");
+const { default: ProjectPage } = await import("./project-screen");
+const { default: ProjectLayout } = await import("./layout");
 
 const visibleProposal = {
   id: "public-proposal",
@@ -83,7 +84,7 @@ function project(withRelease = false) {
 }
 
 describe("Project issue proposal visibility", () => {
-  it("does not pass private or unpublished proposal metadata to IssueBoard", async () => {
+  it("keeps full issue and proposal metadata out of Overview", async () => {
     vi.clearAllMocks();
     mocks.findProject.mockResolvedValue(project());
     mocks.getSession.mockResolvedValue({ user: { id: "viewer" } });
@@ -97,16 +98,10 @@ describe("Project issue proposal visibility", () => {
 
     const markup = renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
 
-    const props = mocks.issueBoard.mock.calls.at(-1)?.[0] as { issues: Array<{ proposals?: Array<Record<string, unknown>> }> };
-    expect(props.issues[0].proposals).toHaveLength(1);
-    expect(props.issues[0].proposals?.[0]).toEqual({ id: "public-proposal", proposalNumber: 32, title: "Public proposal", status: "OPEN", appliedRevisions: [{ id: "r14", number: 14, title: "Revision 14" }] });
-    expect(JSON.stringify(props)).not.toContain("private-proposal");
-    expect(JSON.stringify(props)).not.toContain("unpublished-proposal");
-    expect(JSON.stringify(props)).not.toContain("secret-owner");
-    expect(JSON.stringify(props)).not.toContain("Secret change");
-    expect(JSON.stringify(props)).not.toContain("Unpublished change");
-    expect((props.issues[0] as { sourceDiscussion?: { id: string; title: string } }).sourceDiscussion).toEqual({ id: "discussion-1", title: "Mobile navigation" });
-    expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ issues: expect.objectContaining({ include: expect.objectContaining({ sourceDiscussion: { select: { id: true, title: true } } }) }) }) }));
+    expect(mocks.issueBoard).not.toHaveBeenCalled();
+    expect(markup).not.toContain("Private proposal");
+    expect(markup).not.toContain("Secret change");
+    expect(markup).not.toContain("Unpublished change");
     expect(markup).toContain("<dt>Contributors</dt><dd>1</dd>");
     expect(markup).toContain("Owner");
     expect(markup).toContain("Contributor");
@@ -163,7 +158,7 @@ describe("Project issue proposal visibility", () => {
   });
 });
 
-async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0) {
+async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0, view: Parameters<typeof ProjectPage>[0]["view"] = "overview") {
   vi.clearAllMocks();
   mocks.findProject.mockResolvedValue(value);
   mocks.getSession.mockResolvedValue(session);
@@ -174,7 +169,8 @@ async function renderProjectPage(session: { user: { id: string } } | null, value
   mocks.attribution.mockResolvedValue([]);
   mocks.findProposal.mockResolvedValue(null);
   mocks.readBundle.mockResolvedValue(null);
-  return renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
+  const content = await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}), view });
+  return renderToStaticMarkup(await ProjectLayout({ params: Promise.resolve({ slug: "demo" }), children: content }));
 }
 
 describe("Project Star action", () => {
@@ -211,28 +207,28 @@ describe("Project Star action", () => {
 
 describe("Project Releases section", () => {
   it("places Releases between Revisions and Discussions", async () => {
-    await renderProjectPage(null);
+    await renderProjectPage(null, project(), 0, 0, "releases");
     const props = mocks.sectionNav.mock.calls.at(-1)?.[0] as { items: Array<{ href: string }> };
-    expect(props.items.map((item) => item.href).slice(1, 4)).toEqual(["#revisions", "#releases", "#discussions"]);
+    expect(props.items.map((item) => item.href).slice(1, 4)).toEqual(["/projects/demo/revisions", "/projects/demo/releases", "/projects/demo/discussions"]);
     expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ releases: expect.objectContaining({ orderBy: { number: "desc" }, select: expect.objectContaining({ _count: { select: { revisions: true } } }) }) }) }));
   });
 
   it("shows release rows and the publish link only to the owner", async () => {
     const releases = project(true);
-    const ownerMarkup = await renderProjectPage({ user: { id: "owner" } }, releases);
+    const ownerMarkup = await renderProjectPage({ user: { id: "owner" } }, releases, 0, 0, "releases");
     expect(ownerMarkup).toContain("Release 3");
     expect(ownerMarkup).toContain("Navigation rethink");
     expect(ownerMarkup).toContain("3 revisions");
     expect(ownerMarkup).toContain('href="/projects/demo/releases/3"');
     expect(ownerMarkup).toContain('href="/projects/demo/releases/new"');
 
-    const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } }, releases);
+    const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } }, releases, 0, 0, "releases");
     expect(visitorMarkup).toContain('href="/projects/demo/releases/3"');
     expect(visitorMarkup).not.toContain('href="/projects/demo/releases/new"');
   });
 
   it("keeps the owner publish link in the empty state", async () => {
-    const markup = await renderProjectPage({ user: { id: "owner" } });
+    const markup = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "releases");
     expect(markup).toContain("No releases yet.");
     expect(markup).toContain('href="/projects/demo/releases/new"');
   });
@@ -241,7 +237,7 @@ describe("Project Releases section", () => {
 describe("Project Discussions section", () => {
 
   it("shows summary rows with title, author, created time, and comment count", async () => {
-    const markup = await renderProjectPage(null);
+    const markup = await renderProjectPage(null, project(), 0, 0, "discussions");
     expect(markup).toContain("Mobile navigation");
     expect(markup).toContain("Jisoo");
     expect(markup).toContain("4 comments");
@@ -250,19 +246,19 @@ describe("Project Discussions section", () => {
   });
 
   it("links discussion titles to their standalone detail pages", async () => {
-    const markup = await renderProjectPage(null);
+    const markup = await renderProjectPage(null, project(), 0, 0, "discussions");
     expect(markup).toContain('href="/projects/demo/discussions/new-discussion"');
   });
 
   it("hides the anonymous create form and provides a login path", async () => {
-    const markup = await renderProjectPage(null);
+    const markup = await renderProjectPage(null, project(), 0, 0, "discussions");
     expect(markup).not.toContain("<form");
     expect(markup).toContain("Sign in to start a discussion");
     expect(markup).toContain("/login?next=%2Fprojects%2Fdemo%2Fdiscussions%2Fnew");
   });
 
   it("shows signed-in users a link to the discussion form", async () => {
-    const markup = await renderProjectPage({ user: { id: "viewer" } });
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, project(), 0, 0, "discussions");
     expect(markup).toContain("Start a discussion");
     expect(markup).toContain('href="/projects/demo/discussions/new"');
     expect(markup).not.toContain("<form");
@@ -281,11 +277,15 @@ describe("Project Document section", () => {
   it("shows the empty state with an owner edit CTA only to the owner", async () => {
     const ownerMarkup = await renderProjectPage({ user: { id: "owner" } });
     expect(ownerMarkup).toContain("No project document has been added yet.");
-    expect(ownerMarkup).toContain("Add one in Owner tools");
+    expect(ownerMarkup).toContain("Add document");
+    expect(ownerMarkup).toContain("Edit About");
 
     const visitorMarkup = await renderProjectPage({ user: { id: "visitor" } });
     expect(visitorMarkup).toContain("No project document has been added yet.");
-    expect(visitorMarkup).not.toContain("Add one in Owner tools");
+    expect(visitorMarkup).not.toContain("Add document");
+    expect(visitorMarkup).not.toContain("Edit About");
+    expect(visitorMarkup).toContain("A revision has not been published yet.");
+    expect(visitorMarkup).not.toContain('href="/projects/demo/revisions">Revisions</a>');
   });
 
   it("never renders raw HTML from the document", async () => {

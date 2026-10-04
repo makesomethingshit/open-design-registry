@@ -1,0 +1,20 @@
+.editor { display: grid; gap: var(--odr-space-3); min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--odr-space-3); padding: var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-control); background: var(--odr-surface-subtle); }
+.toolbar > div, .tools, .actions { display: flex; flex-wrap: wrap; gap: var(--odr-space-2); }
+.actions { justify-content: flex-end; }
+.hint { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
+.error { margin: 0; color: var(--odr-text-primary); }
+.preview { min-height: 12rem; padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-control); }
+.prose { min-width: 0; overflow-wrap: anywhere; }
+.prose img { display: block; max-width: 100%; height: auto; margin-block: var(--odr-space-4); }
+.prose pre, .prose :global(.document-table), .tableScroll { max-width: 100%; overflow-x: auto; }
+.prose table { width: 100%; border-collapse: collapse; font-size: var(--odr-font-body); line-height: var(--odr-line-body); }
+.prose th, .prose td { padding: var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-default); text-align: left; }
+.prose th { background: var(--odr-surface-subtle); font-weight: var(--odr-weight-semibold); }
+.tableEditor { display: grid; gap: var(--odr-space-3); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); }
+.tableScroll table { border-collapse: collapse; width: 100%; }
+.tableScroll td { min-width: 8rem; padding: var(--odr-space-1); }
+.blocks { display: grid; gap: var(--odr-space-2); }
+.block { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--odr-space-3); padding: var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-control); }
+.block > span { overflow-wrap: anywhere; font-size: var(--odr-font-label); color: var(--odr-text-secondary); }
+@media (max-width: 48rem) { .toolbar, .block { align-items: stretch; } .toolbar > div { flex-wrap: wrap; } }

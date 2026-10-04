@@ -23,7 +23,7 @@ vi.mock("react", async (importOriginal) => {
     },
   };
 });
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, refresh: vi.fn() }) }));
 
 const { default: ReleaseForm } = await import("./release-form");
 

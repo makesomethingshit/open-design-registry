@@ -79,6 +79,7 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
         return;
       }
       router.push(`/projects/${slug}/releases/${payload.number}`);
+      router.refresh();
       navigated = true;
     } catch {
       setError("Couldn’t publish the release. Try again.");
@@ -116,7 +117,7 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
     <p aria-live="polite" className="sr-only" role="status">{submitting ? "Publishing…" : ""}</p>
     <Inline className={styles.actions} gap={3}>
       <Button disabled={!revisions.length} loading={submitting} loadingLabel="Publishing release" type="submit">Publish release</Button>
-      <TextLink href={`/projects/${slug}#releases`}>Cancel</TextLink>
+      <TextLink href={`/projects/${slug}/releases`}>Cancel</TextLink>
     </Inline>
   </form>;
 }

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { assetUrl, getObject, legacyObjectUrl } from "@/src/lib/storage";
+import { documentImageProjectId } from "@/src/lib/project-document-images";
+import { renderProjectDocument } from "@/src/lib/project-document";
 
 const bucket = process.env.S3_BUCKET ?? "open-design-registry";
 
@@ -23,15 +25,20 @@ export async function GET(request: Request) {
   if (hasKey) [assetUrl(key), legacyObjectUrl(key), key].forEach((value) => storedUrls.add(value));
 
   const session = await auth.api.getSession({ headers: request.headers });
-  const [projects, previews, revisions] = await Promise.all([
+  const imageProjectId = documentImageProjectId(key);
+  const [projects, previews, revisions, documentProject] = await Promise.all([
     prisma.project.findMany({ where: { coverUrl: { in: [...storedUrls] } }, select: { isPublic: true, ownerId: true } }),
     prisma.preview.findMany({
       where: { OR: [{ key }, { url: { in: [...storedUrls] } }] },
       select: { revision: { select: { project: { select: { isPublic: true, ownerId: true } } } } },
     }),
     prisma.revision.findMany({ where: { sourceKey: key }, select: { project: { select: { isPublic: true, ownerId: true } } } }),
+    imageProjectId ? prisma.project.findUnique({ where: { id: imageProjectId }, select: { isPublic: true, ownerId: true, document: true } }) : Promise.resolve(null),
   ]);
-  const owners = [
+  const owners = imageProjectId ? (documentProject ? [{
+    ownerId: documentProject.ownerId,
+    isPublic: documentProject.isPublic && renderProjectDocument(documentProject.document).includes(`<img src="${assetUrl(key)}"`),
+  }] : []) : [
     ...projects,
     ...previews.map(({ revision }) => revision.project),
     ...revisions.map(({ project }) => project),
