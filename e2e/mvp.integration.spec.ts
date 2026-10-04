@@ -553,6 +553,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await expect(page.getByRole("button", { name: "Approve change" })).toHaveCount(0);
 
       await owner.goto(firstProposalPath);
+      await owner.waitForLoadState("networkidle");
       await expect(owner.getByRole("heading", { name: "Review this proposed change" })).toBeVisible();
       await owner.getByRole("button", { name: "Request changes", exact: true }).click();
       await owner.getByRole("textbox", { name: /^Feedback for/ }).fill("Increase the contrast of the title too.");

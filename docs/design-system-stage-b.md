@@ -1,15 +1,7 @@
-# Phase B handoff — ODR components and Proposal workspace
+# Phase B 인계 문서 안내
 
-Phase A intentionally leaves the existing Proposal controller and API routes untouched. The next implementation should compose the Phase A primitives rather than recreate their CSS.
+Phase B의 Proposal 컴포넌트 통합은 이미 적용되었습니다. 이 파일은 기존 링크를 유지하기 위한 안내이며 앞으로 구현할 작업 목록이 아닙니다.
 
-## Integration seams
-
-- Build `DesignPreview` and `PreviewToolbar` from `Panel`, `SegmentedControl`, `Banner`, and the existing revision preview data. Preserve original media behavior; no image filters or invented metadata.
-- Render proposal and change badges via `status-presentation.ts`. Continue to use `proposal-status.ts` and server responses for domain calculation.
-- Replace repeated review-state markup in `app/proposals/[id]/proposal-review.tsx` with `ChangeItem`, `ReviewInspector`, and `ReviewActionBar` only after tracing its shared `viewedChangeId`, selection, mutation, and stale-check state.
-- Keep review, select-for-apply, and apply as independent actions. Do not change the PATCH or POST payloads.
-- Keep errors beside the current action and inside confirmation dialogs. Reuse native dialog focus behavior from Phase A.
-
-## Verification target
-
-Check ADD, MODIFY, REMOVE, RENAME, legacy replacement, stale invalidation, partial apply, network recovery, keyboard selection, private-source visibility, and the existing proposal tests before changing layout. No Prisma migration or client-side authorization move belongs in this phase.
+- 현재 컴포넌트와 유지할 통합 규칙: [디자인 시스템 — Proposal 화면 통합](design-system.md#proposal-화면-통합)
+- 기여·리뷰·선택 적용의 동작과 API 계약: [Proposal 협업 가이드](proposals.md)
+- 전체 문서 안내: [문서 목차](README.md)

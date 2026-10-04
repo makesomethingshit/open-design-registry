@@ -1,5 +1,7 @@
 # UI 용어집
 
+[문서 목차](README.md) · [디자인 시스템](design-system.md) · [현재 기능](current-capabilities.md)
+
 ## 기본 원칙
 
 - 기본 UI 언어는 영어입니다. 버튼, 레이블, 도움말, 빈 상태, 오류·성공 메시지, 상태 표시와 접근성 이름도 영어로 씁니다.
@@ -20,6 +22,11 @@
 | Design request | Design request | 프로젝트 관리자가 요청한 구체적인 디자인 작업입니다. 해결할 문제를 기록하는 Issue와 구분합니다. |
 | Issue | Issue | 해결이 필요한 구체적인 문제입니다. 자유로운 방향·아이디어 논의는 Discussion으로 표시합니다. |
 | Discussion | Discussion | 방향, 해석, 아이디어를 자유롭게 논의하는 공간입니다. |
+| Review | Review | Proposal의 각 변경을 승인하거나 수정을 요청하는 검토입니다. 적용할 변경의 선택과 실제 적용은 별도 행동입니다. |
+| Star | Star | 공개 프로젝트에 관심을 표시하고 다시 찾는 행동입니다. 품질 등급이나 완료 상태가 아닙니다. |
+| Watch | Watch | 프로젝트의 새 Revision·Release 발행 알림을 받는 행동입니다. Proposal 알림은 직접 당사자에게 전달됩니다. |
+| Feed | Feed | 공개 프로젝트의 Revision·Release 발행을 모은 화면입니다. 개인 알림과 구분합니다. |
+| Notifications | Notifications | 로그인 사용자의 개인 알림 화면입니다. 현재 전역 헤더의 Activity 링크가 이 화면으로 연결됩니다. |
 
 ## 화면 문구
 
