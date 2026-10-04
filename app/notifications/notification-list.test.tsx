@@ -7,6 +7,16 @@ vi.mock("next/link", () => ({ default: ({ href, children, ...props }: { href: st
 const { default: NotificationList } = await import("./notification-list");
 
 describe("discussion notifications", () => {
+  it("links an issue notification to the created issue", () => {
+    const html = renderToStaticMarkup(<NotificationList unreadCount={1} notifications={[{
+      id: "issue-event", type: "ISSUE_CREATED", readAt: null, createdAt: "2026-10-01T00:00:00.000Z",
+      actor: { name: "Alex" }, project: { slug: "demo", title: "Demo" },
+      issue: { id: "created-issue", title: "Fix navigation" }, discussion: null,
+      forkedProject: null, proposal: null, revision: null, release: null,
+    }]} />);
+    expect(html).toContain('href="/projects/demo/issues/created-issue"');
+    expect(html).toContain("Fix navigation");
+  });
   it.each([["ISSUE_CREATED", "issues"], ["DISCUSSION_CREATED", "discussions"], ["REVISION_PUBLISHED", "revisions"], ["RELEASE_PUBLISHED", "releases"]] as const)("opens the %s tab when the detail object is unavailable", (type, section) => {
     const html = renderToStaticMarkup(<NotificationList unreadCount={1} notifications={[{ id: "fallback", type, readAt: null, createdAt: "2026-10-01T00:00:00.000Z", actor: { name: "Alex" }, project: { slug: "demo", title: "Demo" }, issue: null, discussion: null, forkedProject: null, proposal: null, revision: null, release: null }]} />);
     expect(html).toContain(`href="/projects/demo/${section}"`);
