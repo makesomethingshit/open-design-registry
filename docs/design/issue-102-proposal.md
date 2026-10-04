@@ -39,10 +39,12 @@
 
 ## 비교 시안과 확인한 범위
 
-- [A/B 비교 HTML](issue-102-preview.html): 로컬에서 열고 A/B와 light/dark를 전환할 수 있다. 제품 동작 구현을 대신하지 않는다.
-- [편집 가능한 A 데스크톱 / 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd4168e17064)
-- [편집 가능한 A 모바일 / 390](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd4173ff237e)
+- [A / 데스크톱 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd4168e17064)
+- [A / 모바일 390](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd4173ff237e)
+- [B / 데스크톱 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7fbf948771)
+- [B / 모바일 390](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7fca39f758)
+- [A/B 비교 HTML](issue-102-preview.html): 보조 비교 자료로 유지한다.
 
-원격 MCP로 실제 파일·페이지를 읽고 기존 v2 보드를 복제했다. 기존 네 보드의 ID·위치·크기를 보존했다. A 보드의 모든 자식이 보드 안에 있고 textBounds도 보드 밖으로 넘지 않는 것을 확인했다. 데스크톱은 1440×2541, 모바일은 390×3220이다. 기존 버튼 component instance와 Aster asset을 재사용했다. B는 HTML 비교 시안이며 아직 Penpot 구현이 아니다.
+A/B 모두 원격 MCP로 만든 편집 가능한 Penpot 보드다. B는 제목·CTA와 Aster 작업물을 데스크톱에서 좌우로 나누고 모바일에서 세로로 쌓는다. 기존 공개 원본·Revision·기여 패널, 버튼 component instance와 Aster 벡터를 재사용한다. 기존 여섯 보드의 이름·위치·크기를 보존했다. 보드 범위와 PNG 표시를 확인하며, PNG는 PR 코멘트에 첨부한다.
 
-HTML 시안은 Chromium에서 320·390·1440px 가로 넘침이 없고 이미지가 정상 로드됨을 확인했다. A/B 전환과 다크 테마도 확인했다. 실제 제품의 검색·라우팅·포커스 회귀, 768px와 전체 테마/크기 조합의 acceptance 검증은 구현 후에 한다. PNG는 PR 첨부자료로 제공한다.
+시안 선택은 미정이다. 실제 제품의 검색·라우팅·포커스 회귀, 320·390·768·1440px와 light/dark 조합의 acceptance 검증은 방향 결정 후 구현에서 수행한다.
