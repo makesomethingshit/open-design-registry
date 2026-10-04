@@ -224,7 +224,7 @@ describe("Revision upstream work chain", () => {
     expect(markup).toContain("Mobile navigation");
     expect(markup).toContain('href="/projects/demo/discussions/discussion-7"');
     expect(markup).toContain("Fix mobile navigation");
-    expect(markup).toContain('href="/projects/demo#issue-issue-14"');
+    expect(markup).toContain('href="/projects/demo/issues/issue-14"');
     expect(markup).toContain('href="/proposals/proposal-32"');
     expect(markup).toContain("Proposal #32");
   });

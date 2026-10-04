@@ -50,8 +50,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
     }
   }
 
-  return <details className="project-settings">
-    <summary>Project settings</summary>
+  return <section aria-label="Edit project settings" className="project-settings">
     <form className="form" noValidate onSubmit={submit} aria-busy={saving}>
       <Stack gap={4}>
         <Field error={fieldErrors.title} id="settings-title" invalid={Boolean(fieldErrors.title)} label="Title" required><Input name="title" defaultValue={title} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={120} /></Field>
@@ -65,5 +64,5 @@ export default function ProjectSettingsForm({ slug, title, description, license,
         <Button loading={saving} loadingLabel="Saving settings" type="submit">Save settings</Button>
       </Stack>
     </form>
-  </details>;
+  </section>;
 }

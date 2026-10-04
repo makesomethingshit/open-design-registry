@@ -56,6 +56,7 @@ test("sign-up and sign-in return to project creation and an expired session keep
   const popupPromise = page.waitForEvent("popup");
   await recoveryLink.click();
   const login = await popupPromise;
+  await login.waitForLoadState("networkidle");
   await login.getByLabel("Email").fill(email);
   await login.getByLabel("Password").fill(password);
   await login.getByRole("button", { name: "Sign in", exact: true }).click();

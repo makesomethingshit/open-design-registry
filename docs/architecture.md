@@ -6,6 +6,12 @@
 
 ## 전체 구조
 
+### 프로젝트 화면
+
+`app/projects/[slug]/project-shell.tsx`가 프로젝트 헤더와 탭을 공유한다. Overview에는 작업물/About/Project document와 최대 3개의 요청·제안 및 최신 Revision 요약을 둔다. 전체 목록은 프로젝트 URL 아래 `/revisions`, `/releases`, `/issues`, `/proposals`, `/discussions`, `/contributors`, `/forks`에서 제공한다. Settings는 소유자만 접근한다. 기존 상세 URL은 유지하며 상위 탭을 활성 표시한다.
+
+Issues는 Open/Closed 목록, `/issues/new` 작성 화면, 본문·댓글·관련 제안·소유자 상태 변경을 제공하는 상세 화면으로 나눈다. 발행 폼은 Revisions에 있고 기여 복귀 query를 보존한다. 상세로 이동하는 생성/복원 동작은 공통 헤더도 refresh한다. 이전 project hash와 루트의 `proposalStatus` query는 해당 탭으로 연결하고, 개별 이슈 hash는 닫힌 이슈도 읽을 수 있는 상세로 연결한다. 각 서버 페이지는 기존 공개/비공개 및 소유자 권한 검사를 유지한다.
+
 ODR은 Next.js App Router 애플리케이션입니다. 화면과 HTTP API가 같은 저장소에 있으며, Prisma를 통해 PostgreSQL에 메타데이터를 저장하고 S3 호환 저장소에 원본·미리보기·번들을 저장합니다.
 
 ```mermaid
@@ -28,7 +34,8 @@ flowchart LR
 
 | 위치 | 책임 |
 | --- | --- |
-| `app/projects/[slug]/page.tsx` | Overview와 프로젝트별 Revision·Release·Issue·Proposal·Fork 표시 |
+| `app/projects/[slug]/project-screen.tsx` | Overview와 기능별 목록·설정·발행 화면. 각 하위 `page.tsx`가 표시할 기능을 선택 |
+| `app/projects/[slug]/project-shell.tsx` | 프로젝트 헤더·탭과 공개/비공개 권한. 프로젝트 layout 및 Proposal 상세에서 재사용 |
 | `app/projects/[slug]/revision-publish-form.tsx` | 원본·미리보기·유닛 정보 발행 입력 |
 | `app/projects/[slug]/releases/` | Release 발행 입력과 변경 불가 상세 조회 |
 | `src/lib/release-handlers.ts` | Release 소유권·Revision 검증, 번호 산정·원자 발행 |

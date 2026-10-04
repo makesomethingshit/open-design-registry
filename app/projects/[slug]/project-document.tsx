@@ -79,7 +79,7 @@ export default function ProjectDocument({
               <Button onClick={edit} size="sm" variant="secondary">Add document</Button>
             </>
           ) : hasRevision ? (
-            <> Read About for a short summary and browse <a href="#revisions">Revisions</a> for the current design.</>
+            <> Read About for a short summary and browse <a href={`/projects/${slug}/revisions`}>Revisions</a> for the current design.</>
           ) : (
             <> Read About for a short summary. A revision has not been published yet.</>
           )}

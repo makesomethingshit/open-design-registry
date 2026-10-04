@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+vi.mock("@/app/projects/[slug]/project-shell", () => ({ default: ({ children }: { children: unknown }) => children }));
 
 const mocks = vi.hoisted(() => ({ findProposal: vi.fn(), findLatest: vi.fn(), getSession: vi.fn(), readBundle: vi.fn(), review: vi.fn(() => null), proposalStatus: vi.fn(() => ({ label: "Status", tone: "neutral" as const, icon: "clock" as const })) }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
@@ -92,7 +93,7 @@ describe("proposal review data", () => {
 
     const markup = renderToStaticMarkup(await ProposalPage({ params: Promise.resolve({ id: "proposal" }) }));
 
-    expect(markup).toContain('href="/projects/project#issue-issue-14"');
+    expect(markup).toContain('href="/projects/project/issues/issue-14"');
     expect(markup).toContain("Fix navigation");
   });
 });
@@ -119,14 +120,14 @@ describe("proposal origin", () => {
     expect(markup).toContain("Mobile navigation");
     expect(markup).toContain('href="/projects/project/discussions/discussion-7"');
     expect(markup).toContain("Fix mobile navigation");
-    expect(markup).toContain('href="/projects/project#issue-issue-14"');
+    expect(markup).toContain('href="/projects/project/issues/issue-14"');
   });
 
   it("labels a design request work item", async () => {
     const markup = await renderOrigin({ id: "issue-15", title: "Explore compact header", kind: "DESIGN_REQUEST", sourceDiscussion: { id: "discussion-7", title: "Mobile navigation" } });
 
     expect(markup).toContain("Design request");
-    expect(markup).toContain('href="/projects/project#issue-issue-15"');
+    expect(markup).toContain('href="/projects/project/issues/issue-15"');
   });
 
   it("shows a legacy issue without inventing a discussion link", async () => {

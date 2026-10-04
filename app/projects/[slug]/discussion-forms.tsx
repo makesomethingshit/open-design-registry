@@ -60,7 +60,7 @@ export function DiscussionCreateForm({ slug }: { slug: string }) {
         {submitting && <Banner title="Creating discussion" tone="info">Your discussion is being saved.</Banner>}
         <p className={styles.discussionPrivacy}>Everyone who can view this project can read the discussion.</p>
         <div className={styles.discussionActions}>
-          <Link className={styles.discussionCancel} href={`/projects/${slug}#discussions`}>Cancel</Link>
+          <Link className={styles.discussionCancel} href={`/projects/${slug}/discussions`}>Cancel</Link>
           <Button loading={submitting} loadingLabel="Creating discussion" size="lg" type="submit">Create discussion</Button>
         </div>
       </Stack>

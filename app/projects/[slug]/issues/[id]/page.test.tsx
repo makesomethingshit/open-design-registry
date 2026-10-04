@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findFirst: vi.fn() }));
-vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NEXT_NOT_FOUND"); } }));
+vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NEXT_NOT_FOUND"); }, useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children, ...props }: { href: string; children?: unknown; [key: string]: unknown }) => createElement("a", { href, ...props }, children as never) }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { issue: { findFirst: mocks.findFirst } } }));
@@ -57,6 +57,19 @@ describe("project issue detail page", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "visitor" } });
 
     await expect(IssuePage({ params: Promise.resolve({ slug: "demo", id: "request-1" }) })).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("keeps comments and owner controls in detail while hiding private proposal metadata", async () => {
+    const value = { ...issue(), comments: [{ id: "comment", body: "A useful comment", author: { name: "Commenter" } }], proposals: [{ id: "hidden", proposalNumber: 8, title: "Private proposed work", status: "OPEN", project: { id: "project", ownerId: "owner", isPublic: true }, baseRevision: { projectId: "project", isPublished: true }, sourceRevision: { isPublished: true, project: { ownerId: "other-owner", isPublic: false } }, appliedRevisions: [] }] };
+    const html = await markup({ user: { id: "owner" } }, value);
+    expect(html).toContain("A useful comment");
+    expect(html).toContain("Comment on Improve the mobile empty state");
+    expect(html).toContain("Close issue");
+    expect(html).not.toContain("Private proposed work");
+    expect(html).not.toContain("Open an issue");
+    const visitor = await markup(null, value);
+    expect(visitor).not.toContain("Private proposed work");
+    expect(visitor).not.toContain("Comment on Improve the mobile empty state");
   });
 
   it("does not link an unpublished related revision", async () => {

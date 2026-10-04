@@ -25,7 +25,7 @@ export default async function NewReleasePage({ params }: { params: Promise<{ slu
   return <PageGrid aria-labelledby="new-release-heading">
     <WideColumn>
       <Stack gap={5}>
-        <TextLink href={`/projects/${slug}#releases`}>{project.title}</TextLink>
+        <TextLink href={`/projects/${slug}/releases`}>{project.title}</TextLink>
         <PageHeader description="Group published revisions into a meaningful design release." id="new-release-heading" title="Publish release" />
         <Panel><ReleaseForm revisions={revisions} slug={slug} /></Panel>
       </Stack>

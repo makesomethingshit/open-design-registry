@@ -163,6 +163,7 @@ export default function RevisionPublishForm({ slug, existingFiles, contributionR
         if (contributionReturn.relatedIssueId) params.set("relatedIssue", contributionReturn.relatedIssueId);
         router.push(`/projects/${encodeURIComponent(contributionReturn.targetSlug)}/contribute?${params}`);
       } else router.push(`/projects/${slug}/revisions/${payload.number}`);
+      router.refresh();
     } catch {
       setError("Revision could not be published");
     } finally {

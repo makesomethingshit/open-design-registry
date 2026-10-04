@@ -5,13 +5,17 @@ import { TextLink } from "@/src/components/ui/button";
 import { Inline, PageGrid, PageHeader, Panel, SectionHeader, Stack, WideColumn } from "@/src/components/ui/layout";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
+import { isVisible } from "@/src/lib/proposal-handlers";
+import IssueBoard from "../../issue-board";
 import styles from "../../project.module.css";
 
 export const dynamic = "force-dynamic";
 
-export default async function IssuePage({ params }: { params: Promise<{ slug: string; id: string }> }) {
+export default async function IssuePage({ params, searchParams }: { params: Promise<{ slug: string; id: string }>; searchParams?: Promise<{ issueStatus?: string }> }) {
   const { slug, id } = await params;
   const session = await getSession();
+  const query = await searchParams;
+  const listSearch = query?.issueStatus === "closed" ? "?issueStatus=closed" : "";
   const issue = await prisma.issue.findFirst({
     where: { id, project: { slug } },
     select: {
@@ -24,6 +28,8 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
       author: { select: { name: true } },
       project: { select: { title: true, ownerId: true, isPublic: true } },
       revision: { select: { number: true, isPublished: true } },
+      comments: { orderBy: { createdAt: "asc" }, select: { id: true, body: true, author: { select: { name: true } } } },
+      proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } },
     },
   });
   if (!issue || (!issue.project.isPublic && issue.project.ownerId !== session?.user.id)) notFound();
@@ -35,7 +41,7 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
   return <PageGrid aria-labelledby="issue-heading">
     <WideColumn className={styles.discussionDetailPage}>
       <Stack gap={4}>
-        <Link className={styles.secondaryLink} href={`/projects/${slug}#issues`}>← {issue.project.title}</Link>
+        <Link aria-label="Back to issues" className={styles.secondaryLink} href={`/projects/${slug}/issues${listSearch}`}>← Issues</Link>
         <PageHeader eyebrow={heading} id="issue-heading" title={issue.title} />
         <Inline gap={2}><StatusBadge tone={isOpen ? "success" : "neutral"}>{isOpen ? "Open" : "Closed"}</StatusBadge></Inline>
         <p className={styles.discussionMeta}>Opened by {issue.author.name} <span aria-hidden="true">·</span> <time dateTime={issue.createdAt.toISOString()}>{formatDate(issue.createdAt)}</time></p>
@@ -45,6 +51,7 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
             <p className={styles.discussionBody}>{issue.body || "No description was provided."}</p>
           </Stack>
         </Panel>
+        <IssueBoard canManage={issue.project.isPublic && session?.user.id === issue.project.ownerId} issues={[{ ...issue, comments: issue.comments ?? [], proposals: (issue.proposals ?? []).filter((proposal) => isVisible(proposal, session?.user.id)).map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })) }]} mode="conversation" revisions={[]} signedIn={issue.project.isPublic && Boolean(session)} slug={slug} />
         <Panel aria-labelledby="issue-context-heading">
           <Stack gap={3}>
             <SectionHeader id="issue-context-heading" title="Request context" />

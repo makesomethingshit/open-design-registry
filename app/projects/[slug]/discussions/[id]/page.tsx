@@ -27,7 +27,7 @@ export default async function DiscussionPage({ params }: { params: Promise<{ slu
   return <PageGrid aria-labelledby="discussion-heading">
     <WideColumn className={styles.discussionDetailPage}>
       <Stack gap={4}>
-        <Link className={styles.secondaryLink} href={`/projects/${slug}#discussions`}>← {discussion.project.title}</Link>
+        <Link className={styles.secondaryLink} href={`/projects/${slug}/discussions`}>← {discussion.project.title}</Link>
         <PageHeader eyebrow="DISCUSSION" id="discussion-heading" title={discussion.title} />
         <p className={styles.discussionMeta}>{discussion.author.name} <span aria-hidden="true">·</span> <time dateTime={discussion.createdAt.toISOString()}>{formatDate(discussion.createdAt)}</time></p>
         {discussion.body && <Panel className={styles.discussionBodyPanel}><p className={styles.discussionBody}>{discussion.body}</p></Panel>}
@@ -37,7 +37,7 @@ export default async function DiscussionPage({ params }: { params: Promise<{ slu
             {discussion.issues.length ? <ul aria-labelledby="resulting-work-heading" className={styles.discussionWorkList}>{discussion.issues.map((issue) => {
               const kindLabel = issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue";
               return <li className={styles.discussionWorkItem} key={issue.id}>
-                <Link aria-label={`${kindLabel}: ${issue.title}, ${issue.status}`} className={styles.discussionWorkLink} href={`/projects/${slug}#issue-${issue.id}`}>
+                <Link aria-label={`${kindLabel}: ${issue.title}, ${issue.status}`} className={styles.discussionWorkLink} href={`/projects/${slug}/issues/${issue.id}`}>
                   <span className={styles.discussionWorkKind}>{kindLabel}</span>
                   <strong className={styles.discussionWorkTitle}>{issue.title} <span aria-hidden="true">→</span></strong>
                   <span className={styles.discussionWorkStatus}>{issue.status}</span>

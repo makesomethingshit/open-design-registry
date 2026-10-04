@@ -32,6 +32,7 @@ export default function RestoreForm({ slug, number }: { slug: string; number: nu
         return;
       }
       router.push(`/projects/${slug}/revisions/${payload.number}`);
+      router.refresh();
     } catch {
       setError("Could not restore revision. Try again.");
     } finally {
