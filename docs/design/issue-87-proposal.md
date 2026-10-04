@@ -82,4 +82,15 @@ The implementation PR should be limited to the global header and its focused che
 
 **Choose A (recommended compact Account disclosure) or B (all account actions visible in a second row). Keep `New project` in the public group and keep `Reports` account-only in either direction.**
 
-The static comparison is in [`issue-87-preview.html`](./issue-87-preview.html). It is a review aid only; it does not implement either direction.
+The primary comparison is now editable Penpot boards. The [HTML preview](./issue-87-preview.html) remains a supplementary review aid.
+
+## Editable Penpot comparison
+
+- [A / Desktop 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7efe896112)
+- [A / Mobile 440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7f018acef4)
+- [B / Desktop 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7f035fc950)
+- [B / Mobile 440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7f055099a7)
+
+Both alternatives show global search, theme access, public destinations, the active Feed location, and My projects / Starred / Notifications / Sign out. A shows its expanded Account panel; B keeps the account row visible. Native text and shapes remain editable, and existing button component instances are reused. PNG exports are attached to the PR.
+
+Board containment and PNG rendering are checked. These static boards do not establish live keyboard behavior, disclosure focus restoration, signed-out states, or route acceptance; those checks belong to the selected implementation. The A/B choice remains pending.
