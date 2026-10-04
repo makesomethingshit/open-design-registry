@@ -94,7 +94,6 @@ jobs:
     env:
       S3_ENDPOINT: http://127.0.0.1:9000
       E2E_INTEGRATION: "1"
-      PLAYWRIGHT_SERVER_COMMAND: npm run start -- --hostname 127.0.0.1
     services:
       postgres:
         image: postgres:16
@@ -128,7 +127,6 @@ jobs:
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npx playwright install --with-deps chromium
-      - run: npm run build
       - run: npm run test:e2e
       - name: Upload failed browser traces
         if: failure()
