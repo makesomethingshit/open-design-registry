@@ -282,6 +282,10 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(page.getByRole("heading", { name: "Initial revision" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "HTML previews" })).toBeVisible();
     await expect(page.locator('iframe[title="HTML design preview"]')).toBeVisible();
+    await expectRevisionLayoutGeometry(page, true);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expectRevisionLayoutGeometry(page, true);
     const filteredExplore = `/explore?${new URLSearchParams({ q: projectTitle, license: "CC BY 4.0", tool: "penpot", tag: "ui", sort: "recent" })}`;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(filteredExplore);
@@ -366,6 +370,13 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     expect(session?.user ?? null).toBeNull();
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await signUp(page, `Forker ${suffix}`, `forker-${suffix}@example.test`, password);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${projectPath}/revisions/3`);
+    await expect(page.getByRole("heading", { name: "Fork this revision" })).toBeVisible();
+    await expectRevisionLayoutGeometry(page, false);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expectRevisionLayoutGeometry(page, false);
     await page.goto(projectPath);
     await page.goto(`${projectPath}/issues/new`);
     await page.getByLabel("Issue title").fill(issueTitle);
@@ -630,6 +641,52 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     }
   });
 });
+
+async function expectRevisionLayoutGeometry(page: Page, owner: boolean) {
+  const geometry = await page.evaluate(() => {
+    const byToken = (token: string) => [...document.querySelectorAll<HTMLElement>("[class]")].filter((element) => [...element.classList].some((name) => name.includes(token)));
+    const box = (element: HTMLElement | undefined) => {
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, right: rect.right, width: rect.width };
+    };
+    const grid = box(byToken("pageGrid")[0]);
+    const form = box(byToken("formColumn")[0]);
+    const readings = byToken("readingColumn").map(box).filter((value): value is NonNullable<typeof value> => Boolean(value));
+    return {
+      grid,
+      form,
+      readings,
+      viewportWidth: window.innerWidth,
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  expect(geometry.overflow).toBe(false);
+  expect(geometry.grid).not.toBeNull();
+  expect(geometry.form).not.toBeNull();
+  expect(geometry.readings.length).toBeGreaterThan(0);
+  if (!geometry.grid || !geometry.form) return;
+  if (geometry.viewportWidth >= 1200) {
+    const center = geometry.grid.x + geometry.grid.width / 2;
+    expect(Math.abs(geometry.form.x + geometry.form.width / 2 - center)).toBeLessThanOrEqual(1);
+    for (const reading of geometry.readings) expect(Math.abs(reading.x + reading.width / 2 - center)).toBeLessThanOrEqual(1);
+    expect(geometry.form.width).toBeLessThan(Math.max(...geometry.readings.map((reading) => reading.width)));
+  } else {
+    expect(Math.abs(geometry.form.x - geometry.grid.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.form.right - geometry.grid.right)).toBeLessThanOrEqual(1);
+    for (const reading of geometry.readings) {
+      expect(Math.abs(reading.x - geometry.grid.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(reading.right - geometry.grid.right)).toBeLessThanOrEqual(1);
+    }
+  }
+  if (owner) {
+    await expect(page.getByRole("heading", { name: "Restore this revision" })).toBeVisible();
+  } else {
+    await expect(page.getByRole("heading", { name: "Restore this revision" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Fork this revision" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Report this content" })).toBeVisible();
+  }
+}
 
 async function publishWork(page: Page, title: string, sourceUrl: string) {
   await page.waitForLoadState("networkidle");

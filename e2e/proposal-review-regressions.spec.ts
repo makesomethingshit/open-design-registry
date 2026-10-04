@@ -3,6 +3,47 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe("proposal review regression fixtures", () => {
   test.setTimeout(90_000);
 
+  test("centers shared form and reading columns without mobile overflow", async ({ page }) => {
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/design-system");
+      const geometry = await page.evaluate(() => {
+        const form = document.querySelector('[data-layout-span="6"]');
+        const reading = document.querySelector('[data-layout-span="8"]');
+        const grid = form?.parentElement;
+        const rect = (element: Element | null) => {
+          if (!element) return null;
+          const box = element.getBoundingClientRect();
+          return { x: box.x, width: box.width, right: box.right };
+        };
+        const gridBox = grid?.getBoundingClientRect();
+        return {
+          grid: gridBox ? { x: gridBox.x, width: gridBox.width } : null,
+          form: rect(form),
+          reading: rect(reading),
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        };
+      });
+      expect(geometry.grid).not.toBeNull();
+      expect(geometry.form).not.toBeNull();
+      expect(geometry.reading).not.toBeNull();
+      expect(geometry.overflow).toBe(false);
+      if (geometry.grid && geometry.form && geometry.reading) {
+        const gridCenter = geometry.grid.x + geometry.grid.width / 2;
+        if (viewport.width >= 1200) {
+          expect(Math.abs(geometry.form.x + geometry.form.width / 2 - gridCenter)).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.reading.x + geometry.reading.width / 2 - gridCenter)).toBeLessThanOrEqual(1);
+          expect(geometry.form.width).toBeLessThan(geometry.reading.width);
+        } else {
+          expect(Math.abs(geometry.form.x - geometry.grid.x)).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.reading.x - geometry.grid.x)).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.form.right - (geometry.grid.x + geometry.grid.width))).toBeLessThanOrEqual(1);
+          expect(Math.abs(geometry.reading.right - (geometry.grid.x + geometry.grid.width))).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
   test("restores the Fork trigger and resets intent across dialog reopen", async ({ page }) => {
     await page.goto("/design-system");
     const project = page.locator("section").filter({ has: page.locator("#project-components-heading") });
