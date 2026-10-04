@@ -651,29 +651,33 @@ async function expectRevisionLayoutGeometry(page: Page, owner: boolean) {
       return { x: rect.x, right: rect.right, width: rect.width };
     };
     const grid = box(byToken("pageGrid")[0]);
-    const form = box(byToken("formColumn")[0]);
     const readings = byToken("readingColumn").map(box).filter((value): value is NonNullable<typeof value> => Boolean(value));
+    const actionColumn = byToken("readingColumn").find((element) => element.querySelector(".revision-actions"));
+    const action = box(actionColumn);
     return {
       grid,
-      form,
       readings,
+      action,
       viewportWidth: window.innerWidth,
       overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     };
   });
   expect(geometry.overflow).toBe(false);
   expect(geometry.grid).not.toBeNull();
-  expect(geometry.form).not.toBeNull();
+  expect(geometry.action).not.toBeNull();
   expect(geometry.readings.length).toBeGreaterThan(0);
-  if (!geometry.grid || !geometry.form) return;
+  if (!geometry.grid || !geometry.action) return;
   if (geometry.viewportWidth >= 1200) {
     const center = geometry.grid.x + geometry.grid.width / 2;
-    expect(Math.abs(geometry.form.x + geometry.form.width / 2 - center)).toBeLessThanOrEqual(1);
     for (const reading of geometry.readings) expect(Math.abs(reading.x + reading.width / 2 - center)).toBeLessThanOrEqual(1);
-    expect(geometry.form.width).toBeLessThan(Math.max(...geometry.readings.map((reading) => reading.width)));
+    expect(Math.abs(geometry.action.x + geometry.action.width / 2 - center)).toBeLessThanOrEqual(1);
+    const reading = geometry.readings[0];
+    expect(Math.abs(geometry.action.x - reading.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.action.right - reading.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.action.width - reading.width)).toBeLessThanOrEqual(1);
   } else {
-    expect(Math.abs(geometry.form.x - geometry.grid.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(geometry.form.right - geometry.grid.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.action.x - geometry.grid.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.action.right - geometry.grid.right)).toBeLessThanOrEqual(1);
     for (const reading of geometry.readings) {
       expect(Math.abs(reading.x - geometry.grid.x)).toBeLessThanOrEqual(1);
       expect(Math.abs(reading.right - geometry.grid.right)).toBeLessThanOrEqual(1);

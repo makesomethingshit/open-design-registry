@@ -8,7 +8,7 @@ import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { readRevisionBundle } from "@/src/lib/revision-bundle";
 import { Tag } from "@/src/components/ui/badge";
-import { FormColumn, PageGrid, Panel, ReadingColumn } from "@/src/components/ui/layout";
+import { PageGrid, Panel, ReadingColumn } from "@/src/components/ui/layout";
 import CapabilityBadge from "@/app/capability-badge";
 import RevisionDiff from "../../revision-diff";
 import ReportForm from "../../../../reports/report-form";
@@ -112,10 +112,10 @@ export default async function RevisionPage({ params }: { params: Promise<{ slug:
       </section>
     </ReadingColumn>
     }
-    <FormColumn>
+    <ReadingColumn>
       <div className="detail revision-actions">
         {session?.user.id === project.ownerId && <RestoreForm slug={project.slug} number={revision.number} />}<ForkForm slug={project.slug} number={revision.number} license={revision.license ?? project.license} signedIn={project.isPublic && Boolean(session)} />{project.isPublic && <ReportForm revisionId={revision.id} />}
       </div>
-    </FormColumn>
+    </ReadingColumn>
   </PageGrid>;
 }
