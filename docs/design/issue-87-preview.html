@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ODR issue #87 — header navigation alternatives</title>
+  <style>
+    @font-face {
+      font-family: "Pretendard Variable";
+      src: url("../../public/fonts/PretendardVariable.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 100 900;
+    }
+
+    :root {
+      --page: #f7f7f7;
+      --panel: #fff;
+      --subtle: #efefef;
+      --hover: #e8e8e8;
+      --text: #202020;
+      --secondary: #4f4f4f;
+      --muted: #626262;
+      --border: #d0d0d0;
+      --accent: #5145cd;
+      --accent-soft: #efedfc;
+      --space-1: .25rem;
+      --space-2: .5rem;
+      --space-3: .75rem;
+      --space-4: 1rem;
+      --space-5: 1.5rem;
+      --space-6: 2rem;
+      --radius: .25rem;
+      --shadow: 0 10px 30px rgb(32 32 32 / 8%);
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--page); color: var(--text); font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; }
+    body { margin: 0; padding: 2rem 1rem 4rem; }
+    a { color: inherit; }
+    button, input { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .page { width: min(100%, 72rem); margin: 0 auto; }
+    .intro { max-width: 44rem; margin-bottom: 2rem; }
+    .eyebrow { margin: 0 0 .5rem; color: var(--accent); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 0 0 .75rem; font-size: clamp(1.6rem, 4vw, 2.25rem); line-height: 1.1; letter-spacing: -.02em; }
+    .intro p { margin: 0; color: var(--secondary); line-height: 1.5; }
+    .comparison { display: grid; gap: 2rem; }
+    .alternative { display: grid; gap: 1rem; }
+    .alternative-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+    h2 { margin: 0; font-size: 1.25rem; }
+    .recommendation { margin: 0; padding: .25rem .5rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .75rem; font-weight: 700; white-space: nowrap; }
+    .alternative-copy { margin: 0; max-width: 48rem; color: var(--secondary); line-height: 1.45; }
+    .views { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+    .view { min-width: 0; }
+    .view-label { margin: 0 0 .5rem; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .mock { overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: var(--panel); box-shadow: var(--shadow); }
+    .mock.mobile { width: 27.5rem; max-width: 100%; }
+    .view:nth-child(2) { justify-self: end; width: 27.5rem; max-width: 100%; }
+    .mock-page { min-height: 11rem; padding: 1rem 1.25rem 1.5rem; background: linear-gradient(135deg, #fff 0%, #f7f7f7 70%); }
+    .mock-page h3 { margin: 1rem 0 .35rem; font-size: 1rem; }
+    .mock-page p { max-width: 28rem; margin: 0; color: var(--muted); font-size: .8125rem; line-height: 1.45; }
+    .mock-art { float: right; width: 7.5rem; height: 4.5rem; margin-left: .75rem; object-fit: cover; border: 1px solid var(--border); border-radius: var(--radius); opacity: .88; }
+    .header { display: grid; gap: .65rem; padding: .75rem 1rem; border-bottom: 1px solid var(--border); background: var(--panel); }
+    .header-line { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+    .brand { flex: 0 0 auto; display: inline-flex; align-items: center; gap: .35rem; color: var(--text); font-size: .8125rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .brand-mark { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: .25rem; background: var(--text); color: var(--panel); font-family: ui-monospace, monospace; font-size: .7rem; letter-spacing: -.05em; }
+    .search { min-width: 8rem; flex: 1 1 16rem; height: 2rem; padding: .25rem .65rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-size: .75rem; }
+    .public-links, .account-links { display: flex; align-items: center; gap: .25rem; min-width: 0; }
+    .public-links a, .account-links a, .account-trigger, .signout { display: inline-flex; align-items: center; min-height: 2rem; padding: .35rem .5rem; border: 0; border-radius: var(--radius); background: transparent; color: var(--secondary); font-size: .75rem; text-decoration: none; white-space: nowrap; }
+    .public-links a:hover, .account-links a:hover, .account-trigger:hover, .signout:hover { background: var(--hover); color: var(--text); }
+    .public-links a[aria-current="page"], .account-links a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+    .new-project { border: 1px solid var(--border) !important; color: var(--text) !important; font-weight: 700; }
+    .account { position: relative; flex: 0 0 auto; }
+    .account-trigger { border: 1px solid var(--border); cursor: default; color: var(--text); font-weight: 700; }
+    .account-panel { display: grid; gap: .2rem; min-width: 13rem; padding: .5rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+    .mock.desktop .account-panel { position: absolute; top: calc(100% + .4rem); right: 0; z-index: 2; }
+    .account-panel a, .account-panel .signout { justify-content: flex-start; }
+    .menu-note { margin: .15rem .5rem .25rem; color: var(--muted); font-size: .6875rem; }
+    .two-row .header { gap: .5rem; }
+    .group-row { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+    .group-label { flex: 0 0 4.4rem; color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .two-row .public-links, .two-row .account-links { flex-wrap: wrap; }
+    .two-row .account-links { flex: 1; }
+    .two-row .account-links .signout { border: 1px solid var(--border); }
+    .caption { margin: .5rem 0 0; color: var(--muted); font-size: .6875rem; line-height: 1.4; }
+    .mock.mobile .header-line:first-child { display: grid; grid-template-columns: 1fr auto; }
+    .mock.mobile .search { grid-column: 1 / -1; width: 100%; }
+    .mock.mobile .public-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mock.mobile .public-links a { justify-content: center; }
+    .mock.mobile .public-links .new-project { grid-column: 1 / -1; }
+    .mock.mobile .account { justify-self: end; }
+    .two-row.mock.mobile .header-line { display: block; }
+    .two-row.mock.mobile .group-row { display: flex; flex-direction: column; align-items: stretch; gap: .15rem; }
+    .two-row.mock.mobile .group-label { display: block; order: 0; flex: none; margin: .2rem 0; }
+    .two-row.mock.mobile .public-links, .two-row.mock.mobile .account-links { order: 1; flex: none; width: 100%; }
+    .two-row.mock.mobile .public-links, .two-row.mock.mobile .account-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .two-row.mock.mobile .public-links a, .two-row.mock.mobile .account-links a, .two-row.mock.mobile .account-links .signout { justify-content: center; }
+    .two-row.mock.mobile .public-links .new-project { grid-column: 1 / -1; }
+
+    @media (max-width: 60rem) {
+      body { padding-top: 1.25rem; }
+      .mock.desktop { max-width: 100%; }
+    }
+
+    @media (max-width: 30rem) {
+      body { padding-inline: .5rem; }
+      .alternative-heading { display: block; }
+      .recommendation { display: inline-block; margin-top: .45rem; }
+      .mock.mobile { width: 100%; }
+      .header { padding: .65rem; }
+      .mock.mobile .account-panel { min-width: 100%; }
+      .mock-page { min-height: 9rem; padding-inline: .75rem; }
+      .mock-art { width: 6rem; height: 3.75rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="intro">
+      <p class="eyebrow">Issue #87 · P1 decision aid</p>
+      <h1>Public discovery and account actions need separate homes.</h1>
+      <p>These static header studies use the current ODR tokens, the bundled Pretendard font, and the repository's local Aster artwork as a content sample. The controls are illustrative only; choose a direction before product code is changed.</p>
+    </div>
+
+    <div class="comparison">
+      <section class="alternative" aria-labelledby="alternative-a">
+        <div class="alternative-heading">
+          <h2 id="alternative-a">A — public-first header with Account disclosure</h2>
+          <p class="recommendation">Recommended</p>
+        </div>
+        <p class="alternative-copy">Four public actions stay visible. Personal destinations share one labelled account affordance, with the menu shown open here so its contents can be reviewed.</p>
+        <div class="views">
+          <div class="view">
+            <p class="view-label">Desktop</p>
+            <div class="mock desktop">
+              <header class="header">
+                <div class="header-line">
+                  <a class="brand" href="#"><span class="brand-mark">ODR</span><span>Open Design Registry</span></a>
+                  <input class="search" aria-label="Search projects" placeholder="Search projects" type="search">
+                  <nav class="public-links" aria-label="Public">
+                    <a href="#">Explore</a><a href="#">Contribute</a><a href="#" aria-current="page">Feed</a><a class="new-project" href="#">New project</a>
+                  </nav>
+                  <div class="account">
+                    <button class="account-trigger" aria-expanded="true" type="button">Jun · Account⌄</button>
+                    <div class="account-panel" role="group" aria-label="Account menu">
+                      <span class="menu-note">Personal</span>
+                      <a href="#">My projects</a><a href="#">Starred</a><a href="#">Notifications <span aria-label="3 unread">· 3</span></a><button class="signout" type="button">Sign out</button>
+                    </div>
+                  </div>
+                </div>
+              </header>
+              <div class="mock-page"><img class="mock-art" src="../../public/landing-aster.svg" alt=""><h3>Public Feed</h3><p>Feed is the public stream of published Revisions and Releases. The active location is visible in the public group.</p></div>
+            </div>
+            <p class="caption">Active public location: Feed. Account items remain grouped and available from one named control.</p>
+          </div>
+          <div class="view">
+            <p class="view-label">440px mobile</p>
+            <div class="mock mobile">
+              <header class="header">
+                <div class="header-line"><a class="brand" href="#"><span class="brand-mark">ODR</span><span>ODR</span></a><div class="account"><button class="account-trigger" aria-expanded="true" type="button">Jun · Account⌄</button></div></div>
+                <input class="search" aria-label="Search projects" placeholder="Search projects" type="search">
+                <nav class="public-links" aria-label="Public"><a href="#">Explore</a><a href="#">Contribute</a><a href="#" aria-current="page">Feed</a><a class="new-project" href="#">New project</a></nav>
+                <div class="account-panel" role="group" aria-label="Account menu"><span class="menu-note">Personal</span><a href="#">My projects</a><a href="#">Starred</a><a href="#" aria-current="page">Notifications · 3</a><button class="signout" type="button">Sign out</button></div>
+              </header>
+              <div class="mock-page"><h3>Feed</h3><p>All primary actions fit within the viewport. The open Account panel uses the available width.</p></div>
+            </div>
+            <p class="caption">No horizontal overflow. The open state makes the keyboard and discovery contract explicit.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="alternative" aria-labelledby="alternative-b">
+        <div class="alternative-heading"><h2 id="alternative-b">B — two visible navigation rows</h2></div>
+        <p class="alternative-copy">Both groups stay in view, with no disclosure interaction. The cost is a taller sticky header, especially for signed-in users on small screens.</p>
+        <div class="views">
+          <div class="view">
+            <p class="view-label">Desktop</p>
+            <div class="mock desktop two-row">
+              <header class="header">
+                <div class="header-line"><a class="brand" href="#"><span class="brand-mark">ODR</span><span>Open Design Registry</span></a><input class="search" aria-label="Search projects" placeholder="Search projects" type="search"></div>
+                <div class="group-row"><span class="group-label">Explore</span><nav class="public-links" aria-label="Public"><a href="#">Explore</a><a href="#">Contribute</a><a href="#" aria-current="page">Feed</a><a class="new-project" href="#">New project</a></nav></div>
+                <div class="group-row"><span class="group-label">Account</span><nav class="account-links" aria-label="Account"><a href="#">My projects</a><a href="#">Starred</a><a href="#" aria-current="page">Notifications · 3</a><button class="signout" type="button">Sign out</button></nav></div>
+              </header>
+              <div class="mock-page"><img class="mock-art" src="../../public/landing-aster.svg" alt=""><h3>Public Feed</h3><p>Every public and personal destination is immediately visible in a named row.</p></div>
+            </div>
+            <p class="caption">Highest immediate discoverability, with a larger header footprint.</p>
+          </div>
+          <div class="view">
+            <p class="view-label">440px mobile</p>
+            <div class="mock mobile two-row">
+              <header class="header">
+                <div class="header-line"><a class="brand" href="#"><span class="brand-mark">ODR</span><span>ODR</span></a><input class="search" aria-label="Search projects" placeholder="Search projects" type="search"></div>
+                <div class="group-row"><span class="group-label">Explore</span><nav class="public-links" aria-label="Public"><a href="#">Explore</a><a href="#">Contribute</a><a href="#" aria-current="page">Feed</a><a class="new-project" href="#">New project</a></nav></div>
+                <div class="group-row"><span class="group-label">Account</span><nav class="account-links" aria-label="Account"><a href="#">My projects</a><a href="#">Starred</a><a href="#" aria-current="page">Notifications · 3</a><button class="signout" type="button">Sign out</button></nav></div>
+              </header>
+              <div class="mock-page"><h3>Feed</h3><p>All actions remain visible and tabbable, while the header grows vertically instead of scrolling sideways.</p></div>
+            </div>
+            <p class="caption">No hidden account actions, but the sticky header occupies more of the viewport.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
