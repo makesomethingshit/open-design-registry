@@ -97,3 +97,12 @@ B1은 기존 variant 체계를 실제 사용 맥락에 맞춘다. Landing의 두
 2. Action hierarchy는 **B1 (추천)**, B2, B3 중 어느 안으로 구현할 것인가?
 
 추천 조합을 채택하면 다음 구현 단위는 **A2 cover PR**과 **B1 action PR** 두 개다. 선택이 남아 있는 동안에는 구현하지 않는다.
+
+## 편집 가능한 Penpot 비교 시안
+
+- [데스크톱 / 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7e111f873d)
+- [모바일 / 390](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7e9a9c5e3a)
+
+A1/A2/A3의 기본·hover/focus 표현과 B1/B2/B3의 Landing·Contribute 버튼 위계를 같은 작업물로 비교한다. 모바일 A2는 touch에서 label을 표시한다. 기존 Aster 벡터와 버튼 component instance를 재사용하며, 모든 텍스트와 도형은 편집 가능하다. PNG는 PR 코멘트에 첨부한다. HTML preview는 보조 자료로 유지한다.
+
+시안의 보드 범위와 PNG 표시를 확인한다. 실제 제품의 keyboard·reduced-motion·라우팅과 layout shift 검증은 방향 결정 후 구현 PR에서 수행한다. 선택은 여전히 미정이다.
