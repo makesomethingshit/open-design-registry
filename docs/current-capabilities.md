@@ -45,7 +45,9 @@
 | `/stars` | 로그인 사용자가 Star한 공개 프로젝트 |
 | `/notifications` | 로그인 사용자의 개인 알림 |
 
-프로젝트 상세에서 Overview·Revisions·Releases·Issues·Discussions·Proposals·Forks를 탐색합니다. Feed는 사람 활동이나 개인 추천을 제공하지 않습니다. Watch의 알림 대상은 Revision·Release 발행이며 Proposal 알림은 직접 당사자에게 전달됩니다.
+프로젝트의 `/projects/{slug}`는 작품·About·프로젝트 가이드와 기여 요약을 읽는 Overview입니다. Revisions·Releases·Discussions·Issues·Proposals·Contributors·Forks는 각각 `/projects/{slug}/{탭 이름의 소문자}` 경로를 가지며 직접 열기·새로고침·브라우저 뒤로 가기를 지원합니다. Revision 발행은 Revisions, 소유자의 프로젝트 설정은 `/projects/{slug}/settings`에서 처리합니다. 기존 section hash와 기여 복귀 query는 해당 경로로 이동하며 관련 Issue·대상 프로젝트·기준 Revision을 보존합니다.
+
+Feed는 사람 활동이나 개인 추천을 제공하지 않습니다. Watch의 알림 대상은 Revision·Release 발행이며 Proposal 알림은 직접 당사자에게 전달됩니다.
 
 ## 지원하지 않는 범위
 

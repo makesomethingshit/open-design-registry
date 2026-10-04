@@ -28,7 +28,10 @@ flowchart LR
 
 | 위치 | 책임 |
 | --- | --- |
-| `app/projects/[slug]/page.tsx` | Overview와 프로젝트별 Revision·Release·Issue·Proposal·Fork 표시 |
+| `app/projects/[slug]/page.tsx` | 작품·About·프로젝트 가이드와 기여 요약을 읽는 Overview |
+| `app/projects/[slug]/project-shell.tsx`, `project-navigation.tsx` | 공통 프로젝트 헤더, 탭 경로와 기존 hash 링크 이동 |
+| `app/projects/[slug]/{revisions,releases,discussions,issues,proposals,contributors,forks}/` | 기능별 목록·생성·상세 화면을 독립 경로로 제공 |
+| `app/projects/[slug]/settings/page.tsx`, `project-settings-form.tsx` | 소유자의 프로젝트 정보·공개 여부 설정 |
 | `app/projects/[slug]/revision-publish-form.tsx` | 원본·미리보기·유닛 정보 발행 입력 |
 | `app/projects/[slug]/releases/` | Release 발행 입력과 변경 불가 상세 조회 |
 | `src/lib/release-handlers.ts` | Release 소유권·Revision 검증, 번호 산정·원자 발행 |
