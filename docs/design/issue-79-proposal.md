@@ -1,108 +1,98 @@
 # #79 P1 디자인 결정 제안
 
-상태: **구현 전 사람의 선택 필요**
+상태: **A 결정 완료, B 결정 대기**
 
-범위: Project card cover interaction과 Landing/Contribute action hierarchy
+사용자 결정: [A2 cover interaction 수락](https://github.com/makesomethingshit/open-design-registry/pull/111#issuecomment-5988585777)
 
-제안: **A2 + B1**
+현재 B 방향: **B4 Work-first contextual actions 제안, 아직 미수락**
 
-이 문서는 구현 PR이 아니다. 현재 코드가 허용하는 선택지를 좁히고, 구현 전에 결정할 조합을 제안한다. A와 B는 결정 후에도 별도 PR로 유지한다.
+이 문서는 구현 PR이 아니다. A2는 구현 대상으로 기록하고, B4는 native Penpot 보드에서 확인할 다음 방향으로 남긴다. 제품 코드는 변경하지 않는다.
 
-## 현재 코드에서 확인한 제약
+## 결정 기록
 
-- [`ProjectCard`](../../src/components/design/project-card.tsx#L20-L38)는 4:3 media 안에 원본 이미지를 `contain`으로 보여 주고, cover에는 [`mediaLink`](../../src/components/design/project-card.tsx#L24-L28) 하나만 둔다. 현재 cover hover/focus 상태는 없고, 제목 링크와 권리·버전 관련 metadata는 cover 밖에 있다.
-- [`project-card.module.css`](../../src/components/design/project-card.module.css#L1-L14)의 frame이 이미 `aspect-ratio: 4 / 3`과 `overflow: hidden`을 보장한다. interaction은 이 frame 안에서만 일어나야 한다.
-- Landing은 [`Explore projects`](../../app/page.tsx#L7-L19)를 `primary`, `Create a project`를 `secondary`로 이미 구분한다. 모바일에서는 두 링크가 같은 폭으로 줄어들기 때문에 순서와 세로 배치가 결정 대상이다.
-- Contribute의 [`Search`](../../app/contribute/page.tsx#L81-L95)는 기본값인 `primary` Button을 사용한다. 각 request의 [`View request`](../../app/contribute/page.tsx#L102-L125)는 현재 보이는 문구만 있고 실제 링크가 아니다. 제목은 같은 request URL로 연결된다.
-- 선택지는 [`button.module.css`](../../src/components/ui/button.module.css#L1-L51)의 기존 `primary`, `secondary`, `ghost`, `danger`와 [`tokens.css`](../../src/styles/tokens.css#L54-L155)의 의미 토큰 안에서 해결한다. 새 variant, 전역 header 변경, route 변경은 필요하지 않다.
+- **A2 — Contained reveal label:** 수락됨. Cover 안쪽 아래에만 짧은 scrim과 `Open project ↗` label을 reveal한다. 4:3 frame, 기존 링크, 작업물·상태·권리·버전 metadata는 유지한다.
+- **B1/B2/B3:** 모두 거절됨. 이 세 안은 더 이상 선택지나 구현 대상으로 남기지 않는다. 아래 B4는 행동을 작업물의 맥락 안에 배치해 보는 새로운 제안이다.
+- **B4 — Work-first contextual actions:** 새 제안이며 미수락이다. 최신 Penpot Landing·Contribute 보드에서 배치를 확인하고 결정한다.
 
-## A. Project card cover interaction
+## 현재 코드에서 지켜야 할 경계
 
-모든 안은 다음을 고정한다.
+- [`ProjectCard`](../../src/components/design/project-card.tsx#L20-L38)는 4:3 media 안에 원본 이미지를 `contain`으로 보여 주고, cover에는 [`mediaLink`](../../src/components/design/project-card.tsx#L24-L28) 하나만 둔다. 제목과 metadata는 cover 밖에 있다.
+- [`project-card.module.css`](../../src/components/design/project-card.module.css#L1-L14)의 `aspect-ratio: 4 / 3`과 `overflow: hidden`을 유지한다. A2는 frame 안에서만 보이고, hover/focus 중 bounding box·grid track·주변 카드 위치를 바꾸지 않는다.
+- Landing은 현재 [`Explore projects`](../../app/page.tsx#L7-L19)와 `Create a project`를 같은 hero row에 둔다. B4에서는 hero에 Explore 하나만 남기고, Create는 example 아래의 별도 생성 안내으로 옮긴다. URL `/explore`, `/projects/new`는 유지한다.
+- Contribute의 [`Search`](../../app/contribute/page.tsx#L81-L95)는 현재 기본 `primary` Button이다. B4에서는 입력에 붙은 compact `secondary` utility로 보인다. 검색 query와 GET 경로는 바꾸지 않는다.
+- 현재 request의 [`View request`](../../app/contribute/page.tsx#L102-L125)는 보이는 span이고 제목이 request URL로 연결된다. B4에서는 request content/title/rights·version metadata를 먼저 읽게 하고, 같은 request URL로 가는 inline `View request` link를 뒤에 둔다.
+- 표현은 [`button.module.css`](../../src/components/ui/button.module.css#L1-L51)의 기존 `primary`, `secondary`, `ghost`, `danger`와 [`tokens.css`](../../src/styles/tokens.css#L54-L155)의 의미 토큰만 사용한다. 새 variant나 새 상태 모델은 만들지 않는다.
 
-- cover의 기존 링크와 제목·상태·설명·owner·license·tag metadata를 보존한다.
-- frame의 4:3 크기와 카드의 문서 흐름을 바꾸지 않는다. hover/focus 중에도 bounding box, grid track, 주변 카드 위치가 바뀌지 않는다.
-- pointer hover와 `:focus-visible`이 같은 의미인 “프로젝트 상세 열기”를 보여 준다.
-- `prefers-reduced-motion: reduce`에서는 transition과 transform을 제거한다. 터치 환경에는 hover만으로 정보를 숨기지 않는다.
+## A. 수락된 cover direction — A2
 
-### A1 — Frame emphasis
+pointer hover와 `:focus-visible`에서 media frame 안쪽 아래에만 scrim과 `Open project ↗`를 표시한다. 이미지 자체는 frame 밖으로 커지지 않는다. coarse pointer에서는 hover를 전제로 하지 않도록 label을 표시할 수 있어야 하며, `prefers-reduced-motion: reduce`에서는 transition과 transform을 제거한다.
 
-hover/focus에서 frame border를 accent로 바꾸고 이미지에 작은 contained scale을 적용한다. 별도의 문구나 overlay는 두지 않는다.
+A1과 A3는 초기 비교안으로 닫혔다. 이후 선택을 요청하지 않는다.
 
-장점은 가장 조용하고 현재 작업물 이미지를 가장 그대로 보인다는 점이다. 단점은 사용자가 무엇을 할 수 있는지의 문구가 없고, 카드 interaction이 현재의 제목 underline과 비슷하게 읽힐 수 있다는 점이다.
+### A acceptance mapping
 
-### A2 — Contained reveal label **(추천)**
+| #79 기준 | A2 결정 | 구현 PR에서 확인할 증거 |
+| --- | --- | --- |
+| cover hover/focus로 작업물과 상세 진입 강조 | contained scrim + `Open project` label | 실제 ProjectCard 이미지의 pointer hover와 keyboard focus 캡처 |
+| 권리·버전 정보와 탐색 유지 | media 내부만 변경, 기존 href·content·metadata 유지 | `ProjectCard` static markup 및 Explore route 확인 |
+| 위치·크기/layout shift 없음 | 4:3 frame과 카드 문서 흐름 고정 | desktop 2/3열과 mobile 1열의 bounding box 비교 |
+| keyboard parity | media link의 focus-visible이 hover와 같은 의미를 표시 | Tab 순서, focus ring, Enter 이동 확인 |
+| reduced motion·성능 | motion 제거, 기존 lazy/eager 이미지 요청 유지 | reduced-motion browser check와 이미지 로딩 확인 |
 
-hover/focus에서 frame 안쪽 아래에만 짧은 scrim과 `Open project ↗` label을 reveal한다. 이미지는 frame 밖으로 커지지 않는다. `:focus-visible`은 같은 label을 보여 주고, coarse pointer에서는 label을 기본 표시해 touch에 hover를 요구하지 않는다.
+## B. 새 제안 — B4 Work-first contextual actions
 
-작업물의 표면을 가리지 않으면서 상세 진입의 이유와 결과를 가장 분명하게 전달한다. 변화는 frame 내부의 opacity와 border뿐이므로 layout shift를 피하기 쉽고, 현재 media link 구조를 그대로 사용할 수 있다.
+B4는 **작업물을 먼저 읽고, 다음 행동은 맥락 안에서 찾는** 방향이다. 아직 수락된 디자인이 아니며, 최신 Penpot 보드로 검토한다.
 
-### A3 — Active media surface
+### Landing
 
-hover/focus에서 이미지 위에 accent-soft tint와 frame outline을 적용하고 `View project` label을 중앙에 둔다. A2보다 눈에 잘 띄지만 cover가 많은 탐색 화면에서는 모든 카드가 동시에 강해져 작업물보다 control이 앞설 위험이 있다.
+- Hero에는 `Explore projects` **primary** 하나만 둔다.
+- `Create a project`는 example 아래 별도 callout으로 옮긴다. callout은 modest한 surface와 기존 TextLink 표현을 사용하고, hero의 두 번째 큰 button처럼 보이지 않게 한다.
+- example의 작업물, source/history 문맥, `/explore`와 `/projects/new` URL은 유지한다.
 
-## B. Landing / Contribute action hierarchy
+### Contribute
 
-### B1 — 명확한 두 단계 **(추천)**
+- 검색 input에 붙는 compact `Search` **secondary** utility로 표현한다. 독립적인 큰 검정 button이나 별도 panel을 추가하지 않는다.
+- request card에서는 request content, title, rights·version metadata와 project context를 먼저 둔다.
+- `View request`는 그 정보 뒤에 놓는 inline link로, 기존 `requestHref`를 사용한다. 제목 link의 중복 대형 control이 되지 않게 한다.
+- `Clear filters`, project title, pagination 등 탐색 link는 기존 `TextLink` 역할을 유지한다.
+- 기존 Filters의 tool·tag·license 조건, 결과 수·pagination, 요청 이미지의 linked Revision/project cover 출처는 유지한다. 시안의 예시 콘텐츠는 새 데이터 필드를 요구하지 않는다.
 
-- Landing: `Explore projects`는 `primary`, `Create a project`는 `secondary`를 유지한다. desktop은 현재의 가로 순서, mobile은 primary를 먼저 둔 세로 stack으로 확인한다.
-- Contribute: 검색은 목록 필터를 실행하는 utility이므로 `secondary`로 낮춘다. `View request`는 현재 request URL을 가리키는 실제 link로 만들고 `secondary` control 표현을 사용한다. 제목 link와 같은 목적지를 가지되, 반복 목록에서 별도 진입점으로 읽히게 한다.
-- `Clear filters`, project title, pagination 같은 보조 탐색은 `TextLink`로 유지한다.
+`Explore projects`, `Create a project`, `View request`는 페이지 이동 link이므로 hover/focus와 keyboard activation을 확인한다. `Search`처럼 화면 안에서 실행되는 Button만 기존 disabled/loading 상태를 사용한다. link에 동작하지 않는 disabled/loading 표현을 새로 만들지 않는다.
 
-`Search`처럼 화면 안에서 실행되는 Button은 기존 disabled/loading 상태를 그대로 사용한다. `Explore projects`, `Create a project`, `View request`는 페이지 이동 link이므로 hover/focus와 keyboard activation을 확인하고, 동작하지 않는 loading 상태를 만들어내지 않는다.
+### B4가 해결하려는 것
 
-현재 variant와 token을 재사용하면서 landing의 진입 행동과 request 목록의 진입 행동을 구별한다. Contribute 카드마다 강한 검정 primary를 반복하지 않아 작업물과 request 내용이 앞에 남는다.
-
-### B2 — Quiet secondary
-
-Landing의 `Explore projects`만 `primary`로 두고 `Create a project`는 `ghost`로 낮춘다. Contribute의 `View request`는 실제 `TextLink`로 만들고 검색은 `secondary`로 둔다.
-
-화면은 가장 가벼워지지만, Create와 View request의 행동성이 약해지고 #81의 “중요한 행동과 보조 행동의 위계가 약하다”는 문제를 충분히 해결하지 못할 수 있다.
-
-### B3 — Action-led request cards
-
-Landing은 B1과 같게 두고, Contribute의 `View request`를 `primary` control로 강조한다. request를 바로 여는 목적은 분명하지만, 목록의 모든 카드가 같은 강한 control을 가지므로 작업물 중심 원칙과 충돌할 수 있다.
-
-## 추천 조합과 이유
-
-**A2 + B1**을 권한다.
-
-A2는 cover 자체를 상세 진입의 affordance로 만들되 이미지 비율·카드 높이·metadata를 건드리지 않는다. A1은 조용하지만 행동을 설명하지 않고, A3은 작업물보다 overlay가 앞설 가능성이 있다.
-
-B1은 기존 variant 체계를 실제 사용 맥락에 맞춘다. Landing의 두 행동은 이미 올바른 관계를 가지고 있으므로 mobile 순서와 폭만 명시하면 된다. Contribute는 `Search`가 현재 primary인 반면 `View request`가 실제 link가 아니라는 구체적인 불일치가 있어, 새 디자인 언어를 만들기보다 기존 secondary 표현과 실제 link semantics로 정리하는 편이 가장 작다.
+현재 Landing은 hero에서 두 행동이 같은 row에 있고, Contribute는 Search가 기본 primary이며 View request가 실제 link가 아니다. B4는 새 컴포넌트나 새 variant를 추가하지 않고, primary는 사용자가 처음 탐색할 한 행동에만 쓰고 나머지는 작업물과 request 설명 뒤에 배치한다.
 
 ## Acceptance mapping
 
-| #79 기준 | 결정할 내용 | 구현 PR에서 확인할 증거 |
+| #79 기준 | 현재 결정 | 구현 PR에서 확인할 증거 |
 | --- | --- | --- |
-| A: cover hover/focus로 작업물과 상세 진입 강조 | A2의 contained scrim + `Open project` label | 실제 ProjectCard 이미지에서 pointer hover와 keyboard focus 상태 캡처 |
-| A: 권리·버전 정보와 탐색 유지 | media 내부만 변경, content/metadata와 기존 href 유지 | `ProjectCard` static markup 및 Explore route 확인 |
-| A: 위치·크기/layout shift 없음 | 4:3 frame, grid, 카드 높이의 base geometry 유지 | desktop 2/3열과 mobile 1열의 bounding box 비교 |
-| A: keyboard parity | media link의 `:focus-visible`이 hover와 같은 label을 표시 | Tab 순서, focus ring, Enter 이동 확인 |
-| A: reduced motion·성능 | transform/transition 제거, 이미지 요청 방식 유지 | reduced-motion browser check와 기존 lazy/eager 동작 확인 |
-| B: Landing hierarchy | `Explore projects` primary, `Create a project` secondary; mobile primary-first stack | default/hover/focus/disabled/loading은 공통 Button 기준으로 확인하고, link focus는 별도 확인 |
-| B: Contribute hierarchy | Search secondary, `View request`는 requestHref로 가는 실제 secondary link | title link와 View request의 목적지·keyboard activation 확인 |
-| B: 기존 variants/tokens 우선 | 새 variant·임의 색·새 전역 component 없음 | diff 범위를 `app/page*`, `app/contribute/page*`와 필요한 테스트로 확인 |
-| B: desktop/mobile 순서·강조·간격 | desktop 가로, mobile primary-first stack과 touch target | 1440px 및 390px 실제 화면 확인 |
+| A: cover interaction | A2 수락 | A2 표와 별도 cover PR 검증 |
+| A: no geometry/layout shift | 4:3 media frame과 카드 흐름 유지 | 실제 desktop/mobile geometry 비교 |
+| A: keyboard/reduced motion | hover와 focus-visible 의미를 맞추고 reduced motion에서 동작을 단순화 | keyboard 및 reduced-motion browser check |
+| A: 실제 작업물 이미지 | Aster preview는 방향 확인용이며 acceptance 증거가 아님 | 실제 project asset으로 desktop/mobile 확인 |
+| B: Landing hierarchy | B4 제안: hero는 Explore primary 하나, Create는 example 아래 callout | native Penpot board 결정 후 Landing 캡처 |
+| B: Contribute hierarchy | B4 제안: input-attached secondary Search, 설명 뒤 inline View request | native Penpot board와 request route 확인 |
+| B: 기존 variants/tokens | 기존 library variant와 token만 사용 | 새 variant·임의 색·전역 component diff 없음 |
+| B: 상태와 keyboard | 실행 Button의 상태만 확인하고 navigation link에 disabled/loading을 만들지 않음 | Search Button 및 모든 link의 semantics/focus 확인 |
 
-## 구현 경계
+## 구현 경계와 시각 검토의 한계
 
-결정 후 A는 `src/components/design/project-card.tsx`/`.module.css`와 해당 테스트, B는 `app/page.tsx`/`.module.css`, `app/contribute/page.tsx`/`.module.css`와 해당 테스트에 한정한다. 새 route, API, 데이터 필드, global header, page transition, 다른 화면의 버튼 일괄 변경은 포함하지 않는다.
+결정 후 A는 `src/components/design/project-card.tsx`/`.module.css`와 해당 테스트에 한정한다. B는 `app/page.tsx`/`.module.css`, `app/contribute/page.tsx`/`.module.css`와 해당 테스트에 한정한다. 새 route, API, data field, global header, page transition, 다른 화면의 button 일괄 변경은 포함하지 않는다.
 
-실제 작업물 이미지로 desktop/mobile을 확인해야 한다. 이 문서와 preview의 Aster asset은 방향을 비교하기 위한 기존 로컬 asset이며 제품 acceptance의 시각 품질 증거를 대신하지 않는다.
+현재 [HTML preview](./issue-79-preview.html)는 A2와 B4의 보조 자료다. 최신 Penpot 보드를 주요 검토 기준으로 사용한다. 실제 제품의 keyboard·reduced-motion·라우팅·layout shift와 실제 작업물의 시각 품질은 구현 PR에서 확인해야 한다.
 
-## 결정이 필요한 질문
+## 남은 결정
 
-1. Cover는 **A2 (추천)**, A1, A3 중 어느 안으로 구현할 것인가?
-2. Action hierarchy는 **B1 (추천)**, B2, B3 중 어느 안으로 구현할 것인가?
+**B4를 native Penpot 보드 기준으로 수락할 것인가?**
 
-추천 조합을 채택하면 다음 구현 단위는 **A2 cover PR**과 **B1 action PR** 두 개다. 선택이 남아 있는 동안에는 구현하지 않는다.
+수락 전에는 B4를 제품 코드에 적용하지 않는다. A2는 이미 선택된 방향이며 재선택을 요구하지 않는다.
 
-## 편집 가능한 Penpot 비교 시안
+## 최신 Penpot 시안
 
-- [데스크톱 / 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7e111f873d)
-- [모바일 / 390](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7e9a9c5e3a)
+| B4 화면 | 데스크톱 | 모바일 |
+| --- | --- | --- |
+| Landing | [1440px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be1740e72ade) | [390px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be17495131cc) |
+| Contribute | [1440px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be179dabf2cb) | [390px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be17b6d47501) |
 
-A1/A2/A3의 기본·hover/focus 표현과 B1/B2/B3의 Landing·Contribute 버튼 위계를 같은 작업물로 비교한다. 모바일 A2는 touch에서 label을 표시한다. 기존 Aster 벡터와 버튼 component instance를 재사용하며, 모든 텍스트와 도형은 편집 가능하다. PNG는 PR 코멘트에 첨부한다. HTML preview는 보조 자료로 유지한다.
-
-시안의 보드 범위와 PNG 표시를 확인한다. 실제 제품의 keyboard·reduced-motion·라우팅과 layout shift 검증은 방향 결정 후 구현 PR에서 수행한다. 선택은 여전히 미정이다.
+기존 원본·Revision 문맥과 Aster 벡터, 버튼 component instance를 재사용했다. Filters와 요청 이미지의 linked Revision 출처를 유지한다. 기존 비교 보드는 보존한다. A2 선택은 확정이며 B4만 새 검토 대상이다. 실제 제품 코드는 아직 변경하지 않았다.
