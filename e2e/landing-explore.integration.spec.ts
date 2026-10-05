@@ -69,9 +69,13 @@ test("keeps landing, public Explore, and My projects distinct on desktop and mob
       await search.press("Enter");
       await expect(page).toHaveURL(new RegExp(`/explore\\?q=${encodeURIComponent(title).replace(/%20/g, "\\+")}`));
       await expect(search).toHaveValue(title);
+      await expect(page.getByLabel("Search public projects")).toHaveValue(title);
+      await expect(page.getByText(`Search: ${title}`, { exact: false })).toBeInViewport();
       await expect(preview).toBeInViewport();
-      await page.getByRole("link", { name: "Edit search" }).click();
+      await page.getByRole("link", { name: "Edit search" }).focus();
+      await page.keyboard.press("Enter");
       await expect(search).toBeFocused();
+      await expect(search).toHaveValue(title);
       await search.fill(`No match ${suffix}`);
       await search.press("Enter");
       await expect(page.getByRole("heading", { name: "No projects match these filters" })).toBeInViewport();
@@ -80,8 +84,24 @@ test("keeps landing, public Explore, and My projects distinct on desktop and mob
       await expect(page.getByLabel("Search public projects")).toHaveValue(title);
       await page.goForward();
       await expect(search).toHaveValue(`No match ${suffix}`);
+      await expect(page.getByLabel("Search public projects")).toHaveValue(`No match ${suffix}`);
+      await expect(page.getByRole("heading", { name: "No projects match these filters" })).toBeInViewport();
       await page.getByRole("link", { name: "Go to results" }).click();
       await expect(page.locator("#projects-heading")).toBeFocused();
+      await expect(search).toHaveValue(`No match ${suffix}`);
+
+      await page.goto(`/explore?q=${encodeURIComponent(title)}`);
+      await expect(search).toHaveValue(title);
+      await expect(page.getByLabel("Search public projects")).toHaveValue(title);
+      await expect(page.getByText(`Search: ${title}`, { exact: false })).toBeInViewport();
+      await expect(preview).toBeInViewport();
+
+      const directNoMatch = `Direct no match ${suffix}`;
+      await page.goto(`/explore?q=${encodeURIComponent(directNoMatch)}`);
+      await expect(search).toHaveValue(directNoMatch);
+      await expect(page.getByLabel("Search public projects")).toHaveValue(directNoMatch);
+      await expect(page.getByText(`Search: ${directNoMatch}`, { exact: false })).toBeInViewport();
+      await expect(page.getByRole("heading", { name: "No projects match these filters" })).toBeInViewport();
     }
     await page.goto("/projects");
     if (signedIn) {
