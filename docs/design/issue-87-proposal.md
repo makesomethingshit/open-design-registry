@@ -1,96 +1,107 @@
-# Issue #87: global header and account navigation — P1 design proposal
+# Issue #87: global header and account navigation — refined A direction
 
-**Decision status:** implementation is intentionally pending a maintainer choice.
+**Decision status:** A is the chosen structural direction. The refined visual result is awaiting P2 review.
 
 **Issue:** [#87](https://github.com/makesomethingshit/open-design-registry/issues/87)
 
-The proposed decision is between two navigation shapes:
+**Decision feedback:** [human comment 5988603961](https://github.com/makesomethingshit/open-design-registry/pull/112#issuecomment-5988603961)
 
-- **A — public-first header with a compact Account disclosure (recommended).** Keep `Explore`, `Contribute`, `Feed`, and `New project` visible. Put `My projects`, `Starred`, `Notifications`, and `Sign out` behind one clearly labelled account control. Keep the control available to keyboard users and show the current location inside either group.
-- **B — two visible navigation rows.** Keep the same public group visible, then show the account group as a second row with direct links and the `Sign out` button. On a 440px viewport both groups wrap into a small grid instead of scrolling.
+The human decision selected the A structure and identified the first result as too cluttered. This document records the quieter native A revision. There is no remaining A/B choice: the review question is whether this refined result is clear, calm, and complete at desktop and 440px mobile.
 
-The maintainer choice is **A or B**. The recommendation is A because it preserves the four public actions and search while giving personal actions a named home, and it removes the current narrow-screen overflow without making the global header substantially taller on every page. B remains a credible choice if direct visibility of every signed-in destination is more important than header height.
+## Chosen structure
 
-## Evidence from the current product
+### Desktop: one compact closed state
 
-- `app/auth-nav.tsx:56-58` renders public links and signed-in personal links in one `.auth-nav` row. The signed-in link to `/notifications` is labelled `Activity`, while the route and page are already Notifications.
-- `src/styles/legacy-bridge.css:25-40` gives the header one grid, a single flex navigation row, and `white-space: nowrap`.
-- `src/styles/legacy-bridge.css:209-225` moves navigation below the header at narrower widths, then enables `overflow-x: auto` below `48rem`. This is the direct source of the issue's 440px clipping tradeoff.
-- `app/layout.tsx:14` keeps the header contract small: brand, global search, theme select, and `AuthNav`. The proposal keeps that contract and does not introduce route or data changes.
-- `app/global-search.tsx:24` already exposes a labelled search form targeting `/explore`; search remains a first-class header action in both alternatives.
-- `docs/current-capabilities.md:42-46,50` defines `/feed` as public Revision/Release discovery and `/notifications` as the signed-in personal notification screen. `docs/terminology.md:28-29` makes the same distinction and records that the current `Activity` link points to Notifications.
-- `CONTRIBUTING.md:19,36-38` requires a P1 decision before implementation and allows a draft or mockup to record that decision.
+The default signed-in header is one compact row, in this order:
 
-## Alternatives
+`brand` · `Explore` · `Contribute` · `Feed` · wide global search · **`New project`** · quiet theme select · `Account`
 
-### A — public-first header with Account disclosure (recommended)
+The public group is visible and low-noise. `New project` is the only primary action. Theme access remains available without competing with navigation. The Account trigger is a single quiet control; its contents are not displayed in the default screen.
 
-Desktop keeps this order and emphasis:
-
-`Explore` · `Contribute` · `Feed` · **`New project`** · search · `Account`
-
-The signed-in account control is a real button or equivalent disclosure trigger, labelled `Account` with the existing avatar/name available as supporting content. Its panel contains:
+The separate expanded-state specimen shows the Account panel with:
 
 1. `My projects` → `/projects`
 2. `Starred` → `/stars`
 3. `Notifications` → `/notifications`, with the unread count announced accessibly
 4. `Sign out` (the existing action)
+5. `Reports` only when the existing admin role gate allows it
 
-The existing role-gated `Reports` destination remains account-only when present; it should not determine the public header layout. `New project` stays in the public group because the issue explicitly treats it as a primary creation action rather than a private account destination.
+The panel is an account grouping, not a second public navigation row. The closed state should remain the primary review frame.
 
-At 440px, the brand and Account control share the first row, search occupies the next row, and the public group wraps into two columns. The Account panel can use the available width and wrap its links; the page never relies on horizontal scrolling.
+### Mobile: three predictable rows
 
-The disclosure must be operable by mouse and keyboard: tab to the trigger, Enter/Space to open, tab to each link/action, Escape to close and restore focus. The active route uses `aria-current="page"` on its link. When the current route is inside the closed account group, the trigger also receives active styling and an accessible current-section state; opening the panel exposes the matching link with `aria-current="page"`. Opening the account panel must not be required to understand that `/feed` is the current public location.
+At the 440px target:
 
-**Tradeoff:** personal destinations take one interaction after the header gains a meaningful account label. The compact shape gives the 440px case enough room for all primary public actions and search.
+1. first row: brand, quiet theme select, Account trigger;
+2. second row: full-width global search;
+3. third row: quiet `Explore`, `Contribute`, and `Feed` links plus the `New project` primary action.
 
-### B — two visible navigation rows
+The public links may wrap within the third row, but the header must not use a horizontal scrollbar. An open Account panel is an overlay constrained to the viewport; it must not push the page wider or place its last action off-screen.
 
-Desktop keeps two named groups visible:
+## Visual refinement contract
 
-- **Explore:** `Explore` · `Contribute` · `Feed` · **`New project`**
-- **Account:** `My projects` · `Starred` · `Notifications` · `Sign out`
+- Remove explanatory canvas copy that reads like page content. The page specimen should show the actual Feed heading and one representative update card, with ordinary product content doing the explaining.
+- Mark the active `Feed` location with one subtle underline. Do not use an accent-filled navigation pill for the active public link.
+- Keep the default desktop header uncluttered. Show Account contents only in the separate expanded-state specimen and in the interaction contract below it.
+- Keep public and account actions visually distinct without adding a second desktop navigation row.
+- Use the existing ODR semantic tokens, typography, spacing, focus treatment, and bundled local assets. Do not add a token library or new dependency.
 
-The groups use separate `nav` landmarks or equivalent labels. The current route is styled and marked with `aria-current="page"`; the account destinations are direct links, so no disclosure behavior is needed. `Reports` remains an account-only item when rendered for admins.
+## Evidence from the current product
 
-At 440px, the public group and account group each wrap to two columns. The rows may increase the sticky header height, but every action remains visible, tabbable, and executable without horizontal scrolling.
+- `app/auth-nav.tsx:56-58` currently renders public links and signed-in personal links in one `.auth-nav` row. The signed-in link to `/notifications` is labelled `Activity`, while the route and page are already Notifications.
+- `src/styles/legacy-bridge.css:25-40` gives the header one grid, a single flex navigation row, and `white-space: nowrap`.
+- `src/styles/legacy-bridge.css:209-225` moves navigation below the header at narrower widths, then enables `overflow-x: auto` below `48rem`. The refined mobile contract removes that overflow behavior from the chosen implementation.
+- `app/layout.tsx:14` keeps the header contract small: brand, global search, theme select, and `AuthNav`.
+- `app/global-search.tsx:24` already exposes a labelled search form targeting `/explore`; the revision keeps it as the wide second-row mobile search and the wide desktop search field.
+- `docs/current-capabilities.md:42-46,50` defines `/feed` as public Revision/Release discovery and `/notifications` as the signed-in personal notification screen. `docs/terminology.md:28-29` makes the same distinction and records that the current `Activity` link points to Notifications.
+- `CONTRIBUTING.md:19,36-38` defines P1 as the decision stage and P2 as human review of the agreed visual result. The structure decision is complete; this refinement is P2.
 
-**Tradeoff:** this maximizes immediate discoverability and has the smallest interaction change, but it consumes more vertical space and makes the global header visually heavier on every signed-in page.
+## Semantic and interaction contract
+
+- Keep the existing route URLs and signed-out state. Public links remain `/explore`, `/contribute`, `/feed`, and `/projects/new`; account actions remain `/projects`, `/stars`, `/notifications`, and the existing sign-out action.
+- Rename the visible `/notifications` affordance to `Notifications`. Its existing personal meaning, unread behavior, page title, description, data, sorting, and read state remain unchanged. `Feed` continues to mean the public Revision/Release stream.
+- Use separate labelled public and account navigation landmarks or equivalent semantic groups.
+- The Account control is a real keyboard-operable button or equivalent disclosure trigger with `aria-expanded` and `aria-controls`. Enter/Space opens it, Escape closes it and returns focus to the trigger, and every panel link/action is reachable and executable by keyboard.
+- Mark the current public route with `aria-current="page"` and the subtle underline. When an account route is current while the panel is closed, the Account trigger receives an active current-section state; when the panel is open, the matching account link receives `aria-current="page"`.
+- Keep `Reports` role-gated and inside the account group. It must not determine the public header emphasis or appear for ordinary users.
+- Preserve the existing skip link, focus visibility, search semantics, and notification count announcement.
 
 ## Exact scope after the decision
 
-The implementation PR should be limited to the global header and its focused checks:
+This revision edits documentation only. The later implementation PR may touch the existing header contract and focused checks:
 
-- update `app/auth-nav.tsx` to express the chosen public/account grouping, preserve existing route URLs, preserve the signed-out `Sign in` state, and rename the `/notifications` affordance to `Notifications`;
-- update `src/styles/legacy-bridge.css` for the chosen desktop/mobile layout, focus states, active location, and a 440px no-overflow invariant;
-- update `app/layout.tsx` only if the selected grouping needs a separate landmark or trigger container;
-- update focused `app/auth-nav.test.tsx` coverage and add a browser check for logged-out/logged-in desktop and 440px keyboard behavior if the repository's existing test harness is used;
-- leave notification data, unread/read behavior, sorting, APIs, route semantics, and page content unchanged.
+- `app/auth-nav.tsx` for the chosen grouping, Account disclosure, Notifications copy, current-route state, and preserved sign-out behavior;
+- `src/styles/legacy-bridge.css` for the compact desktop row, three-row mobile layout, underline state, focus treatment, viewport-constrained overlay, and 440px no-overflow invariant;
+- `app/layout.tsx` only if the selected grouping needs a separate landmark or trigger container;
+- focused `app/auth-nav.test.tsx` coverage plus a browser check for logged-out/logged-in desktop and 440px keyboard behavior if the existing harness supports it.
 
-## Acceptance mapping
+The implementation must leave notification data, unread/read behavior, sorting, APIs, route semantics, and page content outside the header unchanged. No runtime files are changed by this proposal update.
 
-| Issue #87 requirement | Decision and implementation evidence |
+## Acceptance mapping for the P2 visual review
+
+| Issue #87 requirement | Refined A evidence to review |
 | --- | --- |
-| Public and personal priorities are distinguishable | Separate labelled public and account groups; `Explore`, `Contribute`, `Feed`, and `New project` stay public and prominent. |
-| Current location is visible | Apply `aria-current="page"` and the existing active visual treatment to the matching link; A also marks the closed Account trigger as the current section when the active route is inside its panel. |
-| My projects, Starred, Notifications, and Sign out are easy to find | A exposes one labelled Account control with all four actions; B keeps all four directly visible. Both keep each action tabbable and executable. |
-| Notifications has personal-notification meaning | Use the visible label `Notifications` and `/notifications`; keep the existing page title/description and unread behavior. Keep `Feed` reserved for public Revision/Release changes. |
-| Logged-in ~440px header has no clipping or horizontal scrolling | Wrap or stack the groups at the 440px target, assert `scrollWidth <= clientWidth`, and exercise the last account action. |
-| Desktop/mobile and keyboard validation | Verify logged-out and logged-in states at desktop and 440px, at least on `/explore`, `/feed`, `/projects`, `/stars`, and `/notifications`; include trigger open/close and link activation for A. |
+| Public and personal priorities are distinguishable | One compact desktop row keeps Explore, Contribute, Feed, and New project visible; all personal actions live in the Account panel. |
+| Current location is visible | Feed uses one subtle underline and `aria-current="page"`; an active account route marks the closed Account trigger and the open matching panel link. |
+| My projects, Starred, Notifications, Sign out are easy to find | The Account trigger is visible in the default header; its expanded specimen shows all four named actions in one account group. Reports appears only for admins. |
+| Notifications has personal-notification meaning | The affordance says `Notifications` and points to `/notifications`; Feed remains the public Revision/Release stream. Existing page copy and notification behavior stay intact. |
+| Logged-in ~440px header has no clipping or horizontal scrolling | Brand/theme/Account, full search, and the wrapped three-link/New project row fit at 440px; an open Account overlay stays within the viewport and exposes Sign out. |
+| Desktop/mobile and keyboard access | Review logged-out and logged-in states, Feed and account current states, Account open/close, Escape focus return, all panel actions, and the final narrow action at desktop and 440px. |
+| Result is visually calm enough for P2 | Closed desktop header is the primary frame; explanatory canvas copy is removed; the Feed specimen shows a real heading and update card; active Feed uses an underline rather than an accent-filled pill. |
 
-## Human decision to record on the issue
+## Review status and artifacts
 
-**Choose A (recommended compact Account disclosure) or B (all account actions visible in a second row). Keep `New project` in the public group and keep `Reports` account-only in either direction.**
+The structure is **chosen A**. Alternative B is archived and no longer asks for a decision. The open decision is limited to the **P2 visual result**: whether the refined header is quiet enough while keeping the public actions and Account entry discoverable.
 
-The primary comparison is now editable Penpot boards. The [HTML preview](./issue-87-preview.html) remains a supplementary review aid.
+The revised native A boards below are the current review artifacts. Earlier A/B boards remain untouched as comparison history.
 
-## Editable Penpot comparison
+The existing [HTML preview](./issue-87-preview.html) is marked **superseded**. It remains only as a historical static comparison and is not the refined A implementation.
 
-- [A / Desktop 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7efe896112)
-- [A / Mobile 440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7f018acef4)
-- [B / Desktop 1440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7f035fc950)
-- [B / Mobile 440](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-bd7f055099a7)
+## Current native A refinement
 
-Both alternatives show global search, theme access, public destinations, the active Feed location, and My projects / Starred / Notifications / Sign out. A shows its expanded Account panel; B keeps the account row visible. Native text and shapes remain editable, and existing button component instances are reused. PNG exports are attached to the PR.
+| State | Desktop | Mobile |
+| --- | --- | --- |
+| Default, Account closed | [1440px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be166a8451ce) | [440px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be16746b3504) |
+| Account expanded | [1440px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be1673acb339) | [440px](https://design.penpot.app/#/workspace?team-id=c828d3cf-7d4e-8145-8008-97c0502ab146&file-id=c828d3cf-7d4e-8145-8008-97c16046a495&page-id=e4efa596-26fc-8098-8008-ba98657f1ef7&board-id=d8fcd456-2e62-80c8-8008-be167da73c0f) |
 
-Board containment and PNG rendering are checked. These static boards do not establish live keyboard behavior, disclosure focus restoration, signed-out states, or route acceptance; those checks belong to the selected implementation. The A/B choice remains pending.
+The default and expanded states are separate editable specimens. Existing Aster vectors and button component instances remain linked; the previous boards were preserved. PNGs are attached to the PR. These static boards do not establish live disclosure/keyboard/route behavior.

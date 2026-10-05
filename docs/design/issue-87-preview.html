@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ODR issue #87 — header navigation alternatives</title>
+  <title>Superseded — ODR issue #87 header navigation comparison</title>
   <style>
     @font-face {
       font-family: "Pretendard Variable";
@@ -45,6 +45,8 @@
     .eyebrow { margin: 0 0 .5rem; color: var(--accent); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     h1 { margin: 0 0 .75rem; font-size: clamp(1.6rem, 4vw, 2.25rem); line-height: 1.1; letter-spacing: -.02em; }
     .intro p { margin: 0; color: var(--secondary); line-height: 1.5; }
+    .superseded { margin: 0 0 1.5rem; padding: .75rem 1rem; border: 1px solid #d9c99b; border-radius: .5rem; background: #fff9e7; color: #5c4a16; font-size: .8125rem; line-height: 1.45; }
+    .superseded strong { font-weight: 750; }
     .comparison { display: grid; gap: 2rem; }
     .alternative { display: grid; gap: 1rem; }
     .alternative-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
@@ -118,10 +120,11 @@
 <body>
   <main class="page">
     <div class="intro">
-      <p class="eyebrow">Issue #87 · P1 decision aid</p>
+      <p class="eyebrow">Issue #87 · superseded P1 comparison</p>
       <h1>Public discovery and account actions need separate homes.</h1>
-      <p>These static header studies use the current ODR tokens, the bundled Pretendard font, and the repository's local Aster artwork as a content sample. The controls are illustrative only; choose a direction before product code is changed.</p>
+      <p>These static header studies use the current ODR tokens, the bundled Pretendard font, and the repository's local Aster artwork as a content sample.</p>
     </div>
+    <p class="superseded"><strong>Superseded static comparison.</strong> A is now the chosen structure. The active review is the quieter native A refinement described in <code>issue-87-proposal.md</code>; this page remains only as historical context for the earlier A/B discussion.</p>
 
     <div class="comparison">
       <section class="alternative" aria-labelledby="alternative-a">
