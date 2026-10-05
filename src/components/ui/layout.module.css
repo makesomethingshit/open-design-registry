@@ -2,9 +2,9 @@
 .inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--odr-layout-gap); }
 .pageGrid { display: grid; grid-template-columns: repeat(var(--odr-layout-grid-columns), minmax(0, 1fr)); gap: var(--odr-layout-grid-gutter); width: 100%; max-width: var(--odr-layout-page); min-width: 0; margin-inline: auto; }
 .formColumn, .readingColumn, .wideColumn { min-width: 0; }
-.formColumn { grid-column: span var(--odr-layout-form-span); }
-.readingColumn { grid-column: span var(--odr-layout-reading-span); }
-.wideColumn { grid-column: span var(--odr-layout-wide-span); }
+.formColumn { grid-column: 4 / span var(--odr-layout-form-span); }
+.readingColumn { grid-column: 3 / span var(--odr-layout-reading-span); }
+.wideColumn { grid-column: 1 / -1; }
 .sectionHeader, .pageHeader { display: flex; align-items: end; justify-content: space-between; gap: var(--odr-space-4); }
 .sectionHeader h2, .pageHeader h1 { margin: 0; color: var(--odr-text-primary); font-weight: var(--odr-weight-semibold); }
 .sectionHeader h2 { font-size: var(--odr-font-section); line-height: var(--odr-line-section); }
