@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ODR #79 A2 and B4 proposal preview</title>
+  <style>
+    @font-face { font-family: OdrPreview; src: url("../../public/fonts/PretendardVariable.woff2") format("woff2"); font-display: swap; }
+    :root {
+      color-scheme: light;
+      --odr-surface-page: #f7f7f7;
+      --odr-surface-panel: #ffffff;
+      --odr-surface-subtle: #efefef;
+      --odr-surface-hover: #e8e8e8;
+      --odr-text-primary: #202020;
+      --odr-text-secondary: #4f4f4f;
+      --odr-text-muted: #626262;
+      --odr-border-subtle: #e4e4e4;
+      --odr-border-default: #d4d4d4;
+      --odr-border-control: #7a7a7a;
+      --odr-accent: #5145cd;
+      --odr-accent-soft: #efedfc;
+      --odr-action-primary-bg: #202020;
+      --odr-action-primary-hover: #363636;
+      --odr-action-primary-fg: #ffffff;
+      --odr-control-md: 2.5rem;
+      --odr-control-lg: 3rem;
+      --odr-touch-target: 2.75rem;
+      --odr-border-width: 1px;
+      --odr-focus-width: 2px;
+      --odr-focus-offset: 2px;
+      --odr-duration-fast: 100ms;
+      --odr-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+      --odr-radius-control: 0.25rem;
+      --odr-radius-panel: 0.5rem;
+      --odr-font-sans: OdrPreview, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --odr-font-body: 0.875rem;
+      --odr-line-body: 1.25rem;
+      --odr-font-label: 0.8125rem;
+      --odr-line-label: 1.125rem;
+      --odr-space-2: 0.5rem;
+      --odr-space-3: 0.75rem;
+      --odr-space-4: 1rem;
+      --odr-space-5: 1.5rem;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--odr-surface-page); color: var(--odr-text-primary); font: var(--odr-font-body)/var(--odr-line-body) var(--odr-font-sans); }
+    main { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; }
+    header { display: grid; gap: var(--odr-space-2); margin-bottom: 2rem; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.05; letter-spacing: -0.045em; }
+    h2 { font-size: 1.5rem; line-height: 1.2; }
+    h3 { font-size: 1rem; line-height: 1.3; }
+    .eyebrow, .label { color: var(--odr-accent); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+    .intro, .note { color: var(--odr-text-secondary); }
+    .intro { max-width: 52rem; }
+    .note { color: var(--odr-text-muted); font-size: var(--odr-font-label); }
+    section { display: grid; gap: 1rem; margin-top: 3rem; }
+    .viewport-row { display: grid; grid-template-columns: minmax(0, 1fr) 390px; align-items: start; gap: 1rem; }
+    .viewport { min-width: 0; overflow: hidden; border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); box-shadow: 0 1rem 2rem rgb(32 32 32 / 0.06); }
+    .viewport.mobile { width: 390px; max-width: 100%; }
+    .viewport-title { padding: 0.75rem 1rem; border-bottom: var(--odr-border-width) solid var(--odr-border-subtle); color: var(--odr-text-muted); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+    .viewport-body { padding: 1rem; }
+    .accepted, .pending { display: inline-flex; width: max-content; padding: 0.125rem 0.375rem; border-radius: 999px; font-size: 0.6875rem; font-weight: 600; }
+    .accepted { background: #eaf4ed; color: #21623f; }
+    .pending { background: var(--odr-accent-soft); color: var(--odr-accent); }
+    .card { display: grid; gap: 0.75rem; min-width: 0; }
+    .media-link { display: block; color: inherit; text-decoration: none; }
+    .media { position: relative; display: grid; aspect-ratio: 4 / 3; place-items: center; overflow: hidden; border: var(--odr-border-width) solid var(--odr-border-default); background: var(--odr-surface-subtle); }
+    .media img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: contain; }
+    .media-link:focus-visible { outline: var(--odr-focus-width) solid var(--odr-accent); outline-offset: var(--odr-focus-offset); }
+    .a2 .media::after { position: absolute; right: 0; bottom: 0; left: 0; z-index: 2; height: 38%; content: ""; background: linear-gradient(transparent, rgb(32 32 32 / 0.72)); opacity: 0; transition: opacity var(--odr-duration-fast) var(--odr-ease-standard); }
+    .a2 .media-link:hover .media::after, .a2 .media-link:focus-visible .media::after { opacity: 1; }
+    .a2 .media-link:hover .media, .a2 .media-link:focus-visible .media { border-color: var(--odr-accent); }
+    .media-label { position: absolute; right: 0.75rem; bottom: 0.625rem; z-index: 3; color: #fff; font-size: 0.75rem; font-weight: 600; opacity: 0; transition: opacity var(--odr-duration-fast) var(--odr-ease-standard); }
+    .a2 .media-link:hover .media-label, .a2 .media-link:focus-visible .media-label { opacity: 1; }
+    .card-title { font-weight: 600; }
+    .card-meta { color: var(--odr-text-muted); font-size: 0.75rem; }
+    .state { color: var(--odr-text-muted); font-size: 0.6875rem; }
+    .b4-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.8fr); gap: 1rem; }
+    .surface { display: grid; gap: 1rem; padding: 1rem; border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-surface-panel); }
+    .hero-sample { display: grid; gap: 0.75rem; padding: 1.25rem; background: var(--odr-surface-page); }
+    .hero-sample h3 { font-size: 1.6rem; letter-spacing: -0.035em; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .btn, .inline-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+    .btn { min-height: var(--odr-control-lg); padding: 0.5rem 1rem; border: var(--odr-border-width) solid transparent; border-radius: var(--odr-radius-control); font: 600 var(--odr-font-body)/var(--odr-line-body) var(--odr-font-sans); }
+    .btn.primary { background: var(--odr-action-primary-bg); color: var(--odr-action-primary-fg); }
+    .btn.secondary { border-color: var(--odr-border-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); }
+    .btn:hover, .btn:focus-visible, .inline-link:focus-visible { outline: var(--odr-focus-width) solid var(--odr-accent); outline-offset: var(--odr-focus-offset); }
+    .btn.primary:hover { background: var(--odr-action-primary-hover); }
+    .callout { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 0.875rem 1rem; border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-accent-soft); }
+    .callout p { color: var(--odr-text-secondary); font-size: var(--odr-font-label); }
+    .callout .inline-link { min-height: var(--odr-touch-target); color: var(--odr-accent); font-weight: 600; }
+    .search { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; padding: 0.75rem; border: var(--odr-border-width) solid var(--odr-border-subtle); background: var(--odr-surface-page); }
+    .search label { display: grid; gap: 0.25rem; color: var(--odr-text-muted); font-size: 0.75rem; }
+    .search input { width: 100%; min-height: var(--odr-control-md); padding: 0.5rem 0.75rem; border: var(--odr-border-width) solid var(--odr-border-control); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); font: inherit; }
+    .search .btn { min-height: var(--odr-control-md); padding-inline: 0.75rem; }
+    .request { display: grid; gap: 0.625rem; padding: 0.25rem 0; }
+    .request p { color: var(--odr-text-secondary); }
+    .request-title { font-size: 1.05rem; font-weight: 600; }
+    .request-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; color: var(--odr-text-muted); font-size: 0.75rem; }
+    .inline-link { width: max-content; min-height: var(--odr-touch-target); color: var(--odr-accent); font-size: var(--odr-font-label); font-weight: 600; }
+    .footer { margin-top: 3rem; padding: 1rem; border-left: 3px solid var(--odr-accent); background: var(--odr-accent-soft); color: var(--odr-text-secondary); }
+    @media (max-width: 760px) {
+      main { width: min(100% - 1rem, 390px); padding-top: 1rem; }
+      .viewport-row, .b4-grid { grid-template-columns: 1fr; }
+      .viewport.desktop, .viewport.mobile { width: 100%; }
+      .hero-actions, .callout, .search { grid-template-columns: 1fr; }
+      .hero-actions { display: grid; }
+      .hero-actions .btn, .callout .inline-link, .search .btn { width: 100%; }
+    }
+    @media (pointer: coarse) { .a2 .media::after, .a2 .media-label { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .a2 .media::after, .media-label { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Issue #79 · design decision preview</p>
+      <h1>Work first. Actions contextual.</h1>
+      <p class="intro">A2 is accepted. B4 is a pending proposal for native Penpot review. This static preview uses the existing local <code>public/landing-aster.svg</code> asset and token values; it does not change product code.</p>
+    </header>
+
+    <section aria-labelledby="a2-heading">
+      <div><h2 id="a2-heading">A. Project card cover · A2</h2><p class="note"><span class="accepted">Accepted</span> Hover or keyboard-focus the cover. The 4:3 frame and card metadata stay in place.</p></div>
+      <div class="viewport-row">
+        <div class="viewport desktop"><p class="viewport-title">Desktop · accepted interaction</p><div class="viewport-body"><div class="card a2"><a class="media-link" href="#project-desktop"><div class="media"><img src="../../public/landing-aster.svg" alt="Aster project cover"><span class="media-label">Open project ↗</span></div></a><p class="card-title">Aster coffee identity</p><p class="card-meta">Active · CC BY 4.0 · Updated Sep 6</p><p class="state">Hover/focus reveals a contained bottom label.</p></div></div></div>
+        <div class="viewport mobile"><p class="viewport-title">Mobile · 390px accepted interaction</p><div class="viewport-body"><div class="card a2"><a class="media-link" href="#project-mobile"><div class="media"><img src="../../public/landing-aster.svg" alt="Aster project cover"><span class="media-label">Open project ↗</span></div></a><p class="card-title">Aster coffee identity</p><p class="card-meta">Active · CC BY 4.0</p><p class="state">Touch keeps the entry cue visible.</p></div></div></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="b4-heading">
+      <div><h2 id="b4-heading">B. Landing / Contribute · B4</h2><p class="note"><span class="pending">Pending proposal</span> Work-first contextual actions; native Penpot review is still required.</p></div>
+      <div class="viewport-row">
+        <div class="viewport desktop"><p class="viewport-title">Desktop · example before secondary actions</p><div class="viewport-body"><div class="b4-grid">
+          <div class="surface"><p class="label">Landing hero</p><div class="hero-sample"><h3>Good design.<br><span>Built in the open.</span></h3><p class="note">Discover open work and start with what inspires you.</p><div class="hero-actions"><a class="btn primary" href="#explore">Explore projects ↗</a></div></div><div class="surface"><p class="label">Below the example</p><div class="callout"><p>Have a project to share?</p><a class="inline-link" href="#create">Create a project →</a></div></div></div>
+          <div class="surface"><p class="label">Contribute</p><div class="search"><label>Search requests<input type="search" value="packaging"></label><a class="btn secondary" href="#search">Search</a></div><article class="request"><p class="request-title">Packaging exploration</p><p>Improve the package system while keeping the project source and revision context intact.</p><div class="request-meta"><span>CC BY 4.0</span><span>Revision 3</span><span>Active</span><span>Owner: Aster studio</span></div><a class="inline-link" href="#request">View request →</a></article></div>
+        </div></div></div>
+        <div class="viewport mobile"><p class="viewport-title">Mobile · 390px contextual flow</p><div class="viewport-body"><div class="surface"><p class="label">Landing</p><div class="hero-sample"><h3>Good design.<br><span>Built in the open.</span></h3><div class="hero-actions"><a class="btn primary" href="#mobile-explore">Explore projects ↗</a></div></div><div class="callout"><p>Have a project to share?</p><a class="inline-link" href="#mobile-create">Create a project →</a></div></div><div class="surface"><p class="label">Contribute</p><div class="search"><label>Search requests<input type="search" value="packaging"></label><a class="btn secondary" href="#mobile-search">Search</a></div><article class="request"><p class="request-title">Packaging exploration</p><p>Project context and rights come before the inline action.</p><div class="request-meta"><span>CC BY 4.0</span><span>Revision 3</span><span>Active</span></div><a class="inline-link" href="#mobile-request">View request →</a></article></div></div></div>
+      </div>
+    </section>
+
+    <p class="footer"><strong>B4 remains undecided.</strong> The current native Penpot board links are in the accompanying proposal document. Product routing, keyboard behavior, reduced-motion behavior, layout stability, and real project-image quality remain implementation evidence.</p>
+  </main>
+</body>
+</html>
