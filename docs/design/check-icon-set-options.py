@@ -2,6 +2,7 @@
 from pathlib import Path
 from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
+import re
 
 BASE = Path(__file__).resolve().parent
 NS = '{http://www.w3.org/2000/svg}'
@@ -43,7 +44,9 @@ for option, buttons in parsed.options.items():
 assert selected == 8
 assert '.dark .btn.primary{background:#f2f2f2' in page
 octicons = page.split('id="option-d"',1)[1].split('</article>',1)[0]
-import re
+all_icons = [ET.fromstring(s) for s in re.findall(r'<svg\b.*?</svg>',page,re.S)]
+assert len(all_icons) == 132
+assert all(e.get('aria-hidden') == 'true' and e.get('focusable') == 'false' for e in all_icons)
 icons = [ET.fromstring(s) for s in re.findall(r'<svg\b.*?</svg>',octicons,re.S)]
 watch = [ET.tostring(e.find('path') if e.find('path') is not None else e.find(NS+'path')) for e in icons if e.get('data-icon') == 'watch']
 preview = [ET.tostring(e.find('path') if e.find('path') is not None else e.find(NS+'path')) for e in icons if e.get('data-icon') == 'preview']
