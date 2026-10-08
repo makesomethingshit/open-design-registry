@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findIssue: vi.fn(), updateIssue: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { issue: { findUnique: mocks.findIssue, update: mocks.updateIssue } } }));
+vi.mock("@/src/lib/prisma", () => ({
+  prisma: {
+    issue: { findUnique: mocks.findIssue, update: mocks.updateIssue },
+    $transaction: (callback: (tx: unknown) => unknown) =>
+      callback({
+        $queryRaw: async () => [{ id: "issue-1" }],
+        issue: { findUnique: mocks.findIssue, update: mocks.updateIssue },
+      }),
+  },
+}));
 
 const { GET, PATCH } = await import("./route");
 const context = { params: Promise.resolve({ id: "issue-1" }) };
