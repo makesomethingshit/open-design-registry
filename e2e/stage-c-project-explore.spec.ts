@@ -23,3 +23,44 @@ test("keeps Project and Explore components readable across gallery breakpoints",
     await section.screenshot({ path: testInfo.outputPath(`stage-c-${viewport.width}.png`) });
   }
 });
+
+test("reveals the project action without moving the card or its neighbors", async ({ page, browser }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/design-system");
+    const link = page.getByRole("link", { name: "View Aster coffee identity" });
+    await link.scrollIntoViewIfNeeded();
+    const card = link.locator("xpath=..");
+    const label = link.getByText("Open project");
+    const before = await card.boundingBox();
+    const neighbors = await page.getByRole("link", { name: /View (Portrait poster|Landscape spread)/ }).all();
+    const neighborBoxes = await Promise.all(neighbors.map((neighbor) => neighbor.boundingBox()));
+    await expect(label).toHaveCSS("opacity", "0");
+    await link.hover();
+    await expect(label).toHaveCSS("opacity", "1");
+    expect(await card.boundingBox()).toEqual(before);
+    expect(await Promise.all(neighbors.map((neighbor) => neighbor.boundingBox()))).toEqual(neighborBoxes);
+    await card.screenshot({ path: testInfo.outputPath(`card-hover-${width}.png`) });
+    await page.mouse.move(0, 0);
+    await page.keyboard.press("Tab");
+    await link.focus();
+    await expect(label).toHaveCSS("opacity", "1");
+    await expect(label).toHaveCSS("transition-property", "none");
+    expect(await card.boundingBox()).toEqual(before);
+    await card.screenshot({ path: testInfo.outputPath(`card-focus-${width}.png`) });
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#project-components-heading$/);
+  }
+  const touch = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  try {
+    const mobile = await touch.newPage();
+    await mobile.goto(`${new URL(page.url()).origin}/design-system`);
+    const link = mobile.getByRole("link", { name: "View Aster coffee identity" });
+    await link.scrollIntoViewIfNeeded();
+    await expect(link.getByText("Open project")).toHaveCSS("opacity", "1");
+    await link.locator("xpath=..").screenshot({ path: testInfo.outputPath("card-touch.png") });
+  } finally {
+    await touch.close();
+  }
+});

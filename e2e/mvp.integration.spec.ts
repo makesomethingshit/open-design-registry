@@ -517,7 +517,10 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`/contribute?q=${encodeURIComponent(requestTitle)}`);
-      await page.getByRole("link", { name: requestTitle }).click();
+      await expect(page.getByRole("heading", { name: requestTitle })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Search", exact: true })).toBeVisible();
+      await capture("00-discovery-mobile.png");
+      await page.getByRole("link", { name: "View request" }).press("Enter");
       await expect(page.getByRole("heading", { name: "Before you contribute" })).toBeVisible();
       await expect(page.getByText("A Fork creates your own public work project.", { exact: false })).toBeVisible();
       await capture("01-request-mobile.png");

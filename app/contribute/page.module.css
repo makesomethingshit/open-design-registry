@@ -30,11 +30,10 @@
 .requestHeading, .metadata { display: flex; flex-wrap: wrap; align-items: center; gap: var(--odr-space-2); }
 .requestHeading time { color: var(--odr-text-muted); font-size: var(--odr-font-caption); }
 .requestContent h3 { margin: 0; font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); overflow-wrap: anywhere; }
-.requestContent h3 a, .projectLine a { color: var(--odr-text-primary); text-decoration: underline; text-underline-offset: 0.15em; }
+.projectLine a { color: var(--odr-text-primary); text-decoration: underline; text-underline-offset: 0.15em; }
 .body, .projectLine { margin: 0; color: var(--odr-text-secondary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); overflow-wrap: anywhere; }
 .body { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.requestLink { display: inline-flex; align-items: center; }
-.titleLink, .projectLink { display: inline-flex; align-items: center; min-height: var(--odr-touch-target); max-width: 100%; }
+.requestLink, .projectLink { display: inline-flex; align-items: center; min-height: var(--odr-touch-target); max-width: 100%; }
 .metadata > span:not([class]) { color: var(--odr-text-muted); font-size: var(--odr-font-label); }
 .requestLink, .pagination a { width: max-content; color: var(--odr-accent); font-size: var(--odr-font-label); font-weight: var(--odr-weight-semibold); text-underline-offset: 0.15em; }
 .empty { display: grid; justify-items: start; gap: var(--odr-space-2); padding: var(--odr-space-7) 0; color: var(--odr-text-muted); font-size: var(--odr-font-prose); }
@@ -45,8 +44,7 @@
   .hero { padding-top: var(--odr-space-4); }
   .hero h1 { font-size: clamp(2rem, 11vw, var(--odr-font-display)); line-height: 1.1; }
   .sectionHeader { align-items: start; flex-direction: column; }
-  .searchRow, .filterFields { grid-template-columns: 1fr; }
-  .searchButton { width: 100%; min-height: var(--odr-control-lg); }
+  .filterFields { grid-template-columns: 1fr; }
   .requestCard { grid-template-columns: minmax(0, 1fr); }
   .media { width: min(100%, 18rem); }
 }

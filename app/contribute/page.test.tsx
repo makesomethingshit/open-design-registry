@@ -131,13 +131,14 @@ describe("Contribution Discovery", () => {
     expect(unpublished).toContain("Project cover");
   });
 
-  it("sizes the title and project links for touch", async () => {
+  it("puts one request link after its context and keeps Search secondary", async () => {
     mocks.findMany.mockResolvedValue([request("request-1")]);
     const markup = renderToStaticMarkup(await ContributePage({ searchParams: Promise.resolve({}) }));
-    const titleAnchor = markup.match(/<h3><a[^>]*>/)?.[0] ?? "";
-
-    expect(titleAnchor).toContain('href="/projects/design-system/issues/request-1"');
-    expect(titleAnchor).toMatch(/class="[^"]+"/);
+    expect(markup).toContain('<h3>Request request-1</h3>');
+    expect(markup.match(/href="\/projects\/design-system\/issues\/request-1"/g)).toHaveLength(1);
+    expect(markup).toMatch(/<a[^>]*href="\/projects\/design-system\/issues\/request-1"[^>]*>View request/);
+    expect(markup.indexOf('View request')).toBeGreaterThan(markup.indexOf('MIT'));
+    expect(markup).toMatch(/<button[^>]*class="[^"]*secondary[^"]*"[^>]*>/);
     expect(markup).toMatch(/<a class="[^"]+" href="\/projects\/design-system">Design system<\/a>/);
   });
 

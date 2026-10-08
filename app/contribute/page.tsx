@@ -81,7 +81,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
       <form action="/contribute" className={styles.filters} method="get">
         <div className={styles.searchRow}>
           <label className={styles.searchLabel} htmlFor="request-search">Search requests<input defaultValue={query} id="request-search" name="q" placeholder="Request or project name and description" type="search" /></label>
-          <Button className={styles.searchButton} type="submit">Search</Button>
+          <Button className={styles.searchButton} variant="secondary" type="submit">Search</Button>
         </div>
         <details className={styles.filterGroup} open={hasActiveFilter}>
           <summary>Filters</summary>
@@ -111,7 +111,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
             </figure>
             <div className={styles.requestContent}>
               <div className={styles.requestHeading}><Badge>Design request</Badge><time dateTime={request.createdAt.toISOString()}>Opened {formatDate(request.createdAt)}</time></div>
-              <h3><Link className={styles.titleLink} href={requestHref}>{request.title}</Link></h3>
+              <h3>{request.title}</h3>
               <p className={styles.body}>{request.body || "No summary provided"}</p>
               <p className={styles.projectLine}>For <Link className={styles.projectLink} href={`/projects/${project.slug}`}>{project.title}</Link> · by {project.owner.name}</p>
               <div className={styles.metadata}>
@@ -120,7 +120,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
                 {latestRevision?.tool && <Tag>{latestRevision.tool}</Tag>}
                 {latestRevision?.tags.slice(0, 3).map((value) => <Tag key={value}>{value}</Tag>)}
               </div>
-              <span aria-hidden="true" className={styles.requestLink}>View request <span aria-hidden="true">→</span></span>
+              <TextLink className={styles.requestLink} href={requestHref}>View request <span aria-hidden="true">→</span></TextLink>
             </div>
           </article>
         </li>;

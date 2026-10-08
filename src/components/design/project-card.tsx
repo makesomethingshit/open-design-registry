@@ -24,6 +24,7 @@ export function ProjectCard({ activityStatus = "ACTIVE", coverUrl, description, 
     <Link aria-label={`View ${title}`} className={styles.mediaLink} href={href}>
       <div className={styles.media}>
         {coverUrl ? <><span aria-hidden="true" className={styles.skeleton} /><img alt={`${title} cover`} decoding="async" fetchPriority={priority ? "high" : undefined} loading={priority ? "eager" : "lazy"} src={coverUrl} /></> : <span className={styles.noPreview}>No preview</span>}
+        <span aria-hidden="true" className={styles.openLabel}>Open project <span>→</span></span>
       </div>
     </Link>
     <div className={styles.content}>
