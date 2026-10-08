@@ -34,6 +34,7 @@ export function conflictForChange(change: ConflictChange, base: RevisionBundle |
   if (!baseFile) return unavailable("Comparison data is unavailable.");
   if (!latestFile) return conflict("This unit was removed from the latest revision.");
   if (!sameDependencySet(baseFile.dependencies, latestFile.dependencies)) return conflict("Unit dependencies changed upstream.");
+  if (action === "RENAME_UNIT" && baseFile.name !== latestFile.name) return conflict("Unit name changed upstream.");
   if (baseFile.checksum && latestFile.checksum) {
     return baseFile.checksum === latestFile.checksum
       ? noConflict()
@@ -43,6 +44,17 @@ export function conflictForChange(change: ConflictChange, base: RevisionBundle |
   return metadataChanged(baseFile, latestFile)
     ? conflict("Unit metadata changed upstream.")
     : unavailable();
+}
+
+export function renamedUnitIds(before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null) {
+  const previous = new Map(before.files.map((file) => [file.id, file]));
+  const next = new Map(after.files.map((file) => [file.id, file]));
+  const ids = targetFileIds ?? [...new Set([...previous.keys(), ...next.keys()])];
+  return ids.filter((id) => {
+    const left = previous.get(id);
+    const right = next.get(id);
+    return Boolean(left && right && left.name !== right.name);
+  });
 }
 
 export function changedUnitIds(before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null) {

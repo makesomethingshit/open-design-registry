@@ -6,7 +6,7 @@ import { proposalApplySchema, proposalCloseSchema, proposalCreateSchema, proposa
 import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-status";
 import { deleteObject, publicAssetUrl } from "./storage";
 import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameDependencySet, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
-import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
+import { changedUnitIds, conflictForChange, renamedUnitIds } from "./proposal-conflicts";
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
@@ -632,10 +632,14 @@ function selectiveBundle(latest: RevisionBundle, source: RevisionBundle | null, 
 
 async function invalidateUpstreamApprovals(tx: Prisma.TransactionClient, projectId: string, proposalId: string, before: RevisionBundle, after: RevisionBundle, targetFileIds: string[] | null, revision: { id: string; number: number }) {
   const changedIds = changedUnitIds(before, after, targetFileIds);
-  if (!changedIds.length) return;
+  const renamedOnlyIds = renamedUnitIds(before, after, targetFileIds).filter((id) => !changedIds.includes(id));
+  if (!changedIds.length && !renamedOnlyIds.length) return;
+  const affectedTargets: Prisma.ChangeWhereInput[] = [];
+  if (changedIds.length) affectedTargets.push({ targetFileId: { in: changedIds } });
+  if (renamedOnlyIds.length) affectedTargets.push({ targetFileId: { in: renamedOnlyIds }, OR: [{ action: "RENAME_UNIT" as const }, { action: null, type: "RENAME_UNIT" as const }] });
   const affected = await tx.change.findMany({
     where: {
-      targetFileId: { in: changedIds }, reviewStatus: "APPROVED", appliedRevisionId: null,
+      OR: affectedTargets, reviewStatus: "APPROVED", appliedRevisionId: null,
       changeSet: { proposal: { projectId, id: { not: proposalId }, status: { notIn: ["CLOSED", "ACCEPTED"] } } },
     },
     select: { id: true, changeSetId: true },
