@@ -221,7 +221,7 @@ describe("selective proposal apply route", () => {
     expect(mocks.createRevision).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publishedById: "owner", sourceProposalId: "proposal" }) }));
 
     expect(response.status).toBe(201);
-    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ targetFileId: { in: ["changed", "removed"] } }) }));
+    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: [{ targetFileId: { in: ["changed", "removed"] } }] }) }));
     expect(mocks.createHistory).toHaveBeenCalledWith({ data: expect.arrayContaining([
       expect.objectContaining({ changeId: "other-changed", eventType: "INVALIDATED_UPSTREAM", causedByRevisionId: "revision-11" }),
       expect.objectContaining({ changeId: "other-removed", eventType: "INVALIDATED_UPSTREAM", causedByRevisionId: "revision-11" }),
@@ -244,7 +244,7 @@ describe("selective proposal apply route", () => {
     const response = await POST(request({ changeIds: ["whole-change"] }), { params: Promise.resolve({ id: "proposal" }) });
 
     expect(response.status).toBe(201);
-    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ targetFileId: { in: ["unrelated"] } }) }));
+    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: [{ targetFileId: { in: ["unrelated"] } }] }) }));
   });
 
   it("writes no second whole-document invalidation event on an idempotent retry", async () => {
@@ -340,6 +340,33 @@ describe("selective proposal apply route", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ conflictChangeIds: ["change-a"] });
     expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("blocks a stale rename when the upstream unit name changed with the same checksum", async () => {
+    const homeBase = { version: 2, files: [{ ...latestBundle.files[0], id: "home", name: "Home", checksum: "a".repeat(64) }] };
+    const homeLatest = { version: 2, files: [{ ...homeBase.files[0], name: "Landing" }] };
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: [{ id: "rename", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Home", targetFileId: "home", name: "Home", newName: "Dashboard", reviewStatus: "APPROVED", appliedRevisionId: null }] } }));
+    mocks.findLatest.mockResolvedValue({ id: "r2", number: 12 });
+    mocks.findRevision.mockResolvedValue(latest("r2", 12));
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? homeBase : homeLatest));
+    const response = await POST(request({ changeIds: ["rename"], reviewedLatestRevisionId: "r2", reviewedChangeIds: ["rename"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ conflictChangeIds: ["rename"] });
+    expect(mocks.createRevision).not.toHaveBeenCalled();
+  });
+
+  it("invalidates only rename approvals for a name-only upstream change", async () => {
+    const home = { id: "home", name: "Home", kind: "artboard", mimeType: "image/png", size: 10, assetKey: "home-key", previewKeys: ["target-a-preview"], checksum: "a".repeat(64) };
+    mocks.findProposal.mockResolvedValue(proposal({ changeSet: { id: "set", changes: [{ id: "rename", type: "RENAME_UNIT", action: "RENAME_UNIT", target: "Home", targetFileId: "home", name: "Home", newName: "Landing", reviewStatus: "APPROVED", appliedRevisionId: null }] } }));
+    mocks.readBundle.mockResolvedValue({ version: 2, files: [home] });
+    mocks.findAffectedChanges.mockResolvedValue([{ id: "other-rename", changeSetId: "other-set" }]);
+    mocks.findChangeSets.mockResolvedValue([{ proposalId: "other-proposal", changes: [{ reviewStatus: "PENDING", appliedRevisionId: null }] }]);
+    const response = await POST(request({ changeIds: ["rename"] }), { params: Promise.resolve({ id: "proposal" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.findAffectedChanges).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      OR: [{ targetFileId: { in: ["home"] }, OR: [{ action: "RENAME_UNIT" }, { action: null, type: "RENAME_UNIT" }] }],
+    }) }));
+    expect(mocks.updateChanges).toHaveBeenCalledWith({ where: { id: { in: ["other-rename"] } }, data: { reviewStatus: "PENDING", reviewComment: null, reviewedById: null, reviewedAt: null } });
   });
 
   it("records one system dismissal when this apply changes another approved unit", async () => {

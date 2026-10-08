@@ -611,6 +611,13 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       expect((await (await page.request.get(`/api/proposals/${firstProposalId}`)).json()).status).toBe("CHANGES_REQUESTED");
       await owner.goto(revisedProposalPath);
       await owner.waitForLoadState("networkidle");
+      await expect(owner.getByRole("button", { name: /^Account/ })).toBeVisible();
+      const visualReview = owner.getByRole("region", { name: "Visual review" });
+      await expect(visualReview.getByText("100%", { exact: true })).toBeVisible();
+      await visualReview.getByRole("button", { name: "Zoom in" }).click();
+      await expect(visualReview.getByText("125%", { exact: true })).toBeVisible();
+      await visualReview.getByRole("button", { name: "Zoom out" }).click();
+      await expect(visualReview.getByText("100%", { exact: true })).toBeVisible();
       const approvalResponse = owner.waitForResponse((response) => new URL(response.url()).pathname.startsWith(`/api${revisedProposalPath}/changes/`) && response.request().method() === "PATCH");
       await owner.getByRole("button", { name: "Approve change" }).click();
       expect((await approvalResponse).status()).toBe(200);
