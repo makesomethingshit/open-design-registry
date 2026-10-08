@@ -127,6 +127,10 @@ jobs:
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npx playwright install --with-deps chromium
+      - name: Verify document image cleanup against PostgreSQL and MinIO
+        run: npx vitest run scripts/document-image-cleanup.integration.test.mjs
+        env:
+          RUN_DOCUMENT_IMAGE_CLEANUP_TEST: "1"
       - run: npm run test:e2e
       - name: Upload failed browser traces
         if: failure()

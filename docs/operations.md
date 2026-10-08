@@ -121,6 +121,24 @@ CI가 구성한 검사 범위와 특정 커밋에서 실제 통과한 결과를 
 
 ## 운영 전 확인
 
+### 미참조 문서 이미지 정리
+
+문서 에디터 업로드는 본문 저장 전에 객체를 생성합니다. 취소·부분 업로드 실패·본문에서 제거한 이미지는 다음 수동 명령으로 정리합니다. 기본은 **dry-run**, 기본 유예 기간은 7일이며 최소 24시간입니다. 운영 DB/S3 설정으로 dry-run 결과를 먼저 확인하고, 유지할 오래된 초안은 본문에 저장하거나 별도로 보관합니다.
+
+```sh
+node --env-file=.env scripts/document-image-cleanup.mjs
+node --env-file=.env scripts/document-image-cleanup.mjs --apply
+node --env-file=.env scripts/document-image-cleanup.mjs --grace-hours 336
+```
+
+정리 범위는 서버가 생성한 `project-documents/<projectId>/<UUID>.png|jpg` key뿐입니다. 객체 생성 시각이 유예 기간을 넘고, 저장된 모든 프로젝트 문서·커버·Revision 원본·preview·Proposal 변경 자산·권리 선언에서 참조하지 않을 때만 삭제합니다. 공개 여부는 삭제 기준이 아닙니다. 다른 프로젝트의 참조와 코드 예제의 참조도 보수적으로 보존합니다. 프로젝트가 삭제된 후 남은 이미지도 같은 기준을 적용합니다.
+
+삭제 직전 DB 참조와 S3의 현재 수정 시각을 재확인합니다. 객체별 트랜잭션에서 문서 저장과 공통 advisory lock을 잡고 참조 테이블의 쓰기를 잠시 차단하므로 **트래픽이 낮은 시간에 실행**하세요. 삭제 실패는 key별 JSON 로그와 종료 코드 1로 보고하며 다음 실행에서 재시도합니다. dry-run에도 같은 잠금과 참조 재확인을 적용합니다. S3 객체 삭제는 DB rollback으로 복구되지 않으므로 먼저 백업·dry-run을 확인해야 합니다.
+
+정리가 먼저 완료된 오래된 초안을 늦게 저장하면 API가 409와 이미지 재업로드 안내를 반환합니다. 저장이 먼저 커밋되면 정리는 그 참조를 확인해 이미지를 보존합니다. 상시 worker·자동 타이머는 추가하지 않습니다.
+
+격리 테스트 DB·스토리지에서 `RUN_DOCUMENT_IMAGE_CLEANUP_TEST=1 npx vitest run scripts/document-image-cleanup.integration.test.mjs`로 실제 객체 보존·삭제와 저장 경합을 검증할 수 있습니다. CI의 e2e 작업은 PostgreSQL·MinIO 준비 후 이 테스트도 실행합니다.
+
 1. 배포할 커밋 SHA와 환경을 고정하고 해당 코드의 마이그레이션 상태를 확인합니다. 테스트 기록의 SHA와 다르면 같은 결과로 취급하지 않습니다.
 2. DB와 S3 객체를 함께 복구할 수 있는 백업을 확보하고 격리 환경에서 마이그레이션을 검증합니다. `prisma db push`는 SQL 트리거를 포함한 마이그레이션 이력의 대체가 아닙니다.
 3. 로그인·공개/비공개 자산 접근·Revision 발행·Fork·Proposal 리뷰·선택 적용을 확인합니다. 원본 key·캐시로 비공개 접근이 우회되지 않아야 합니다.
