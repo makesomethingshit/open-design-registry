@@ -38,7 +38,7 @@
 .nav-button { display: inline-flex; align-items: center; gap: var(--odr-space-2); min-height: var(--odr-touch-target); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
 .account-nav { position: relative; justify-self: end; color: var(--odr-text-primary); font-size: 1rem; }
 .account-trigger { font-weight: var(--odr-weight-semibold); }
-.account-panel { position: absolute; top: calc(100% + var(--odr-space-2)); right: 0; display: grid; gap: var(--odr-space-1); width: min(15rem, calc(100vw - var(--odr-space-6))); max-height: calc(100dvh - var(--odr-header-height) - var(--odr-space-4)); overflow-y: auto; padding: var(--odr-space-2); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-overlay); box-shadow: var(--odr-shadow-card); }
+.account-panel { position: absolute; z-index: var(--odr-z-popover); top: calc(100% + var(--odr-space-2)); right: 0; display: grid; gap: var(--odr-space-1); width: min(15rem, calc(100vw - var(--odr-space-6))); max-height: calc(100dvh - var(--odr-header-height) - var(--odr-space-4)); overflow-y: auto; padding: var(--odr-space-2); border: var(--odr-border-width) solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-overlay); box-shadow: var(--odr-shadow-card); }
 .account-panel[hidden] { display: none; }
 .account-panel > a, .account-panel > button { width: 100%; padding-inline: var(--odr-space-3); border-radius: var(--odr-radius-control); }
 .account-panel > a:hover, .account-panel > button:hover { background: var(--odr-surface-hover); }

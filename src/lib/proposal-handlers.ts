@@ -502,12 +502,24 @@ export async function postProposalComment(request: Request, scope: { id: string 
   if (proposal.status === "CLOSED") return error("Proposal is closed", 409);
   const parsed = issueCommentSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return error("Comment body is required");
-  const comment = await prisma.$transaction(async (tx) => {
-    const created = await tx.proposalComment.create({ data: { proposalId: proposal.id, authorId: session.user.id, body: parsed.data.body }, include: { author: { select: { id: true, name: true } } } });
-    await tx.proposal.update({ where: { id: proposal.id }, data: { updatedAt: new Date() } });
-    return created;
-  });
-  return NextResponse.json(comment, { status: 201 });
+  // Re-check eligibility inside the same Project-row lock/transaction boundary
+  // used by closeProposal, so a close that committed first rejects.
+  try {
+    const comment = await prisma.$transaction(async (tx) => {
+      const lockedProjects = await lockProjects(tx, [proposal.project.id]);
+      if (!lockedProjects.has(proposal.project.id)) throw new ProposalError("Proposal not found", 404);
+      const current = await tx.proposal.findUnique({ where: { id: proposal.id }, select: { status: true } });
+      if (!current) throw new ProposalError("Proposal not found", 404);
+      if (current.status === "CLOSED") throw new ProposalError("Proposal is closed", 409);
+      const created = await tx.proposalComment.create({ data: { proposalId: proposal.id, authorId: session.user.id, body: parsed.data.body }, include: { author: { select: { id: true, name: true } } } });
+      await tx.proposal.update({ where: { id: proposal.id }, data: { updatedAt: new Date() } });
+      return created;
+    });
+    return NextResponse.json(comment, { status: 201 });
+  } catch (cause) {
+    if (cause instanceof ProposalError) return error(cause.message, cause.status, cause.details);
+    throw cause;
+  }
 }
 
 export async function reviewProposalChange(request: Request, scope: { id: string; changeId: string }) {

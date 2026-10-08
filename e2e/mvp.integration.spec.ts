@@ -635,7 +635,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await expect(page.getByRole("heading", { name: "Applied to the original" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Review latest revision" })).toHaveCount(0);
       await expect(page.getByRole("region", { name: "Next step for this change" })).toContainText("The owner added this change to a new Revision");
-      const appliedRevisions = await (await page.request.get(`/api${projectPath}/revisions`)).json();
+      const appliedRevisions = await (await page.request.get(`/api${projectPath}/revisions`, { maxRetries: 2 })).json();
       expect(appliedRevisions).toHaveLength(2);
       expect(appliedRevisions[0].sourceUrl).toBe(`https://example.com/${suffix}/original.penpot`);
       expect(appliedRevisions[1].sourceUrl).toBe(`https://example.com/${suffix}/revised.penpot`);
