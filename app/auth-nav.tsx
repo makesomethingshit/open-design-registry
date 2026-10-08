@@ -6,6 +6,7 @@ import GlobalSearch from "./global-search";
 import { ThemeSelect } from "@/src/components/ui/theme-select";
 import type { ThemeValue } from "@/src/lib/ui/theme";
 import buttonStyles from "@/src/components/ui/button.module.css";
+import { Icon } from "@/src/components/ui/icon";
 
 type User = { name?: string | null; role?: string | null };
 
@@ -80,7 +81,7 @@ export default function AuthNav({ initialTheme }: { initialTheme: ThemeValue }) 
       <a aria-current={pathname === "/feed" ? "page" : undefined} href="/feed" className="nav-link">Feed</a>
     </nav>
     <Suspense><GlobalSearch /></Suspense>
-    <a aria-current={pathname === "/projects/new" ? "page" : undefined} href="/projects/new" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.sm} nav-cta`}>New project</a>
+    <a aria-current={pathname === "/projects/new" ? "page" : undefined} href="/projects/new" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.lg} nav-cta`}>New project</a>
     <ThemeSelect initialTheme={initialTheme} />
     <div className="account-nav" ref={account} onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -92,7 +93,7 @@ export default function AuthNav({ initialTheme }: { initialTheme: ThemeValue }) 
       }
     }}>
       {!loaded || !user ? <a href="/login" className="nav-link">Sign in</a> : <>
-        <button ref={trigger} type="button" className="nav-button account-trigger" aria-controls="account-panel" aria-expanded={open} data-active={accountActive || undefined} aria-label={unreadCount ? `Account, ${unreadCount} unread notifications` : "Account"} onClick={() => setOpen(!open)}>Account <span aria-hidden="true">⌄</span>{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</button>
+        <button ref={trigger} type="button" className="nav-button account-trigger" aria-controls="account-panel" aria-expanded={open} data-active={accountActive || undefined} aria-label={unreadCount ? `Account, ${unreadCount} unread notifications` : "Account"} onClick={() => setOpen(!open)}>Account <Icon name="chevron" size={16} />{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</button>
         <nav id="account-panel" className="account-panel" aria-label="Account" hidden={!open}>
           <a aria-current={pathname === "/projects" ? "page" : undefined} href="/projects" className="nav-link">My projects</a>
           <a aria-current={pathname === "/stars" ? "page" : undefined} href="/stars" className="nav-link">Starred</a>

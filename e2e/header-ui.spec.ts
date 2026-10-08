@@ -18,6 +18,7 @@ test("keeps public and account actions visible with keyboard disclosure and sign
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("navigation", { name: "Public" })).toBeVisible();
     await expect(page.getByRole("link", { name: "New project", exact: true })).toBeInViewport();
+    await expect(page.getByRole("link", { name: "New project", exact: true })).toHaveCSS("min-height", "48px");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width === 1440 || width === 440) await header.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`header-closed-${width}.png`) });
     await trigger.focus();

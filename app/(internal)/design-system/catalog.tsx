@@ -19,6 +19,10 @@ import { RevisionItem } from "@/src/components/design/revision-item";
 import type { ReviewChange } from "@/src/components/design/review-types";
 import ProposalReview from "@/app/proposals/[id]/proposal-review";
 import ContributeDialog from "@/app/projects/[slug]/contribute-dialog";
+import { ProjectStarButton } from "@/app/projects/[slug]/project-star-button";
+import { ProjectWatchButton } from "@/app/projects/[slug]/project-watch-button";
+import { ProjectDocumentEditor } from "@/src/components/ui/project-document-editor";
+import { RequestCardImage } from "@/app/contribute/request-card-image";
 import SourceRights from "@/app/projects/[slug]/revisions/[number]/source-rights";
 import { proposalStatuses, type ChangeReviewStatusValue } from "@/src/lib/proposal-status";
 import { changeReviewStatusPresentation, proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
@@ -70,6 +74,7 @@ export default function DesignSystemCatalog() {
   const [fixtureOwner, setFixtureOwner] = useState(true);
   const [fixtureStale, setFixtureStale] = useState(false);
   const [fixtureClosed, setFixtureClosed] = useState(false);
+  const [fixtureDocument, setFixtureDocument] = useState("## Project document\n\nKeep the source, credit and next version together.");
 
   return <Stack className={styles.catalog} gap={7}>
     <PageHeader eyebrow="Foundation / Catalog" title="ODR design system" description="Development fixtures only. Theme is controlled from the global header; production requests return 404." />
@@ -164,11 +169,17 @@ export default function DesignSystemCatalog() {
 
     <section aria-labelledby="project-components-heading">
       <SectionHeader id="project-components-heading" title="Project and Explore fixtures" description="Development-only fixtures for the ProjectCard, ProjectHeader, and RevisionItem components. Production receives visible project data from server queries." />
-      <div className={styles.projectFixture}>
-        <ProjectHeader actions={<><ContributeDialog revisionNumber={14} signedIn slug="fixture-project" /><ContributeDialog initialIntent="fork" revisionNumber={14} signedIn slug="fixture-project" /></>} description="A fixture project demonstrates the project information hierarchy without representing a production project." license="CC BY 4.0" owner="Fixture owner" revisionCount={14} slug="fixture-project" title="Fixture project overview" visibility="public" />
+      <div className={styles.projectFixture} role="group" aria-label="Project actions and document editor fixture">
+        <ProjectHeader actions={<><ProjectStarButton initialStarred={false} signedIn slug="fixture-project" /><ProjectWatchButton initialWatched={false} signedIn slug="fixture-project" /><ContributeDialog revisionNumber={14} signedIn slug="fixture-project" /><ContributeDialog initialIntent="fork" revisionNumber={14} signedIn slug="fixture-project" /></>} description="A fixture project demonstrates the project information hierarchy without representing a production project." license="CC BY 4.0" owner="Fixture owner" revisionCount={14} slug="fixture-project" title="Fixture project overview" visibility="public" />
+        <ProjectDocumentEditor aria-label="Project document" onChange={setFixtureDocument} slug="fixture-project" value={fixtureDocument} />
         <ol className={styles.fixtureRevisionList}><RevisionItem capability={<Badge>Structured · 4 units</Badge>} changeDescription="Refined the poster layout for narrow screens." createdAt={new Date("2026-09-06T00:00:00.000Z")} href="#project-components-heading" id="fixture-revision" number={14} publisher="Fixture publisher" tags={["poster", "mobile"]} title="Responsive poster layout" tool="Penpot 2.0" /></ol>
       </div>
       <div className={styles.projectCardGrid}><ProjectCard coverUrl="/landing-aster.svg" description="Original bundled identity artwork, with source and credit preserved." href="#project-components-heading" license="CC BY 4.0" owner="ODR example" priority tags={["identity", "packaging"]} title="Aster coffee identity" updatedAt={new Date("2026-09-06T00:00:00.000Z")} /><ProjectCard coverUrl={fixtureImage("POSTER", "white", 600, 800)} description="A vertical project cover remains entirely visible inside the gallery frame." href="#project-components-heading" license="CC BY 4.0" owner="Fixture owner" priority tags={["poster", "print"]} title="Portrait poster" updatedAt={new Date("2026-09-06T00:00:00.000Z")} /><ProjectCard coverUrl={fixtureImage("SPREAD", "white", 1200, 600)} description="A wide spread keeps its own aspect ratio while the gallery frame stays 4:3." href="#project-components-heading" license="MIT" owner="Fixture contributor" tags={["editorial", "web"]} title="Landscape spread" updatedAt={new Date("2026-09-05T00:00:00.000Z")} /></div>
+    </section>
+
+    <section aria-labelledby="request-preview-heading">
+      <SectionHeader id="request-preview-heading" title="Request preview fixture" description="The real contribution preview, including cached image loading and failure handling." />
+      <div className={styles.requestPreview}><RequestCardImage alt="Request preview fixture" src="/landing-aster.svg" /></div>
     </section>
 
     <PreviewCacheFixture />

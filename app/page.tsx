@@ -12,9 +12,9 @@ export default function HomePage() {
     <section aria-labelledby="landing-heading" className={styles.hero}>
       <p className={styles.eyebrow}>Open source. Open possibilities.</p>
       <h1 id="landing-heading">Good design.<br /><span>Built in the open.</span></h1>
-      <p className={styles.intro}>A home for design you can open, understand, and build on.<br className={styles.desktopBreak} /> Source files, shared history, and a place to make your next move.</p>
+      <p className={styles.intro}>A shared place for design and the files behind it.<br className={styles.desktopBreak} /> Keep the source, credit and next version together.</p>
       <div className={styles.heroActions}>
-        <Link className={primaryLink} href="/explore">Explore projects <span aria-hidden="true">↗</span></Link>
+        <Link className={primaryLink} href="/explore">Explore projects</Link>
       </div>
       <p className={styles.heroNote}>Browse freely. Start with what inspires you.</p>
     </section>
@@ -22,16 +22,16 @@ export default function HomePage() {
     <div className={styles.stage}>
       <figure className={styles.projectWindow}>
         <figcaption className={styles.sampleLabel}>Example project / illustrative content</figcaption>
-        <div className={styles.projectHeading}><div><h2><span>studio /</span> Aster coffee identity</h2><p><Icon name="globe" size={16} /> Public <span>·</span> Active <span>·</span> CC BY 4.0</p></div><span className={styles.projectMark} aria-hidden="true">a*</span></div>
+        <div className={styles.projectHeading}><div><h2><span>studio /</span> Aster coffee identity</h2><p><Icon name="globe" size={16} /> Public <span>·</span> Active <span>·</span> CC BY 4.0</p></div></div>
         <div className={styles.projectSections} aria-hidden="true"><span>Overview</span><span>Revisions</span><span>Releases</span><span>Proposals</span><span>Discussions</span></div>
         <div className={styles.projectBody}>
           <Image className={styles.projectArtwork} src="/landing-aster.svg" width={960} height={600} unoptimized loading="eager" alt="Original Aster sample identity: green and cream coffee packaging with a botanical print." />
           <aside className={styles.context} aria-label="Example source and revision history">
             <p className={styles.panelLabel}>Published source</p>
             <strong className={styles.sourceName}><Icon name="file" />aster-identity.zip</strong>
-            <p className={styles.contextNote}>Editable files, with their origin attached.</p>
+            <p className={styles.contextNote}>Source files, with their origin attached.</p>
             <div className={styles.history}><p className={styles.panelLabel}>Revision history</p><ol>
-              <li><span>r3</span><div><strong>Packaging exploration</strong><small>A new direction, same project.</small></div></li>
+              <li><span>r3</span><div><strong>Packaging exploration</strong></div></li>
               <li><span>r2</span><div>Color and typography</div></li>
               <li><span>r1</span><div>Initial identity</div></li>
             </ol></div>
@@ -41,9 +41,9 @@ export default function HomePage() {
       </figure>
     </div>
 
-    <aside className={styles.createCallout} aria-label="Start a project"><div><strong>Have work to share?</strong><p>Publish your source, credit its origin, and invite the next contribution.</p></div><TextLink href="/projects/new">Create a project <span aria-hidden="true">→</span></TextLink></aside>
+    <aside className={styles.createCallout} aria-label="Start a project"><div><h2>Have work to share?</h2><p>Start a project with your source and credit.</p></div><TextLink href="/projects/new">Create a project <Icon name="arrowUpRight" size={16} /></TextLink></aside>
 
-    <div className={styles.tools}><p className={styles.panelLabel}>Keep the source. Move the work forward.</p><ul aria-label="What you can share"><li>Editable files</li><li>Assets</li><li>Source links</li></ul></div>
+    <div className={styles.tools}><p className={styles.panelLabel}>Your work. Your source. A shared place to build.</p><ul aria-label="What you can share"><li>Editable files</li><li>Assets</li><li>Source links</li></ul></div>
 
     <section aria-labelledby="workflow-heading" className={styles.features}>
       <p className={styles.eyebrow}>The work, and everything behind it.</p>
@@ -65,17 +65,17 @@ export default function HomePage() {
           <ul><li><Icon name="file" /><span>aster-identity.zip</span><small>Source</small></li><li><Icon name="image" /><span>packaging.svg</span><small>Asset</small></li></ul>
         </article>
         <article className={styles.contribute}>
-          <p className={styles.panelLabel}>03 / Make the next contribution</p>
-          <h3>Keep the source.<br />Move the work forward.</h3>
-          <p className={styles.featureDescription}>Follow the source and its credit. Publish a revision and propose what comes next.</p>
-          <Link href="/contribute">Find a design request <span aria-hidden="true">→</span></Link>
+          <p className={styles.panelLabel}>03 / Build on open work</p>
+          <h3>Keep the source.<br />Move it forward.</h3>
+          <p className={styles.featureDescription}>Share the files, credit the origin, and propose the next revision.</p>
+          <Link href="/contribute">Find a design request <Icon name="arrowUpRight" size={16} /></Link>
         </article>
       </div>
     </section>
 
     <section aria-labelledby="start-heading" className={styles.start}>
       <div><h2 id="start-heading">Your next idea<br />has a starting point.</h2><p>Discover open work. Make it your own.</p></div>
-      <Link className={primaryLink} href="/explore">Find a project <span aria-hidden="true">↗</span></Link>
+      <Link className={primaryLink} href="/explore">Find a project</Link>
     </section>
   </div>;
 }

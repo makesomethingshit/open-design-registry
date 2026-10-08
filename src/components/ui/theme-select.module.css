@@ -1,2 +1,3 @@
-.themeSelect { display: inline-flex; min-height: var(--odr-control-sm); align-items: center; gap: var(--odr-space-1); color: var(--odr-text-muted); font-size: var(--odr-font-caption); white-space: nowrap; }
-.themeSelect select { min-height: var(--odr-control-sm); padding: var(--odr-space-1) var(--odr-space-2); border: var(--odr-border-width) solid var(--odr-border-control); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); }
+.themeSelect { display: inline-flex; min-height: var(--odr-touch-target); align-items: center; color: var(--odr-text-secondary); white-space: nowrap; }
+.themeSelect > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+.themeSelect select { width: auto; min-height: var(--odr-touch-target); padding: var(--odr-space-1); border: 0; background: transparent; color: inherit; font-size: 1rem; }
