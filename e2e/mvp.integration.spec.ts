@@ -361,6 +361,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       const url = new URL(response.url());
       return url.pathname === "/api/auth/sign-out" && response.request().method() === "POST";
     });
+    await page.getByRole("button", { name: /^Account/ }).click();
     await page.getByRole("button", { name: "Sign out" }).click();
     const signOutResponse = await signOutResponsePromise;
     expect(signOutResponse.status()).toBe(200);
@@ -446,9 +447,10 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     const forkDownload = await page.request.get(forkSourceUrl);
     expect(forkDownload.status()).toBe(200);
     expect(await forkDownload.body()).toEqual(originalBytes);
+    await page.getByRole("button", { name: /^Account/ }).click();
     await page.getByRole("button", { name: "Sign out" }).click();
     await signIn(page, ownerEmail, password);
-    await expect(page.getByRole("link", { name: /Activity, 2 unread/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Account, 2 unread notifications/ })).toBeVisible();
     await page.goto("/notifications");
     await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
     const issueNotification = page.getByRole("listitem").filter({ hasText: issueTitle });
@@ -456,10 +458,10 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     await expect(issueNotification).toBeVisible();
     await expect(forkNotification).toBeVisible();
     await issueNotification.getByRole("button", { name: "Mark as read" }).click();
-    await expect(page.getByRole("link", { name: /Activity, 1 unread/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Account, 1 unread notifications/ })).toBeVisible();
     await forkNotification.getByRole("button", { name: "Mark as read" }).click();
     await expect(page.getByText("Unread notifications 0")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Activity" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Account", exact: true })).toBeVisible();
 
     // A fork owns independent asset references even after upstream becomes private.
     expect((await page.request.patch(`/api/projects/${slug}`, { data: { isPublic: false } })).status()).toBe(200);
@@ -714,7 +716,7 @@ async function signUp(page: Page, name: string, email: string, password: string)
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Account/ })).toBeVisible();
 }
 
 async function signIn(page: Page, email: string, password: string) {
@@ -723,11 +725,12 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Account/ })).toBeVisible();
 }
 
 async function signOut(page: Page) {
   const responsePromise = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/sign-out" && response.request().method() === "POST");
+  await page.getByRole("button", { name: /^Account/ }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   expect((await responsePromise).status()).toBe(200);
   const sessionResponse = await page.request.get("/api/auth/get-session");

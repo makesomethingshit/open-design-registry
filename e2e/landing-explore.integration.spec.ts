@@ -33,6 +33,7 @@ test("keeps landing, public Explore, and My projects distinct on desktop and mob
 
   for (const signedIn of [true, false]) {
     if (!signedIn) {
+      await page.getByRole("button", { name: /^Account/ }).click();
       await page.getByRole("button", { name: "Sign out" }).click();
       await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     }

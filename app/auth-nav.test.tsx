@@ -9,6 +9,7 @@ vi.mock("react", async (importOriginal) => {
   return {
     ...react,
     useEffect: () => undefined,
+    useRef: () => ({ current: null }),
     useState: (initial: unknown) => {
       const index = mocks.stateIndex++;
       if (index >= mocks.state.length) mocks.state.push(initial);
@@ -17,36 +18,58 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname, useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }) }));
+vi.mock("./global-search", () => ({ default: () => <form role="search" /> }));
 
 const { default: AuthNav } = await import("./auth-nav");
 
-function renderNav(pathname = "/stars", signedIn = true) {
+function renderNav(pathname = "/stars", signedIn = true, role = "user", unread = 0) {
   mocks.pathname = pathname;
-  mocks.state = [signedIn ? { name: "Jun", role: "user" } : null, 0, true];
+  mocks.state = [signedIn ? { name: "Jun", role } : null, unread, true, false];
   mocks.stateIndex = 0;
-  return renderToStaticMarkup(AuthNav());
+  return renderToStaticMarkup(AuthNav({ initialTheme: "light" }));
 }
 
 beforeEach(() => vi.clearAllMocks());
 
 describe("AuthNav Starred link", () => {
-  it("places Starred between My projects and New project and marks /stars current", () => {
+  it("groups personal actions in a closed Account panel and marks /stars current", () => {
     const markup = renderNav();
     const positions = [
       markup.indexOf('href="/projects"'),
       markup.indexOf('href="/stars"'),
-      markup.indexOf('href="/projects/new"'),
       markup.indexOf('href="/notifications"'),
+      markup.indexOf('>Sign out<'),
     ];
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(markup).toMatch(/<a aria-current="page" href="\/stars" class="nav-link">Starred<\/a>/);
+    expect(markup).toContain('aria-label="Public"');
+    expect(markup).toContain('aria-controls="account-panel" aria-expanded="false" data-active="true"');
+    expect(markup).toMatch(/<nav id="account-panel"[^>]*aria-label="Account" hidden=""/);
     const navStyles = readFileSync(new URL("../src/styles/legacy-bridge.css", import.meta.url), "utf8");
     expect(navStyles).toContain('.nav-link[aria-current="page"]');
   });
 
   it("only marks Starred current at /stars", () => {
     expect(renderNav("/projects")).not.toMatch(/<a aria-current="page" href="\/stars"/);
+  });
+});
+
+describe("AuthNav account access", () => {
+  it("announces Notifications and its unread count on both the closed trigger and link", () => {
+    const markup = renderNav("/notifications", true, "user", 120);
+    expect(markup).toContain('aria-label="Account, 120 unread notifications"');
+    expect(markup).toContain('aria-label="Notifications, 120 unread"');
+    expect(markup).toContain('99+');
+    expect(markup).not.toContain('Activity');
+  });
+
+  it("keeps Reports admin-only and leaves visitors with Sign in", () => {
+    expect(renderNav()).not.toContain('href="/admin/reports"');
+    expect(renderNav("/admin/reports", true, "admin")).toMatch(/aria-current="page" href="\/admin\/reports"/);
+    const visitor = renderNav("/", false);
+    expect(visitor).toContain('href="/login"');
+    expect(visitor).not.toContain('id="account-panel"');
   });
 });
 
