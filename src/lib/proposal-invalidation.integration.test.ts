@@ -46,14 +46,17 @@ async function fixture(baseBundle: RevisionBundle, sourceBundle: RevisionBundle)
   const [target, source] = await Promise.all(["target", "source"].map((part) => prisma.project.create({
     data: { slug: `rename-${part}-${suffix}`, title: `Rename ${part}`, description: "", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: owner.id },
   })));
-  const [baseRevision, sourceRevision] = await Promise.all([
-    prisma.revision.create({ data: { projectId: target.id, number: 1, title: "Base", changeDescription: "Initial", license: "MIT", sourceKey: `rename-base-${suffix}` } }),
-    prisma.revision.create({ data: { projectId: source.id, number: 1, title: "Source", changeDescription: "Source", license: "MIT", sourceKey: `rename-source-${suffix}` } }),
-  ]);
-  const previews = (revisionId: string, files: RevisionBundle["files"]) => prisma.preview.createMany({
-    data: [...new Set(files.flatMap((file) => file.previewKeys))].map((key, position) => ({ revisionId, position, key, url: `https://example.test/${key}.png`, mimeType: "image/png", size: 1, altText: key })),
+  const [baseRevision, sourceRevision] = await prisma.$transaction(async (tx) => {
+    const [base, sourceRevisionRow] = await Promise.all([
+      tx.revision.create({ data: { projectId: target.id, number: 1, title: "Base", changeDescription: "Initial", license: "MIT", sourceKey: `rename-base-${suffix}`, isPublished: false } }),
+      tx.revision.create({ data: { projectId: source.id, number: 1, title: "Source", changeDescription: "Source", license: "MIT", sourceKey: `rename-source-${suffix}`, isPublished: false } }),
+    ]);
+    const previews = (revisionId: string, files: RevisionBundle["files"]) => tx.preview.createMany({
+      data: [...new Set(files.flatMap((file) => file.previewKeys))].map((key, position) => ({ revisionId, position, key, url: `https://example.test/${key}.png`, mimeType: "image/png", size: 1, altText: key })),
+    });
+    await Promise.all([previews(base.id, baseBundle.files), previews(sourceRevisionRow.id, sourceBundle.files)]);
+    return Promise.all([base, sourceRevisionRow].map(({ id }) => tx.revision.update({ where: { id }, data: { isPublished: true } })));
   });
-  await Promise.all([previews(baseRevision.id, baseBundle.files), previews(sourceRevision.id, sourceBundle.files)]);
   testState.bundles.set(baseRevision.sourceKey!, baseBundle);
   testState.bundles.set(sourceRevision.sourceKey!, sourceBundle);
   testState.getSession.mockResolvedValue({ user: owner });
