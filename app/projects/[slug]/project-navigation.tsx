@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { Icon } from "@/src/components/ui/icon";
 import { RouteNav } from "@/src/components/ui/section-nav";
 import styles from "./project.module.css";
 import navigationStyles from "./project-navigation.module.css";
@@ -41,6 +42,6 @@ export default function ProjectNavigation({ slug, counts, isOwner, proposalDetai
     window.addEventListener("hashchange", followLegacyLink);
     return () => window.removeEventListener("hashchange", followLegacyLink);
   }, [base, pathname, router]);
-  const items = [{ href: base, label: <>Overview</> }, ...sections.map((value) => ({ href: `${base}/${value}`, label: <>{value[0].toUpperCase() + value.slice(1)} <span className={styles.navCount}>{counts[value]}</span></> })), ...(isOwner ? [{ href: `${base}/settings`, label: <>Settings</> }] : [])];
+  const items = [{ href: base, label: <>Overview</> }, ...sections.map((value) => ({ href: `${base}/${value}`, label: <>{value[0].toUpperCase() + value.slice(1)} <span className={styles.navCount}>{counts[value]}</span></> })), ...(isOwner ? [{ href: `${base}/settings`, label: <><Icon name="settings" size={16} />Settings</> }] : [])];
   return <div className={navigationStyles.navigation} ref={navigation}><RouteNav currentHref={currentHref} items={items} label="Project sections" /></div>;
 }

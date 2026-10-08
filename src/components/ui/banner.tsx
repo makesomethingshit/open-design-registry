@@ -9,7 +9,7 @@ const bannerIcons: Record<BannerTone, IconName> = { info: "clock", success: "che
 
 export function Banner({ action, children, className, title, tone }: BannerProps) {
   return <section aria-live={tone === "error" ? "assertive" : "polite"} className={`${styles.banner}${className ? ` ${className}` : ""}`} data-tone={tone} role={tone === "error" ? "alert" : "status"}>
-    <Icon name={bannerIcons[tone]} size={20} />
+    <Icon name={bannerIcons[tone]} size={24} />
     <div><strong>{title}</strong>{children && <p>{children}</p>}</div>
     {action && <div className={styles.action}>{action}</div>}
   </section>;

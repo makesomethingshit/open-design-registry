@@ -275,3 +275,5 @@ input[type="checkbox"], input[type="range"] { width: auto; min-height: 0; paddin
   .source-rights-heading, .rights-form-grid, .rights-form-item { grid-template-columns: 1fr; }
   .source-rights-summary { align-items: flex-start; }
 }
+
+.source-download { display: inline-flex; align-items: center; gap: var(--odr-space-2); }

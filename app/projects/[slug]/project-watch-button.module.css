@@ -1,5 +1,5 @@
 .control { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--odr-space-2); }
-.loginLink { display: inline-flex; min-height: var(--odr-control-lg); align-items: center; justify-content: center; padding: 0 var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-control-border); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); text-decoration: none; }
+.loginLink { display: inline-flex; gap: var(--odr-space-2); min-height: var(--odr-control-lg); align-items: center; justify-content: center; padding: 0 var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-control-border); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); text-decoration: none; }
 .loginLink:hover { background: var(--odr-surface-hover); }
 .errorBanner { flex-basis: 100%; }
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import { renderProjectDocument } from "@/src/lib/project-document";
 import { Button } from "./button";
+import { Icon } from "./icon";
 import { Input, Textarea } from "./field";
 import styles from "./project-document-editor.module.css";
 
@@ -95,12 +96,12 @@ export function ProjectDocumentEditor({ slug, value, onChange, onBusyChange, dis
   return <div className={styles.editor}>
     <div className={styles.toolbar}>
       <div role="group" aria-label="Document editing mode">
-        <Button aria-pressed={!preview} disabled={Boolean(table)} onClick={() => setPreview(false)} size="sm" variant={preview ? "ghost" : "secondary"}>Write</Button>
-        <Button aria-pressed={preview} disabled={Boolean(table)} onClick={() => setPreview(true)} size="sm" variant={preview ? "secondary" : "ghost"}>Preview</Button>
+        <Button aria-pressed={!preview} disabled={Boolean(table)} onClick={() => setPreview(false)} size="sm" variant={preview ? "ghost" : "secondary"}><Icon name="pencil" size={16} />Write</Button>
+        <Button aria-pressed={preview} disabled={Boolean(table)} onClick={() => setPreview(true)} size="sm" variant={preview ? "secondary" : "ghost"}><Icon name="eye" size={16} />Preview</Button>
       </div>
       <div className={styles.tools}>
-        <Button disabled={busy} loading={uploading} loadingLabel="Uploading image" onClick={() => files.current?.click()} size="sm" variant="secondary">Add image</Button>
-        <Button disabled={busy} onClick={() => { setPreview(false); setTable({ start: field.current?.selectionStart ?? value.length, end: field.current?.selectionEnd ?? value.length, cells: [["Column 1", "Column 2"], ["", ""]] }); }} size="sm" variant="secondary">Insert table</Button>
+        <Button disabled={busy} loading={uploading} loadingLabel="Uploading image" onClick={() => files.current?.click()} size="sm" variant="secondary">{!uploading && <Icon name="image" size={16} />}Add image</Button>
+        <Button disabled={busy} onClick={() => { setPreview(false); setTable({ start: field.current?.selectionStart ?? value.length, end: field.current?.selectionEnd ?? value.length, cells: [["Column 1", "Column 2"], ["", ""]] }); }} size="sm" variant="secondary"><Icon name="table" size={16} />Insert table</Button>
       </div>
     </div>
     <input accept="image/png,image/jpeg" aria-label="Upload document images" hidden multiple onChange={(event) => { void upload(Array.from(event.target.files ?? [])); event.target.value = ""; }} ref={files} type="file" />

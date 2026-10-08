@@ -11,7 +11,7 @@ type ButtonProps = ComponentPropsWithoutRef<"button"> & {
 export function Button({ children, className, disabled, loading = false, loadingLabel = "Working…", size = "md", type = "button", variant = "primary", ...props }: ButtonProps) {
   return <button {...props} aria-busy={loading || undefined} className={`${styles.button} ${styles[variant]} ${styles[size]}${className ? ` ${className}` : ""}`} disabled={disabled || loading} type={type}>
     {loading && <span aria-hidden="true" className={styles.spinner} />}
-    <span>{children}</span>
+    <span className={styles.content}>{children}</span>
     {loading && <span className="sr-only">{loadingLabel}</span>}
   </button>;
 }
