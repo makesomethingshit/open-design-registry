@@ -50,6 +50,17 @@ describe("issue list route", () => {
     expect(await response.json()).toEqual({ items: [{ id: "b" }], nextCursor: null });
     expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ cursor: { id: "a" }, skip: 1, take: 2 }));
   });
+  it("keeps comment author id and name in list responses", async () => {
+    mocks.findIssues.mockResolvedValue([{ id: "a", title: "Has comments", comments: [{ id: "c1", body: "Note", author: { id: "commenter", name: "Commenter" } }] }]);
+    const response = await GET(get("http://localhost/api/projects/demo/issues"), params());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ id: "a", title: "Has comments", comments: [{ id: "c1", body: "Note", author: { id: "commenter", name: "Commenter" } }] }]);
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        comments: expect.objectContaining({ include: { author: { select: { id: true, name: true } } } }),
+      }),
+    }));
+  });
 });
 
 describe("issue creation route", () => {

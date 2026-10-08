@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     where: { projectId: project.id },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     ...(isPaginated ? { cursor: cursor ? { id: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
-    include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } } },
+    include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } } },
   });
   const hasMore = issues.length > limit;
   const page = issues.slice(0, limit);
