@@ -11,6 +11,7 @@ describe("releaseCreateSchema", () => {
     ["no revisions", { ...valid, revisionIds: [] }],
     ["more than 50 revisions", { ...valid, revisionIds: Array.from({ length: 51 }, (_, index) => `revision-${index}`) }],
     ["duplicate revisions", { ...valid, revisionIds: ["revision-1", " revision-1 "] }],
+    ["invalid request ID", { ...valid, requestId: "not-a-uuid" }],
     ["unknown fields", { ...valid, releaseNumber: 8 }],
   ])("rejects %s", (_label, input) => {
     expect(releaseCreateSchema.safeParse(input).success).toBe(false);
@@ -22,5 +23,11 @@ describe("releaseCreateSchema", () => {
       description: "",
       revisionIds: ["revision-1"],
     });
+  });
+
+  it("accepts an optional UUID request ID and an explicit null", () => {
+    const requestId = "3466d7a0-007d-4a11-b1ee-393d16ef1a34";
+    expect(releaseCreateSchema.parse({ ...valid, requestId })).toMatchObject({ requestId });
+    expect(releaseCreateSchema.parse({ ...valid, requestId: null })).toMatchObject({ requestId: null });
   });
 });

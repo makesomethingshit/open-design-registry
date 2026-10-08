@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   findProject: vi.fn(),
   findRevisions: vi.fn(),
+  findRequestRelease: vi.fn(),
   findLatestRelease: vi.fn(),
   createRelease: vi.fn(),
   findWatchers: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession }
 vi.mock("@/src/lib/prisma", () => ({ prisma: {
   project: { findUnique: mocks.findProject },
   revision: { findMany: mocks.findRevisions },
+  release: { findUnique: mocks.findRequestRelease },
   $transaction: mocks.transaction,
 } }));
 
@@ -40,12 +42,13 @@ describe("project releases route", () => {
       { id: "revision-4", projectId: "project", number: 4, isPublished: true },
       { id: "revision-3", projectId: "project", number: 3, isPublished: true },
     ]);
+    mocks.findRequestRelease.mockResolvedValue(null);
     mocks.findLatestRelease.mockResolvedValue({ number: 2 });
     mocks.findWatchers.mockResolvedValue([]);
     mocks.createNotifications.mockResolvedValue({ count: 0 });
     mocks.createRelease.mockResolvedValue({ id: "release-3", number: 3 });
     mocks.lockProject.mockResolvedValue([{ id: "project", isPublic: true }]);
- mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never));
+    mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: mocks.lockProject, release: { findUnique: mocks.findRequestRelease, findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never));
   });
 
   it("returns 404 for a missing project before checking session", async () => {
@@ -126,6 +129,34 @@ describe("project releases route", () => {
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
   });
 
+  it("replays an exact request without creating a release or duplicate notifications", async () => {
+    const requestId = "3466d7a0-007d-4a11-b1ee-393d16ef1a34";
+    mocks.findRequestRelease.mockResolvedValue({ id: "release-2", number: 2, title: "Navigation rethink", description: "A focused change.", revisions: [{ revisionId: "revision-3" }, { revisionId: "revision-4" }] });
+    const response = await POST(request({ ...validBody, requestId }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: "release-2", number: 2 });
+    expect(mocks.findRequestRelease).toHaveBeenCalledWith(expect.objectContaining({ where: { projectId_publishedById_requestId: { projectId: "project", publishedById: "owner", requestId } } }));
+    expect(mocks.findLatestRelease).not.toHaveBeenCalled();
+    expect(mocks.createRelease).not.toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
+  });
+
+  it("rejects a reused request ID when the canonical payload changes", async () => {
+    mocks.findRequestRelease.mockResolvedValue({ id: "release-2", number: 2, title: "Different title", description: "A focused change.", revisions: [{ revisionId: "revision-3" }, { revisionId: "revision-4" }] });
+    const response = await POST(request({ ...validBody, requestId: "3466d7a0-007d-4a11-b1ee-393d16ef1a34" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "This request ID was already used for a different release" });
+    expect(mocks.createRelease).not.toHaveBeenCalled();
+    expect(mocks.createNotifications).not.toHaveBeenCalled();
+  });
+
+  it("creates a new release when the same content uses a different request ID", async () => {
+    const requestId = "f0e0c8c2-f6c7-4f78-9cc5-71f8d0c8d2a5";
+    const response = await POST(request({ ...validBody, requestId }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createRelease).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ requestId }) }));
+  });
+
   it("returns 404 if the project is missing when the transaction locks it", async () => {
     mocks.lockProject.mockResolvedValue([]);
     const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
@@ -150,7 +181,7 @@ describe("project releases route", () => {
     });
     mocks.transaction.mockImplementation(async (callback) => {
       try {
-         return await callback({ $queryRaw: mocks.lockProject, release: { findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never);
+         return await callback({ $queryRaw: mocks.lockProject, release: { findUnique: mocks.findRequestRelease, findFirst: mocks.findLatestRelease, create: mocks.createRelease }, projectWatch: { findMany: mocks.findWatchers }, notification: { createMany: mocks.createNotifications } } as never);
       } finally {
         const next = waiting.shift();
         if (next) next();
@@ -180,6 +211,18 @@ describe("project releases route", () => {
     const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "A release was published at the same time. Review your selection and try again." });
+  });
+
+  it("reconciles a request-ID unique race by reading the committed release", async () => {
+    const requestId = "3466d7a0-007d-4a11-b1ee-393d16ef1a34";
+    const conflict = Object.assign(new Error("unique"), { code: "P2002", meta: { target: ["projectId", "publishedById", "requestId"] } });
+    Object.setPrototypeOf(conflict, Prisma.PrismaClientKnownRequestError.prototype);
+    mocks.transaction.mockRejectedValue(conflict);
+    mocks.findRequestRelease.mockResolvedValue({ id: "release-3", number: 3, title: "Navigation rethink", description: "A focused change.", revisions: [{ revisionId: "revision-3" }, { revisionId: "revision-4" }] });
+    const response = await POST(request({ ...validBody, requestId }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: "release-3", number: 3 });
+    expect(mocks.createRelease).not.toHaveBeenCalled();
   });
   it("notifies project watchers except the publisher on publish", async () => {
     mocks.findWatchers.mockResolvedValue([{ userId: "watcher-1" }]);

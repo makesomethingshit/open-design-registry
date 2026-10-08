@@ -10,6 +10,17 @@ function error(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function isSameReleasePayload(existing: { title: string; description: string; revisions: Array<{ revisionId: string }> }, title: string, description: string, revisionIds: string[]) {
+  return existing.title === title
+    && existing.description === description
+    && existing.revisions.length === revisionIds.length
+    && existing.revisions.every((revision, index) => revision.revisionId === revisionIds[index]);
+}
+
+function uniqueTarget(target: unknown, fields: string[]) {
+  return fields.every((field) => Array.isArray(target) ? target.includes(field) : typeof target === "string" && target.includes(field));
+}
+
 export async function createProjectRelease(request: Request, { slug }: ProjectScope) {
   const project = await prisma.project.findUnique({ where: { slug }, select: { id: true, ownerId: true, isPublic: true } });
   if (!project) return error("Project not found", 404);
@@ -32,9 +43,19 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
   revisions.sort((left, right) => left.number - right.number);
 
   try {
-    const release = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const [lockedProject] = await tx.$queryRaw<Array<{ id: string; isPublic: boolean }>>`SELECT id, "isPublic" FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) return null;
+      if (parsed.data.requestId) {
+        const existing = await tx.release.findUnique({
+          where: { projectId_publishedById_requestId: { projectId: project.id, publishedById: session.user.id, requestId: parsed.data.requestId } },
+          select: { id: true, number: true, title: true, description: true, revisions: { orderBy: { position: "asc" }, select: { revisionId: true } } },
+        });
+        if (existing) {
+          const samePayload = isSameReleasePayload(existing, parsed.data.title, parsed.data.description, revisions.map((revision) => revision.id));
+          return { release: { id: existing.id, number: existing.number }, created: false, conflict: !samePayload };
+        }
+      }
       const latest = await tx.release.findFirst({ where: { projectId: project.id }, orderBy: { number: "desc" }, select: { number: true } });
       const created = await tx.release.create({
         data: {
@@ -43,6 +64,7 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
           title: parsed.data.title,
           description: parsed.data.description,
           publishedById: session.user.id,
+          ...(parsed.data.requestId ? { requestId: parsed.data.requestId } : {}),
           revisions: { create: revisions.map((revision, position) => ({ position, revision: { connect: { id: revision.id } } })) },
         },
         select: { id: true, number: true },
@@ -53,14 +75,25 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
           await tx.notification.createMany({ data: watchers.map((watcher) => ({ recipientId: watcher.userId, actorId: session.user.id, type: "RELEASE_PUBLISHED", projectId: project.id, releaseId: created.id })) });
         }
       }
-      return created;
+      return { release: created, created: true, conflict: false };
     });
-    if (!release) return error("Project not found", 404);
-    return NextResponse.json(release, { status: 201 });
+    if (!result) return error("Project not found", 404);
+    if (result.conflict) return error("This request ID was already used for a different release", 409);
+    return NextResponse.json(result.release, { status: result.created ? 201 : 200 });
   } catch (cause) {
     if (cause instanceof Prisma.PrismaClientKnownRequestError && cause.code === "P2002") {
       const target = cause.meta?.target;
-      if ((Array.isArray(target) && target.includes("projectId") && target.includes("number")) || target === "Release_projectId_number_key") {
+      if (parsed.data.requestId && uniqueTarget(target, ["projectId", "publishedById", "requestId"])) {
+        const existing = await prisma.release.findUnique({
+          where: { projectId_publishedById_requestId: { projectId: project.id, publishedById: session.user.id, requestId: parsed.data.requestId } },
+          select: { id: true, number: true, title: true, description: true, revisions: { orderBy: { position: "asc" }, select: { revisionId: true } } },
+        });
+        if (existing && isSameReleasePayload(existing, parsed.data.title, parsed.data.description, revisions.map((revision) => revision.id))) {
+          return NextResponse.json({ id: existing.id, number: existing.number }, { status: 200 });
+        }
+        if (existing) return error("This request ID was already used for a different release", 409);
+      }
+      if (uniqueTarget(target, ["projectId", "number"]) || target === "Release_projectId_number_key") {
         return error("A release was published at the same time. Review your selection and try again.", 409);
       }
     }
