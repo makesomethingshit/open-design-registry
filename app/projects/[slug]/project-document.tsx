@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { renderProjectDocument } from "@/src/lib/project-document";
 import { Button } from "@/src/components/ui/button";
+import { Icon } from "@/src/components/ui/icon";
 import { Field } from "@/src/components/ui/field";
 import { ProjectDocumentEditor } from "@/src/components/ui/project-document-editor";
 import editorStyles from "@/src/components/ui/project-document-editor.module.css";
@@ -54,7 +55,7 @@ export default function ProjectDocument({
         </div>
         {isOwner && !editing && body && (
           <Button onClick={edit} size="sm" variant="secondary">
-            Edit document
+            <Icon name="pencil" size={16} />Edit document
           </Button>
         )}
       </header>
@@ -76,7 +77,7 @@ export default function ProjectDocument({
           {isOwner ? (
             <>
               {" "}Share the project's goals, design principles and ways to contribute.{" "}
-              <Button onClick={edit} size="sm" variant="secondary">Add document</Button>
+              <Button onClick={edit} size="sm" variant="secondary"><Icon name="plus" size={16} />Add document</Button>
             </>
           ) : hasRevision ? (
             <> Read About for a short summary and browse <a href={`/projects/${slug}/revisions`}>Revisions</a> for the current design.</>

@@ -61,3 +61,9 @@ Phase B의 컴포넌트 통합은 현재 적용되어 있습니다. [`proposal-r
 - [Catalog / system-light / 390 × 844](design-system-screenshots/catalog-system-390x844.png)
 - [Proposal / light / 1440 × 900](design-system-screenshots/review-light-1440x900.png)
 - [Proposal / light / 390 × 844](design-system-screenshots/review-light-390x844.png)
+
+## Icons
+
+Production controls use a licensed SVG subset of GitHub Primer Octicons through `src/components/ui/icon.tsx`, following the selected direction in [the icon proposal](design/icon-set-options.md). The subset is pinned to `primer/octicons` commit `1dafaa68a1cef892168aa0fe3d16f0b406715c15`; its MIT notice is next to the source in `octicons.LICENSE.txt`. No icon package or runtime request is needed.
+
+Use the native 16px drawing for compact controls and 24px for standard controls. Keep text labels on project and document actions. Watch uses `bell` for revision/release subscriptions, while Preview uses `eye`. Watch/Contribute retain primary styling and Star/Fork secondary styling; selected state remains exposed through `aria-pressed`. Icons supplement accessible text and are hidden from assistive technology unless given an explicit `title`. Preserve loading spinners and text-only consequential actions such as Save, Cancel and Submit.

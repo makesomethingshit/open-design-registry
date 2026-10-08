@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import { Badge } from "@/src/components/ui/badge";
 import { Banner } from "@/src/components/ui/banner";
 import { Button } from "@/src/components/ui/button";
+import { Icon } from "@/src/components/ui/icon";
 import { Field } from "@/src/components/ui/field";
 import { focusFirstInvalid } from "@/src/components/ui/form";
 import { Panel, Stack } from "@/src/components/ui/layout";
@@ -119,8 +120,8 @@ export default function SourceRights({
     <div className="source-rights-source">
       <h3>Source</h3>
       {sourceHref || sourceFiles.length ? <>
-        {sourceHref && <a className="button secondary" href={sourceHref} {...(sourceHref.startsWith("http") ? { target: "_blank", rel: "noreferrer" } : { download: true })}>{sourceHref.startsWith("http") ? "Open source link" : "Download source"}</a>}
-        {sourceFiles.length > 0 && <ul className="commit-previews" aria-label="Revision source files">{sourceFiles.map((file) => <li className="commit-chip" key={file.id}><span>{file.name} · {file.mimeType} · {formatSize(file.size)}</span><a href={file.href}>Download</a></li>)}</ul>}
+        {sourceHref && <a className="button secondary" href={sourceHref} {...(sourceHref.startsWith("http") ? { target: "_blank", rel: "noreferrer" } : { download: true })}>{sourceHref.startsWith("http") ? "Open source link" : <><Icon name="download" />Download source</>}</a>}
+        {sourceFiles.length > 0 && <ul className="commit-previews" aria-label="Revision source files">{sourceFiles.map((file) => <li className="commit-chip" key={file.id}><span>{file.name} · {file.mimeType} · {formatSize(file.size)}</span><a className="source-download" href={file.href}><Icon name="download" size={16} />Download</a></li>)}</ul>}
       </> : <p><strong>No editable source recorded.</strong> This revision can be viewed, but an editable source has not been provided.</p>}
       {(tool || toolVersion || sourceChecksum) && <p className="meta">{tool ?? "Unknown tool"}{toolVersion ? ` ${toolVersion}` : ""}{sourceChecksum ? ` · SHA-256 ${sourceChecksum}` : ""}</p>}
     </div>

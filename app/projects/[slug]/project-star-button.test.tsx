@@ -73,7 +73,8 @@ describe("ProjectStarButton", () => {
   it("uses a login return path for anonymous visitors", () => {
     const markup = renderToStaticMarkup(renderControl(false, false) as ReactElement);
     expect(markup).toContain('href="/login?next=%2Fprojects%2Fdemo"');
-    expect(markup).toContain(">Star</a>");
+    expect(markup).toContain("<span>Star</span>");
+    expect(markup).toContain('aria-hidden="true"');
     expect(markup).not.toContain("<button");
   });
 
