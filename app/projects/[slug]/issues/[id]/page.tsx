@@ -6,6 +6,7 @@ import { Inline, PageGrid, PageHeader, Panel, SectionHeader, Stack, WideColumn }
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { isVisible } from "@/src/lib/proposal-handlers";
+import ParticipationControl from "./participation-control";
 import IssueBoard from "../../issue-board";
 import styles from "../../project.module.css";
 
@@ -36,6 +37,13 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
 
   const isRequest = issue.kind === "DESIGN_REQUEST";
   const isOpen = issue.status === "OPEN";
+  const participation = isRequest && issue.project.isPublic && isOpen
+    ? await Promise.all([
+      prisma.designRequestParticipation.count({ where: { issueId: issue.id } }),
+      prisma.designRequestParticipation.findMany({ where: { issueId: issue.id }, orderBy: [{ createdAt: "asc" }, { userId: "asc" }], take: 5, select: { user: { select: { name: true } } } }),
+      session ? prisma.designRequestParticipation.findUnique({ where: { issueId_userId: { issueId: issue.id, userId: session.user.id } }, select: { issueId: true } }) : Promise.resolve(null),
+    ])
+    : [0, [], null] as const;
   const heading = isRequest ? "Design request" : "Issue";
 
   return <PageGrid aria-labelledby="issue-heading">
@@ -45,6 +53,7 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
         <PageHeader eyebrow={heading} id="issue-heading" title={issue.title} />
         <Inline gap={2}><StatusBadge tone={isOpen ? "success" : "neutral"}>{isOpen ? "Open" : "Closed"}</StatusBadge></Inline>
         <p className={styles.discussionMeta}>Opened by {issue.author.name} <span aria-hidden="true">·</span> <time dateTime={issue.createdAt.toISOString()}>{formatDate(issue.createdAt)}</time></p>
+        {isRequest && issue.project.isPublic && isOpen && <ParticipationControl issueId={issue.id} count={participation[0]} names={participation[1].map(({ user }) => user.name)} participating={Boolean(participation[2])} signedIn={Boolean(session)} loginHref={`/login?next=${encodeURIComponent(`/projects/${slug}/issues/${issue.id}`)}`} />}
         <Panel aria-labelledby="issue-description-heading" className={styles.discussionBodyPanel}>
           <Stack gap={3}>
             <SectionHeader id="issue-description-heading" title="Details" />

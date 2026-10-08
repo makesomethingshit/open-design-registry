@@ -128,6 +128,13 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Upload participation screen evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: participation-screenshots
+          path: test-results/**/mobile-*.png
+          retention-days: 7
       - name: Upload failed browser traces
         if: failure()
         uses: actions/upload-artifact@v4

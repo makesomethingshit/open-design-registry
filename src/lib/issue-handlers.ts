@@ -22,7 +22,7 @@ const commentAccess = {
   project: { select: { isPublic: true } },
 } satisfies Prisma.IssueSelect;
 
-async function lockIssue(tx: Prisma.TransactionClient, id: string) {
+export async function lockIssue(tx: Prisma.TransactionClient, id: string) {
   const [row] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "Issue" WHERE id = ${id} FOR UPDATE`;
   return row;
 }
@@ -58,6 +58,7 @@ export async function patchIssue(request: Request, scope: IssueScope): Promise<N
   // close that wins the lock is observed by a later comment in its own lock.
   const updated = await prisma.$transaction(async (tx) => {
     await lockIssue(tx, scope.id);
+    if (status === "CLOSED") await tx.designRequestParticipation.deleteMany({ where: { issueId: scope.id } });
     return tx.issue.update({
       where: { id: scope.id },
       data: { status, closedAt: status === "CLOSED" ? new Date() : null, closedBy: status === "CLOSED" ? session.user.id : null },

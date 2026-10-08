@@ -1,0 +1,6 @@
+.participation { display: grid; gap: var(--odr-space-3); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-panel); background: var(--odr-surface-subtle); }
+.heading { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); }
+.summary, .notice, .error { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--odr-space-2); }
+.error { color: var(--odr-danger-fg); }
+@media (max-width: 40rem) { .actions { align-items: stretch; flex-direction: column; } .actions button, .actions a { width: 100%; } }

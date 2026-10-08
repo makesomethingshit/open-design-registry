@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findIssue: vi.fn(), updateIssue: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findIssue: vi.fn(), updateIssue: vi.fn(), deleteParticipations: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({
   prisma: {
@@ -9,6 +9,7 @@ vi.mock("@/src/lib/prisma", () => ({
       callback({
         $queryRaw: async () => [{ id: "issue-1" }],
         issue: { findUnique: mocks.findIssue, update: mocks.updateIssue },
+        designRequestParticipation: { deleteMany: mocks.deleteParticipations },
       }),
   },
 }));
@@ -30,6 +31,7 @@ describe("issue route", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
     mocks.findIssue.mockResolvedValue({ id: "issue-1", status: "OPEN", project: { ownerId: "owner", isPublic: false } });
     mocks.updateIssue.mockResolvedValue({ id: "issue-1", status: "CLOSED" });
+    mocks.deleteParticipations.mockResolvedValue({ count: 0 });
   });
 
   it("does not expose a private issue to another user", async () => {
