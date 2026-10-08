@@ -5,6 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findProject: vi.fn(),
+  findForks: vi.fn(),
+  findRevisions: vi.fn(),
+  countRevisions: vi.fn(),
+  findReleases: vi.fn(),
+  findIssues: vi.fn(),
+  countIssues: vi.fn(),
+  findDiscussions: vi.fn(),
   getSession: vi.fn(),
   listProposals: vi.fn(),
   countProposals: vi.fn(),
@@ -20,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), usePathname: () => "/projects/demo", useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, findMany: mocks.findForks }, revision: { findMany: mocks.findRevisions, count: mocks.countRevisions }, release: { findMany: mocks.findReleases }, issue: { findMany: mocks.findIssues, count: mocks.countIssues }, discussion: { findMany: mocks.findDiscussions }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
@@ -86,7 +93,9 @@ function project(withRelease = false) {
 describe("Project issue proposal visibility", () => {
   it("keeps full issue and proposal metadata out of Overview", async () => {
     vi.clearAllMocks();
-    mocks.findProject.mockResolvedValue(project());
+    const value = project();
+    mocks.findProject.mockResolvedValue(value);
+    mockProjectQueries(value);
     mocks.getSession.mockResolvedValue({ user: { id: "viewer" } });
     mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
     mocks.countProposals.mockResolvedValue(0);
@@ -119,6 +128,7 @@ describe("Project issue proposal visibility", () => {
       { ...value.issues[0], id: "closed-request", title: "Closed request", kind: "DESIGN_REQUEST", status: "CLOSED" },
     ];
     mocks.findProject.mockResolvedValue(value);
+    mockProjectQueries(value);
     mocks.getSession.mockResolvedValue({ user: { id: "viewer" } });
     mocks.listProposals.mockResolvedValue({ items: [], nextCursor: null });
     mocks.countProposals.mockResolvedValue(0);
@@ -129,6 +139,7 @@ describe("Project issue proposal visibility", () => {
     const markup = renderToStaticMarkup(await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}) }));
 
     expect(markup).toContain("<dt>Open issues</dt><dd>2</dd>");
+    expect(mocks.findIssues).toHaveBeenCalled();
     expect(markup).toContain("Design request one");
     expect(markup).toContain("Design request two");
     expect(markup).toContain("Design request three");
@@ -158,9 +169,23 @@ describe("Project issue proposal visibility", () => {
   });
 });
 
+function mockProjectQueries(value: ReturnType<typeof project>) {
+  mocks.findRevisions.mockResolvedValue(value.revisions);
+  mocks.countRevisions.mockResolvedValue(value.revisions.length);
+  mocks.findReleases.mockResolvedValue(value.releases);
+  mocks.findDiscussions.mockResolvedValue(value.discussions);
+  mocks.findForks.mockResolvedValue(value.forks);
+  mocks.findIssues.mockImplementation(async (args?: { select?: unknown }) =>
+    args?.select
+      ? value.issues.filter((issue) => issue.status === "OPEN" && issue.kind === "DESIGN_REQUEST").slice(0, 3).map(({ id, title, author }) => ({ id, title, author }))
+      : value.issues);
+  mocks.countIssues.mockResolvedValue(value.issues.filter((issue) => issue.status === "OPEN" && issue.kind !== "DESIGN_REQUEST").length);
+}
+
 async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0, view: Parameters<typeof ProjectPage>[0]["view"] = "overview") {
   vi.clearAllMocks();
   mocks.findProject.mockResolvedValue(value);
+  mockProjectQueries(value);
   mocks.getSession.mockResolvedValue(session);
   mocks.findStarCount.mockResolvedValue(starCount);
   mocks.findWatchCount.mockResolvedValue(watchCount);
@@ -210,7 +235,7 @@ describe("Project Releases section", () => {
     await renderProjectPage(null, project(), 0, 0, "releases");
     const props = mocks.sectionNav.mock.calls.at(-1)?.[0] as { items: Array<{ href: string }> };
     expect(props.items.map((item) => item.href).slice(1, 4)).toEqual(["/projects/demo/revisions", "/projects/demo/releases", "/projects/demo/discussions"]);
-    expect(mocks.findProject).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ releases: expect.objectContaining({ orderBy: { number: "desc" }, select: expect.objectContaining({ _count: { select: { revisions: true } } }) }) }) }));
+    expect(mocks.findReleases).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { number: "desc" }, select: expect.objectContaining({ _count: { select: { revisions: true } } }) }));
   });
 
   it("shows release rows and the publish link only to the owner", async () => {
@@ -262,6 +287,50 @@ describe("Project Discussions section", () => {
     expect(markup).toContain("Start a discussion");
     expect(markup).toContain('href="/projects/demo/discussions/new"');
     expect(markup).not.toContain("<form");
+  });
+});
+
+describe("Project view query contracts", () => {
+  it("overview reads the base project plus latest revision, counts, and top design requests only", async () => {
+    await renderProjectPage({ user: { id: "viewer" } });
+    expect(mocks.findProject).toHaveBeenCalledWith({ where: { slug: "demo" }, include: { owner: { select: { name: true } } } });
+    expect(mocks.findRevisions).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
+    expect(mocks.countRevisions).toHaveBeenCalled();
+    expect(mocks.countIssues).toHaveBeenCalled();
+    expect(mocks.findReleases).not.toHaveBeenCalled();
+    expect(mocks.findDiscussions).not.toHaveBeenCalled();
+    expect(mocks.findForks).not.toHaveBeenCalled();
+    expect(mocks.findIssues.mock.calls.length).toBeGreaterThan(0);
+    for (const call of mocks.findIssues.mock.calls) {
+      expect(call[0]).toHaveProperty("select");
+      expect(call[0]).not.toHaveProperty("include");
+    }
+  });
+
+  it("issues view reads the full issue collection with nested comments and proposals", async () => {
+    await renderProjectPage({ user: { id: "viewer" } }, project(), 0, 0, "issues");
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ comments: expect.anything(), proposals: expect.anything() }) }));
+    expect(mocks.findRevisions).not.toHaveBeenCalled();
+    expect(mocks.findReleases).not.toHaveBeenCalled();
+    expect(mocks.findDiscussions).not.toHaveBeenCalled();
+    expect(mocks.findForks).not.toHaveBeenCalled();
+  });
+
+  it("releases, discussions, and revisions tabs read only their own collection", async () => {
+    await renderProjectPage({ user: { id: "viewer" } }, project(true), 0, 0, "releases");
+    expect(mocks.findReleases).toHaveBeenCalled();
+    expect(mocks.findIssues).not.toHaveBeenCalled();
+    expect(mocks.findDiscussions).not.toHaveBeenCalled();
+
+    await renderProjectPage({ user: { id: "viewer" } }, project(), 0, 0, "discussions");
+    expect(mocks.findDiscussions).toHaveBeenCalled();
+    expect(mocks.findReleases).not.toHaveBeenCalled();
+    expect(mocks.findIssues).not.toHaveBeenCalled();
+
+    await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions");
+    expect(mocks.findRevisions).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { number: "asc" } }));
+    expect(mocks.findIssues).not.toHaveBeenCalled();
+    expect(mocks.findReleases).not.toHaveBeenCalled();
   });
 });
 

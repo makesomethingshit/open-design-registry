@@ -1,14 +1,56 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), findRevision: vi.fn(), findDiscussion: vi.fn(), createIssue: vi.fn(), createNotification: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), findRevision: vi.fn(), findDiscussion: vi.fn(), createIssue: vi.fn(), findIssues: vi.fn(), createNotification: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findFirst: mocks.findRevision }, discussion: { findFirst: mocks.findDiscussion }, issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findFirst: mocks.findRevision }, discussion: { findFirst: mocks.findDiscussion }, issue: { create: mocks.createIssue, findMany: mocks.findIssues }, notification: { create: mocks.createNotification } } }));
 
-const { POST } = await import("./route");
+const { GET, POST } = await import("./route");
 
 function request(body: Record<string, unknown>) {
   return new Request("http://localhost/api/projects/demo/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
+
+describe("issue list route", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSession.mockResolvedValue({ user: { id: "viewer" } });
+    mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
+    mocks.findIssues.mockResolvedValue([]);
+  });
+
+  function get(url: string) {
+    return new Request(url);
+  }
+
+  function params() {
+    return { params: Promise.resolve({ slug: "demo" }) };
+  }
+
+  it("returns the issue array with a has-more header for plain requests", async () => {
+    mocks.findIssues.mockResolvedValue([{ id: "a" }, { id: "b" }]);
+    const response = await GET(get("http://localhost/api/projects/demo/issues"), params());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(response.headers.get("X-Has-More")).toBe("false");
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ take: 25 }));
+  });
+
+  it("paginates into an envelope with the next cursor when pagination is requested", async () => {
+    mocks.findIssues.mockResolvedValue([{ id: "a" }, { id: "b" }]);
+    const response = await GET(get("http://localhost/api/projects/demo/issues?limit=1"), params());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [{ id: "a" }], nextCursor: "a" });
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ take: 2 }));
+  });
+
+  it("continues from a cursor with skip", async () => {
+    mocks.findIssues.mockResolvedValue([{ id: "b" }]);
+    const response = await GET(get("http://localhost/api/projects/demo/issues?limit=1&cursor=a"), params());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [{ id: "b" }], nextCursor: null });
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ cursor: { id: "a" }, skip: 1, take: 2 }));
+  });
+});
 
 describe("issue creation route", () => {
   beforeEach(() => {

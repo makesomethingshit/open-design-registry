@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import CapabilityBadge from "@/app/capability-badge";
 import ReportForm from "@/app/reports/report-form";
 import { RevisionItem } from "@/src/components/design/revision-item";
@@ -31,27 +32,56 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     ? { targetSlug: query.contributionTarget, baseRevision: requestedContributionBase, relatedIssueId: query.relatedIssue?.slice(0, 200) }
     : undefined;
   const session = await getSession();
-  const project = await prisma.project.findUnique({
+  const base = await prisma.project.findUnique({
     where: { slug },
-    include: {
-      owner: { select: { name: true } },
-      revisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } }, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } },
-      releases: { orderBy: { number: "desc" }, select: { id: true, number: true, title: true, description: true, createdAt: true, publishedBy: { select: { name: true } }, _count: { select: { revisions: true } } } },
-      issues: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } },
-      discussions: { orderBy: { createdAt: "desc" }, select: { id: true, title: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } },
-      forks: { where: { isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } },
-      _count: { select: { forks: { where: { isPublic: true } } } },
-      forkedFrom: { select: { slug: true, title: true, owner: { select: { name: true } } } },
-      forkedFromRevision: { select: { number: true } },
-    },
+    include: { owner: { select: { name: true } } },
   });
-  if (!project) notFound();
+  if (!base) notFound();
 
-  if (!project.isPublic && session?.user.id !== project.ownerId) notFound();
+  if (!base.isPublic && session?.user.id !== base.ownerId) notFound();
   if (view === "new-issue") {
-    if (!project.isPublic) notFound();
+    if (!base.isPublic) notFound();
     if (!session) redirect(`/login?next=${encodeURIComponent(`/projects/${slug}/issues/new`)}`);
   }
+
+  // Each view reads only its own collection, so Overview never loads the full
+  // revision/release history or nested issue comments, proposals, and discussions.
+  const needsRevisionHistory = view === "revisions" || view === "new-issue";
+  const needsLatestRevision = view === "overview" || view === "proposals";
+  const revisionSelect = { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } }, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } satisfies Prisma.RevisionSelect;
+  const releaseSelect = { id: true, number: true, title: true, description: true, createdAt: true, publishedBy: { select: { name: true } }, _count: { select: { revisions: true } } } satisfies Prisma.ReleaseSelect;
+  const issueInclude = { author: { select: { name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } satisfies Prisma.IssueInclude;
+  const discussionSelect = { id: true, title: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.DiscussionSelect;
+  const forkSelect = { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } satisfies Prisma.ProjectSelect;
+  const [revisions, releases, issues, discussions, forks, openIssueCount, revisionCount, openDesignRequests] = await Promise.all([
+    needsRevisionHistory
+      ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, select: revisionSelect })
+      : needsLatestRevision
+        ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "desc" }, take: 1, select: revisionSelect })
+        : Promise.resolve([]),
+    view === "releases"
+      ? prisma.release.findMany({ where: { projectId: base.id }, orderBy: { number: "desc" }, select: releaseSelect })
+      : Promise.resolve([]),
+    view === "issues"
+      ? prisma.issue.findMany({ where: { projectId: base.id }, orderBy: { createdAt: "desc" }, include: issueInclude })
+      : Promise.resolve([]),
+    view === "discussions"
+      ? prisma.discussion.findMany({ where: { projectId: base.id }, orderBy: { createdAt: "desc" }, select: discussionSelect })
+      : Promise.resolve([]),
+    view === "forks"
+      ? prisma.project.findMany({ where: { forkedFromProjectId: base.id, isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: forkSelect })
+      : Promise.resolve([]),
+    view === "overview"
+      ? prisma.issue.count({ where: { projectId: base.id, status: "OPEN", kind: { not: "DESIGN_REQUEST" } } })
+      : Promise.resolve(0),
+    view === "overview"
+      ? prisma.revision.count({ where: { projectId: base.id, isPublished: true } })
+      : Promise.resolve(0),
+    view === "overview"
+      ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "DESIGN_REQUEST" }, orderBy: { createdAt: "desc" }, take: 3, select: { id: true, title: true, author: { select: { name: true } } } })
+      : Promise.resolve([]),
+  ]);
+  const project = { ...base, revisions, releases, issues, discussions, forks };
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
   const latestRevision = project.revisions.at(-1);
@@ -72,8 +102,6 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       .filter((proposal) => isVisible(proposal, session?.user.id))
       .map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })),
   }));
-  const openIssues = visibleIssues.filter((issue) => issue.status === "OPEN" && issue.kind !== "DESIGN_REQUEST");
-  const openDesignRequests = visibleIssues.filter((issue) => issue.status === "OPEN" && issue.kind === "DESIGN_REQUEST");
   const contributors = attribution.length;
   if (view === "settings" && session?.user.id !== project.ownerId) notFound();
   return <>
@@ -92,8 +120,8 @@ export default async function ProjectScreen({ params, searchParams, view = "over
           </dl>
           <dl className={styles.metrics}>
             <div><dt>Contributors</dt><dd>{contributors}</dd></div>
-            <div><dt>Revisions</dt><dd>{project.revisions.length}</dd></div>
-            <div><dt>Open issues</dt><dd>{openIssues.length}</dd></div>
+            <div><dt>Revisions</dt><dd>{revisionCount}</dd></div>
+            <div><dt>Open issues</dt><dd>{openIssueCount}</dd></div>
             <div><dt>Open proposals</dt><dd>{activeProposalCount}</dd></div>
           </dl>
           {!project.isPublic && session?.user.id === project.ownerId && <p className={styles.privateNote}>Private workspace visible to you.</p>}
