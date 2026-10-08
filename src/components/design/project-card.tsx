@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatusBadge, Tag } from "@/src/components/ui/badge";
 import { projectActivityStatusPresentation } from "@/src/lib/ui/activity-status";
+import { Icon } from "@/src/components/ui/icon";
 import styles from "./project-card.module.css";
 
 export type ProjectCardProps = {
@@ -24,6 +25,7 @@ export function ProjectCard({ activityStatus = "ACTIVE", coverUrl, description, 
     <Link aria-label={`View ${title}`} className={styles.mediaLink} href={href}>
       <div className={styles.media}>
         {coverUrl ? <><span aria-hidden="true" className={styles.skeleton} /><img alt={`${title} cover`} decoding="async" fetchPriority={priority ? "high" : undefined} loading={priority ? "eager" : "lazy"} src={coverUrl} /></> : <span className={styles.noPreview}>No preview</span>}
+        <span aria-hidden="true" className={styles.openLabel}>Open project <Icon name="arrowUpRight" size={16} /></span>
       </div>
     </Link>
     <div className={styles.content}>

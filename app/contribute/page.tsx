@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Badge, StatusBadge, Tag } from "@/src/components/ui/badge";
+import { StatusBadge, Tag } from "@/src/components/ui/badge";
 import { Button, TextLink } from "@/src/components/ui/button";
+import { Icon } from "@/src/components/ui/icon";
 import { defaultPageSize, pageCursor } from "@/src/lib/pagination";
 import { prisma } from "@/src/lib/prisma";
 import { projectActivityStatusPresentation } from "@/src/lib/ui/activity-status";
@@ -43,7 +44,6 @@ export default async function ContributePage({ searchParams }: { searchParams: P
       id: true,
       title: true,
       body: true,
-      createdAt: true,
       revision: {
         select: {
           number: true,
@@ -72,16 +72,15 @@ export default async function ContributePage({ searchParams }: { searchParams: P
 
   return <div className={styles.page}>
     <header className={styles.hero}>
-      <p className={styles.eyebrow}>Contribute</p>
-      <h1>Open design requests</h1>
-      <p>Find a project looking for help, then open its Design request to understand the work. Prepare your own copy, edit in your design tool, publish a Revision, and send a Proposal for the project owner to review.</p>
+      <h1>Contribute</h1>
+      <p>Find an open request and add your next revision.</p>
     </header>
     <section aria-labelledby="requests-heading" className={styles.results}>
-      <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Public projects</p><h2 id="requests-heading">Design requests</h2></div><p>{items.length} {items.length === 1 ? "request" : "requests"} on this page</p></header>
+      <h2 id="requests-heading" className="sr-only">Design requests</h2>
       <form action="/contribute" className={styles.filters} method="get">
         <div className={styles.searchRow}>
-          <label className={styles.searchLabel} htmlFor="request-search">Search requests<input defaultValue={query} id="request-search" name="q" placeholder="Request or project name and description" type="search" /></label>
-          <Button className={styles.searchButton} type="submit">Search</Button>
+          <label className={styles.searchLabel} htmlFor="request-search"><span className="sr-only">Search requests</span><input defaultValue={query} id="request-search" name="q" placeholder="Search requests" type="search" /></label>
+          <Button className={styles.searchButton} size="lg" variant="secondary" type="submit">Search</Button>
         </div>
         <details className={styles.filterGroup} open={hasActiveFilter}>
           <summary>Filters</summary>
@@ -92,6 +91,7 @@ export default async function ContributePage({ searchParams }: { searchParams: P
           </div>
           {hasActiveFilter && <TextLink href="/contribute">Clear filters</TextLink>}
         </details>
+        <p className={styles.resultCount}>{items.length} {items.length === 1 ? "request" : "requests"} on this page</p>
       </form>
       {items.length ? <ol aria-label="Open design requests" className={styles.requestList}>{items.map((request) => {
         const project = request.project;
@@ -110,17 +110,16 @@ export default async function ContributePage({ searchParams }: { searchParams: P
               <figcaption className={styles.source}>{image.source}</figcaption>
             </figure>
             <div className={styles.requestContent}>
-              <div className={styles.requestHeading}><Badge>Design request</Badge><time dateTime={request.createdAt.toISOString()}>Opened {formatDate(request.createdAt)}</time></div>
-              <h3><Link className={styles.titleLink} href={requestHref}>{request.title}</Link></h3>
+              <h3>{request.title}</h3>
               <p className={styles.body}>{request.body || "No summary provided"}</p>
-              <p className={styles.projectLine}>For <Link className={styles.projectLink} href={`/projects/${project.slug}`}>{project.title}</Link> · by {project.owner.name}</p>
               <div className={styles.metadata}>
+                <p className={styles.projectLine}>For <Link className={styles.projectLink} href={`/projects/${project.slug}`}>{project.title}</Link> · by {project.owner.name}</p>
                 <StatusBadge icon={status.icon} tone={status.tone}>{status.label}</StatusBadge>
                 <span>{project.license}</span>
                 {latestRevision?.tool && <Tag>{latestRevision.tool}</Tag>}
                 {latestRevision?.tags.slice(0, 3).map((value) => <Tag key={value}>{value}</Tag>)}
               </div>
-              <span aria-hidden="true" className={styles.requestLink}>View request <span aria-hidden="true">→</span></span>
+              <TextLink className={styles.requestLink} href={requestHref}>View request <Icon name="arrowUpRight" size={16} /></TextLink>
             </div>
           </article>
         </li>;
@@ -142,8 +141,4 @@ function pageHref({ query, tool, tag, license, cursor }: { query: string; tool: 
   if (license) params.set("license", license);
   params.set("cursor", cursor);
   return `/contribute?${params}`;
-}
-
-function formatDate(value: Date) {
-  return value.toLocaleDateString("en-US", { dateStyle: "medium" });
 }

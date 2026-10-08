@@ -10,6 +10,8 @@ describe("ProjectCard", () => {
     expect(markup).toContain('loading="lazy"');
     expect(markup).toContain("Design kit cover");
     expect(markup).toContain("A reusable kit");
+    expect(markup).toMatch(/<span aria-hidden="true"[^>]*>Open project/);
+    expect(markup).toContain('aria-label="View Design kit"');
   });
 
   it("loads first-viewport project images eagerly", () => {

@@ -178,7 +178,7 @@
   --odr-layout-form-fallback: 42.5rem;
   --odr-review-rail: 16rem;
   --odr-review-inspector: 18rem;
-  --odr-header-height: 3.5rem;
+  --odr-header-height: 5.5rem;
 }
 
 :root[data-theme="dark"] {
