@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedUnitIds, conflictForChange } from "./proposal-conflicts";
+import { changedUnitIds, conflictForChange, renamedUnitIds } from "./proposal-conflicts";
 
 const checksum = (value: string) => value.repeat(64).slice(0, 64);
 const file = (id: string, value?: string, name = "Home") => ({ id, name, kind: "artboard", mimeType: "image/png", size: 10, assetKey: `${id}-key`, previewKeys: [], ...(value === undefined ? {} : { checksum: checksum(value) }) });
@@ -9,6 +9,14 @@ describe("proposal unit conflict checks", () => {
   it("uses per-unit checksums before metadata", () => {
     expect(conflictForChange(change, { version: 2, files: [file("home", "a", "Home")] }, { version: 2, files: [file("home", "a", "Landing")] })).toMatchObject({ status: "NO_CONFLICT" });
     expect(conflictForChange(change, { version: 2, files: [file("home", "a")] }, { version: 2, files: [file("home", "b")] })).toMatchObject({ status: "CONFLICT", reason: "Source content changed upstream." });
+  });
+
+  it("conflicts on upstream renames while preserving checksum priority for modifications", () => {
+    const base = { version: 2 as const, files: [file("home", "a", "Home")] };
+    const latest = { version: 2 as const, files: [file("home", "a", "Landing")] };
+    expect(conflictForChange({ type: "RENAME_UNIT", action: "RENAME_UNIT", targetFileId: "home" }, base, latest)).toEqual({ status: "CONFLICT", reason: "Unit name changed upstream." });
+    expect(conflictForChange(change, base, latest)).toMatchObject({ status: "NO_CONFLICT" });
+    expect(renamedUnitIds(base, latest, null)).toEqual(["home"]);
   });
 
   it("treats dependency mutations as conflicts and upstream unit changes", () => {

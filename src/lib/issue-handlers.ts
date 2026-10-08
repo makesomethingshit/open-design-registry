@@ -22,6 +22,17 @@ const commentAccess = {
   project: { select: { isPublic: true } },
 } satisfies Prisma.IssueSelect;
 
+async function lockIssue(tx: Prisma.TransactionClient, id: string) {
+  const [row] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "Issue" WHERE id = ${id} FOR UPDATE`;
+  return row;
+}
+
+class IssueRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 export async function getIssue(request: Request, scope: IssueScope): Promise<NextResponse> {
   const issue = scope.slug
     ? await prisma.issue.findFirst({ where: { id: scope.id, project: { slug: scope.slug } }, include: issueDetails })
@@ -43,10 +54,15 @@ export async function patchIssue(request: Request, scope: IssueScope): Promise<N
   const parsed = issueStatusSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Status must be OPEN or CLOSED" }, { status: 400 });
   const { status } = parsed.data;
-  const updated = await prisma.issue.update({
-    where: { id: scope.id },
-    data: { status, closedAt: status === "CLOSED" ? new Date() : null, closedBy: status === "CLOSED" ? session.user.id : null },
-    include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } },
+  // Serialize with concurrent comment creation on the same Issue row so a
+  // close that wins the lock is observed by a later comment in its own lock.
+  const updated = await prisma.$transaction(async (tx) => {
+    await lockIssue(tx, scope.id);
+    return tx.issue.update({
+      where: { id: scope.id },
+      data: { status, closedAt: status === "CLOSED" ? new Date() : null, closedBy: status === "CLOSED" ? session.user.id : null },
+      include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } },
+    });
   });
   return NextResponse.json(updated);
 }
@@ -61,9 +77,22 @@ export async function postIssueComment(request: Request, scope: IssueScope): Pro
   if (issue.status === "CLOSED") return NextResponse.json({ error: "Issue is closed" }, { status: 409 });
   const parsed = issueCommentSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Comment body is required" }, { status: 400 });
-  const comment = await prisma.issueComment.create({
-    data: { issueId: scope.id, authorId: session.user.id, body: parsed.data.body },
-    include: { author: { select: { id: true, name: true } } },
-  });
-  return NextResponse.json(comment, { status: 201 });
+  // Re-check eligibility inside the same Issue-row lock/transaction boundary
+  // used by the close transition, so a close that committed first rejects.
+  try {
+    const comment = await prisma.$transaction(async (tx) => {
+      await lockIssue(tx, scope.id);
+      const current = await tx.issue.findUnique({ where: { id: scope.id }, select: commentAccess });
+      if (!current || !current.project.isPublic) throw new IssueRequestError("Issue not found", 404);
+      if (current.status === "CLOSED") throw new IssueRequestError("Issue is closed", 409);
+      return tx.issueComment.create({
+        data: { issueId: scope.id, authorId: session.user.id, body: parsed.data.body },
+        include: { author: { select: { id: true, name: true } } },
+      });
+    });
+    return NextResponse.json(comment, { status: 201 });
+  } catch (cause) {
+    if (cause instanceof IssueRequestError) return NextResponse.json({ error: cause.message }, { status: cause.status });
+    throw cause;
+  }
 }

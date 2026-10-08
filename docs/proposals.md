@@ -81,7 +81,8 @@ base 이후 대상 프로젝트에 새 Revision이 생기면 Proposal은 stale �
 | ADD 대상 ID가 latest에 이미 존재 | `CONFLICT` |
 | 기존 유닛이 latest에서 제거됨 | `CONFLICT` |
 | 기존 유닛의 `dependencies` 집합이 달라짐 | `CONFLICT` — checksum이 같아도 의존성 변경을 먼저 검사 |
-| 의존성 집합 동일·양쪽 checksum 존재·동일 | `NO_CONFLICT` — 내용 비교에서는 이름/kind/크기/MIME보다 checksum을 우선 |
+| `RENAME_UNIT` 대상의 이름이 latest에서 달라짐 | `CONFLICT` — checksum이 같아도 upstream 이름 변경은 충돌 |
+| 의존성 집합 동일·양쪽 checksum 존재·동일, 단 `RENAME_UNIT` 이름 변경 없음 | `NO_CONFLICT` — `MODIFY_UNIT`은 이름/kind/크기/MIME보다 checksum을 우선 |
 | 의존성 집합 동일·양쪽 checksum 존재·다름 | `CONFLICT` |
 | 의존성 집합 동일·한쪽만 checksum 존재 | `CONFLICT` |
 | 의존성 집합 동일·양쪽 checksum 없음·이름/kind/크기/MIME 다름 | `CONFLICT` |
@@ -95,9 +96,9 @@ base 이후 대상 프로젝트에 새 Revision이 생기면 Proposal은 stale �
 
 같은 Proposal에서 일부 변경을 적용해도 남은 미적용 Change의 승인 상태와 리뷰 정보는 유지됩니다. 다만 다음 적용 시 최신 Revision을 기준으로 충돌과 의존성을 다시 검사합니다.
 
-Proposal 적용으로 upstream 유닛의 내용이나 의존성 집합이 바뀌면, **다른** Proposal에서 `CLOSED`·`ACCEPTED`를 제외하고 그 유닛을 대상으로 승인된 미적용 Change를 `PENDING`으로 돌려 `INVALIDATED_UPSTREAM` 이력을 남깁니다. 이 서버 조회 조건은 스키마의 `DRAFT`도 포함하지만 현재 생성 API는 `DRAFT`를 만들지 않습니다. 목록의 열린 상태 필터와 같은 조건으로 가정하지 않습니다.
+Proposal 적용으로 upstream 유닛의 이름, 내용 또는 의존성 집합이 바뀌면, **다른** Proposal의 승인된 미적용 Change를 영향 범위에 따라 `PENDING`으로 돌려 `INVALIDATED_UPSTREAM` 이력을 남깁니다. 이름만 바뀐 경우 같은 유닛을 대상으로 한 `RENAME_UNIT` 승인만 무효화합니다. 같은 유닛의 `MODIFY_UNIT` 승인과 다른 유닛의 승인은 리뷰 상태·메타데이터를 유지합니다. 이름 변경과 함께 checksum 또는 의존성도 바뀌면 내용·의존성 변경 규칙에 따라 해당 유닛의 승인도 무효화됩니다. 이 서버 조회 조건은 스키마의 `DRAFT`도 포함하지만 현재 생성 API는 `DRAFT`를 만들지 않습니다. 목록의 열린 상태 필터와 같은 조건으로 가정하지 않습니다.
 
-전체 문서 적용도 전후 유효 번들이 있으면 이 무효화 경로를 사용합니다. stable ID의 추가·제거, 의존성 집합 변경 또는 양쪽 checksum이 확인된 내용 변경을 계산합니다. checksum이 같고 의존성도 같은 유닛, 이미 적용된 Change, 비교가 확정되지 않은 legacy 데이터는 무조건 해제하지 않습니다.
+전체 문서 적용도 전후 유효 번들이 있으면 이 무효화 경로를 사용합니다. stable ID의 추가·제거, 의존성 집합 변경 또는 양쪽 checksum이 확인된 내용 변경을 계산합니다. 이름만 바뀐 유닛은 같은 유닛의 `RENAME_UNIT` 승인에만 영향을 줍니다. 이름·checksum·의존성이 모두 그대로인 유닛, 이미 적용된 Change, 비교가 확정되지 않은 legacy 데이터는 무조건 해제하지 않습니다.
 
 **자동 승인 해제 이력 생성은 현재 `applyProposal` 경로에 구현되어 있습니다.** 일반 Revision 발행·복원에도 항상 같은 이력이 생성된다고 가정하면 안 됩니다. 최신 Revision이 달라졌을 때의 승인·적용 전 충돌 재판정과 v3 의존성 검사는 별도로 수행됩니다.
 

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import GlobalSearch from "./global-search";
 import { ThemeSelect } from "@/src/components/ui/theme-select";
+import { Banner } from "@/src/components/ui/banner";
 import type { ThemeValue } from "@/src/lib/ui/theme";
 import buttonStyles from "@/src/components/ui/button.module.css";
 import { Icon } from "@/src/components/ui/icon";
@@ -17,6 +18,7 @@ export default function AuthNav({ initialTheme }: { initialTheme: ThemeValue }) 
   const [unreadCount, setUnreadCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const account = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
@@ -66,7 +68,17 @@ export default function AuthNav({ initialTheme }: { initialTheme: ThemeValue }) 
   }, []);
 
   async function signOut() {
-    await fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => undefined);
+    setSignOutError("");
+    try {
+      const response = await fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!response.ok) {
+        setSignOutError("Could not sign out. Please try again.");
+        return;
+      }
+    } catch {
+      setSignOutError("Could not sign out. Please try again.");
+      return;
+    }
     setUser(null);
     setOpen(false);
     router.push("/");
@@ -98,6 +110,7 @@ export default function AuthNav({ initialTheme }: { initialTheme: ThemeValue }) 
           <a aria-current={pathname === "/projects" ? "page" : undefined} href="/projects" className="nav-link">My projects</a>
           <a aria-current={pathname === "/stars" ? "page" : undefined} href="/stars" className="nav-link">Starred</a>
           <a aria-current={pathname === "/notifications" ? "page" : undefined} href="/notifications" className="nav-link" aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}>Notifications{unreadCount > 0 && <span className="notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}</a>
+          {signOutError && <Banner tone="error" title={signOutError} />}
           {user.role === "admin" && <a aria-current={pathname.startsWith("/admin/reports") ? "page" : undefined} href="/admin/reports" className="nav-link">Reports</a>}
           <button type="button" className="nav-button" onClick={signOut}>Sign out</button>
         </nav>

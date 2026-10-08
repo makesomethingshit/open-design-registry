@@ -44,7 +44,17 @@ test("keeps public and account actions visible with keyboard disclosure and sign
     await page.mouse.click(4, (await header.boundingBox())!.height + 8);
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Account, 3 unread notifications" })).toBeVisible();
+  await page.getByRole("button", { name: "Account, 3 unread notifications" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  expect(signOutCalls).toBe(1);
+
+  signedIn = true;
   await page.setViewportSize({ width: 440, height: 900 });
+  await page.goto("/");
   await page.getByLabel("Theme", { exact: true }).selectOption("dark");
   await page.getByRole("button", { name: /^Account/ }).click();
   await expect(page.getByRole("link", { name: "Notifications, 3 unread" })).toBeVisible();
@@ -52,7 +62,7 @@ test("keeps public and account actions visible with keyboard disclosure and sign
   await page.getByRole("button", { name: "Sign out" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
-  expect(signOutCalls).toBe(1);
+  expect(signOutCalls).toBe(2);
   await page.getByLabel("Theme", { exact: true }).selectOption("dark");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.locator(".site-header").screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath("header-visitor-dark.png") });

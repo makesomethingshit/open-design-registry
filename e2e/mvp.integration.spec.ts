@@ -611,6 +611,13 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       expect((await (await page.request.get(`/api/proposals/${firstProposalId}`)).json()).status).toBe("CHANGES_REQUESTED");
       await owner.goto(revisedProposalPath);
       await owner.waitForLoadState("networkidle");
+      await expect(owner.getByRole("button", { name: /^Account/ })).toBeVisible();
+      const visualReview = owner.getByRole("region", { name: "Visual review" });
+      await expect(visualReview.getByText("100%", { exact: true })).toBeVisible();
+      await visualReview.getByRole("button", { name: "Zoom in" }).click();
+      await expect(visualReview.getByText("125%", { exact: true })).toBeVisible();
+      await visualReview.getByRole("button", { name: "Zoom out" }).click();
+      await expect(visualReview.getByText("100%", { exact: true })).toBeVisible();
       const approvalResponse = owner.waitForResponse((response) => new URL(response.url()).pathname.startsWith(`/api${revisedProposalPath}/changes/`) && response.request().method() === "PATCH");
       await owner.getByRole("button", { name: "Approve change" }).click();
       expect((await approvalResponse).status()).toBe(200);
@@ -628,7 +635,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await expect(page.getByRole("heading", { name: "Applied to the original" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Review latest revision" })).toHaveCount(0);
       await expect(page.getByRole("region", { name: "Next step for this change" })).toContainText("The owner added this change to a new Revision");
-      const appliedRevisions = await (await page.request.get(`/api${projectPath}/revisions`)).json();
+      const appliedRevisions = await (await page.request.get(`/api${projectPath}/revisions`, { maxRetries: 2 })).json();
       expect(appliedRevisions).toHaveLength(2);
       expect(appliedRevisions[0].sourceUrl).toBe(`https://example.com/${suffix}/original.penpot`);
       expect(appliedRevisions[1].sourceUrl).toBe(`https://example.com/${suffix}/revised.penpot`);
