@@ -42,6 +42,7 @@
 .sectionHeader > span { color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .secondaryLink { display: inline-flex; min-height: var(--odr-control-md); align-items: center; padding: var(--odr-space-2) var(--odr-space-3); border: var(--odr-border-width) solid var(--odr-border-control); border-radius: var(--odr-radius-control); background: var(--odr-surface-panel); color: var(--odr-text-primary); text-decoration: none; }
 .secondaryLink:hover { background: var(--odr-surface-hover); }
+.pagePagination { display: flex; flex-wrap: wrap; gap: var(--odr-space-2); margin-top: var(--odr-space-3); }
 .forkList { display: grid; padding: 0; margin: 0; list-style: none; border-top: var(--odr-border-width) solid var(--odr-border-subtle); }
 .forkList li { display: grid; gap: var(--odr-space-1); padding: var(--odr-space-4) 0; border-bottom: var(--odr-border-width) solid var(--odr-border-subtle); }
 .forkList a { color: var(--odr-text-primary); font-size: var(--odr-font-body); font-weight: var(--odr-weight-semibold); line-height: var(--odr-line-body); text-decoration: underline; text-underline-offset: 0.15em; }

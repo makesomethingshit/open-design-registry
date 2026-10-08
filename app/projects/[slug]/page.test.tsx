@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   findProject: vi.fn(),
   findForks: vi.fn(),
   findRevisions: vi.fn(),
+  revisionItem: vi.fn(),
   countRevisions: vi.fn(),
   findReleases: vi.fn(),
   findIssues: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock("@/src/lib/ui/status-presentation", () => ({ proposalStatusPresentation:
 vi.mock("@/app/capability-badge", () => ({ default: () => null }));
 vi.mock("@/app/reports/report-form", () => ({ default: () => null }));
 vi.mock("@/src/components/design/project-header", () => ({ ProjectHeader: ({ actions }: { actions?: unknown }) => { mocks.headerActions(actions); return null; } }));
-vi.mock("@/src/components/design/revision-item", () => ({ RevisionItem: () => null }));
+vi.mock("@/src/components/design/revision-item", () => ({ RevisionItem: (props: unknown) => { mocks.revisionItem(props); return null; } }));
 vi.mock("@/src/components/ui/badge", () => ({ Badge: ({ children }: { children: unknown }) => createElement("span", null, children as never), StatusBadge: () => null }));
 vi.mock("@/src/components/ui/section-nav", () => ({ RouteNav: (props: unknown) => { mocks.sectionNav(props); return null; } }));
 vi.mock("./contribute-dialog", () => ({ default: () => null }));
@@ -68,10 +69,28 @@ const visibleProposal = {
   appliedRevisions: [{ id: "r14", number: 14, title: "Revision 14" }],
 };
 
+function revision(number: number) {
+  return {
+    id: `revision-${number}`, number, title: `Revision ${number}`, changeDescription: `Change ${number}`, tool: "Figma", toolVersion: null,
+    tags: [], sourceChecksum: `checksum-${number}`, sourceKey: `source-${number}`, capabilityMode: "UNKNOWN", capabilityUnitCount: 0,
+    adapterId: null, adapterVersion: null, adapterConfidence: null, adapterMaturity: null, createdAt: new Date(`2026-09-${String(number).padStart(2, "0")}T00:00:00Z`),
+    publishedBy: { name: "Owner" }, previews: [{ id: `preview-${number}`, position: 0, url: `preview-${number}.png`, mimeType: "image/png", altText: null }],
+    appliedProposal: null, appliedChanges: [],
+  };
+}
+
+function discussion(id: string) {
+  return { id, title: `Discussion ${id}`, body: "Discussion body", createdAt: new Date("2026-09-12T00:00:00Z"), author: { name: "Jisoo" }, _count: { comments: 4 } };
+}
+
+function release(number: number) {
+  return { id: `release-${number}`, number, title: `Release ${number}`, description: `Description ${number}`, createdAt: new Date(`2026-09-${String(number).padStart(2, "0")}T00:00:00Z`), publishedBy: { name: "Owner" }, _count: { revisions: number } };
+}
+
 function project(withRelease = false) {
   return {
     id: "project", slug: "demo", title: "Demo", description: "A project", license: "MIT", coverUrl: "cover.png", ownerId: "owner", isPublic: true, owner: { name: "Owner" },
-    revisions: [],
+    revisions: [] as ReturnType<typeof revision>[],
     releases: withRelease ? [{ id: "release-3", number: 3, title: "Navigation rethink", description: "A focused change.", createdAt: new Date("2026-09-24T00:00:00Z"), publishedBy: { name: "Owner" }, _count: { revisions: 3 } }] : [],
     discussions: [
       { id: "new-discussion", title: "Mobile navigation", body: "Discussion body must stay private to the detail view", createdAt: new Date("2026-09-12T00:00:00Z"), author: { name: "Jisoo" }, _count: { comments: 4 } },
@@ -79,7 +98,7 @@ function project(withRelease = false) {
     ],
     issues: [{
       id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
-      author: { name: "Reporter" }, revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, comments: [],
+      author: { name: "Reporter" }, revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, comments: [], _count: { comments: 0 },
       proposals: [
         visibleProposal,
         { ...visibleProposal, id: "private-proposal", title: "Private proposal", changeNames: ["Secret change"], sourceRevision: { isPublished: true, project: { ownerId: "secret-owner", isPublic: false } } },
@@ -170,19 +189,33 @@ describe("Project issue proposal visibility", () => {
 });
 
 function mockProjectQueries(value: ReturnType<typeof project>) {
-  mocks.findRevisions.mockResolvedValue(value.revisions);
+  mocks.findRevisions.mockImplementation(async (args?: { orderBy?: { number?: string }; cursor?: { id: string }; skip?: number; take?: number }) => {
+    const rows = [...value.revisions].sort((a, b) => a.number - b.number);
+    if (args?.orderBy?.number === "desc") rows.reverse();
+    return cursorPage(rows, args);
+  });
   mocks.countRevisions.mockResolvedValue(value.revisions.length);
-  mocks.findReleases.mockResolvedValue(value.releases);
-  mocks.findDiscussions.mockResolvedValue(value.discussions);
+  mocks.findReleases.mockImplementation(async (args?: { cursor?: { id: string }; skip?: number; take?: number }) => cursorPage([...value.releases].sort((a, b) => b.number - a.number), args));
+  mocks.findDiscussions.mockImplementation(async (args?: { cursor?: { id: string }; skip?: number; take?: number }) => cursorPage([...value.discussions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id)), args));
   mocks.findForks.mockResolvedValue(value.forks);
-  mocks.findIssues.mockImplementation(async (args?: { select?: unknown }) =>
-    args?.select
-      ? value.issues.filter((issue) => issue.status === "OPEN" && issue.kind === "DESIGN_REQUEST").slice(0, 3).map(({ id, title, author }) => ({ id, title, author }))
-      : value.issues);
+  mocks.findIssues.mockImplementation(async (args?: { where?: { status?: string; kind?: string }; select?: { _count?: unknown }; cursor?: { id: string }; skip?: number; take?: number }) => {
+    let rows = value.issues.filter((row) => (!args?.where?.status || row.status === args.where.status) && (!args?.where?.kind || row.kind === args.where.kind));
+    rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
+    rows = cursorPage(rows, args);
+    return args?.select?._count
+      ? rows.map(({ id, title, kind, status, createdAt, author, _count }) => ({ id, title, kind, status, createdAt, author, _count }))
+      : args?.select ? rows.slice(0, 3).map(({ id, title, author }) => ({ id, title, author })) : rows;
+  });
   mocks.countIssues.mockResolvedValue(value.issues.filter((issue) => issue.status === "OPEN" && issue.kind !== "DESIGN_REQUEST").length);
 }
 
-async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0, view: Parameters<typeof ProjectPage>[0]["view"] = "overview") {
+function cursorPage<T extends { id: string }>(rows: T[], args?: { cursor?: { id: string }; skip?: number; take?: number }) {
+  const cursorIndex = args?.cursor ? rows.findIndex((row) => row.id === args.cursor?.id) : -1;
+  const start = cursorIndex < 0 ? 0 : cursorIndex + (args?.skip ?? 0);
+  return rows.slice(start, args?.take === undefined ? undefined : start + args.take);
+}
+
+async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0, view: Parameters<typeof ProjectPage>[0]["view"] = "overview", searchParams: Awaited<Parameters<typeof ProjectPage>[0]["searchParams"]> = {}) {
   vi.clearAllMocks();
   mocks.findProject.mockResolvedValue(value);
   mockProjectQueries(value);
@@ -194,7 +227,7 @@ async function renderProjectPage(session: { user: { id: string } } | null, value
   mocks.attribution.mockResolvedValue([]);
   mocks.findProposal.mockResolvedValue(null);
   mocks.readBundle.mockResolvedValue(null);
-  const content = await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve({}), view });
+  const content = await ProjectPage({ params: Promise.resolve({ slug: "demo" }), searchParams: Promise.resolve(searchParams), view });
   return renderToStaticMarkup(await ProjectLayout({ params: Promise.resolve({ slug: "demo" }), children: content }));
 }
 
@@ -307,9 +340,18 @@ describe("Project view query contracts", () => {
     }
   });
 
-  it("issues view reads the full issue collection with nested comments and proposals", async () => {
+  it("issues view applies status and a bounded comment-count-only query", async () => {
     await renderProjectPage({ user: { id: "viewer" } }, project(), 0, 0, "issues");
-    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ comments: expect.anything(), proposals: expect.anything() }) }));
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({
+      where: { projectId: "project", status: "OPEN" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 25,
+      select: expect.objectContaining({ _count: { select: { comments: true } } }),
+    }));
+    const issueQuery = mocks.findIssues.mock.calls[0][0];
+    expect(issueQuery).not.toHaveProperty("include");
+    expect(issueQuery.select).not.toHaveProperty("comments");
+    expect(issueQuery.select).not.toHaveProperty("proposals");
     expect(mocks.findRevisions).not.toHaveBeenCalled();
     expect(mocks.findReleases).not.toHaveBeenCalled();
     expect(mocks.findDiscussions).not.toHaveBeenCalled();
@@ -318,19 +360,90 @@ describe("Project view query contracts", () => {
 
   it("releases, discussions, and revisions tabs read only their own collection", async () => {
     await renderProjectPage({ user: { id: "viewer" } }, project(true), 0, 0, "releases");
-    expect(mocks.findReleases).toHaveBeenCalled();
+    expect(mocks.findReleases).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { number: "desc" }, take: 25 }));
     expect(mocks.findIssues).not.toHaveBeenCalled();
     expect(mocks.findDiscussions).not.toHaveBeenCalled();
 
     await renderProjectPage({ user: { id: "viewer" } }, project(), 0, 0, "discussions");
-    expect(mocks.findDiscussions).toHaveBeenCalled();
+    expect(mocks.findDiscussions).toHaveBeenCalledWith(expect.objectContaining({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 25 }));
     expect(mocks.findReleases).not.toHaveBeenCalled();
     expect(mocks.findIssues).not.toHaveBeenCalled();
 
     await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions");
-    expect(mocks.findRevisions).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { number: "asc" } }));
+    expect(mocks.findRevisions).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { number: "asc" }, take: 25 }));
+    expect(mocks.findRevisions).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { number: "desc" }, take: 1, select: expect.objectContaining({ sourceKey: true, previews: expect.anything() }) }));
     expect(mocks.findIssues).not.toHaveBeenCalled();
     expect(mocks.findReleases).not.toHaveBeenCalled();
+  });
+});
+
+describe("Project tab pagination", () => {
+  it.each(["revisions", "releases", "issues", "discussions"] as const)("paginates %s in stable cursor order through the last page", async (view) => {
+    const value = project();
+    const numbered = [1, 2, 3, 4, 5];
+    const ascendingIds = numbered.map((number) => `${view === "issues" ? "issue" : view === "discussions" ? "discussion" : view === "releases" ? "release" : "revision"}-${number}`);
+    if (view === "revisions") value.revisions = numbered.map(revision);
+    if (view === "releases") value.releases = numbered.map(release);
+    if (view === "discussions") value.discussions = numbered.map((number) => discussion(`discussion-${number}`));
+    if (view === "issues") value.issues = numbered.map((number) => ({ ...value.issues[0], id: `issue-${number}`, title: `Issue issue-${number}`, createdAt: new Date("2026-09-12T00:00:00Z") }));
+    const pages = view === "revisions" ? [ascendingIds.slice(0, 2), ascendingIds.slice(2, 4), ascendingIds.slice(4)] : [ascendingIds.slice().reverse().slice(0, 2), ascendingIds.slice().reverse().slice(2, 4), ascendingIds.slice().reverse().slice(4)];
+    const render = (cursor?: string) => renderProjectPage({ user: { id: view === "revisions" ? "owner" : "viewer" } }, value, 0, 0, view, { pageSize: "2", ...(cursor ? { cursor } : {}) });
+    const rowLabel = (id: string) => view === "revisions" ? id.replace("revision-", "Revision ") : view === "releases" ? `Release ${id.replace("release-", "")}` : view === "issues" ? `Issue ${id}` : `Discussion ${id}`;
+    const expectVisible = (markup: string, ids: string[]) => view === "revisions"
+      ? expect(mocks.revisionItem.mock.calls.map(([props]) => (props as { href: string }).href)).toEqual(ids.map((id) => `/projects/demo/revisions/${id.replace("revision-", "")}`))
+      : ids.forEach((id) => expect(markup).toContain(rowLabel(id)));
+
+    const firstPage = await render();
+    expectVisible(firstPage, pages[0]);
+    if (view === "revisions") expect(mocks.revisionItem.mock.calls.map(([props]) => (props as { href: string }).href)).not.toContain(`/projects/demo/revisions/${pages[1][0].replace("revision-", "")}`);
+    else expect(firstPage).not.toContain(rowLabel(pages[1][0]));
+    expect(firstPage).toContain(`cursor=${pages[0][1]}`);
+    expect(firstPage).not.toContain("First page");
+    if (view === "releases") expect(firstPage).toContain(`href="/projects/demo/releases/${pages[0][0].replace("release-", "")}"`);
+    if (view === "discussions") expect(firstPage).toContain(`href="/projects/demo/discussions/${pages[0][0]}"`);
+    if (view === "issues") expect(firstPage).toContain(`href="/projects/demo/issues/${pages[0][0]}"`);
+
+    const secondPage = await render(pages[0][1]);
+    expectVisible(secondPage, pages[1]);
+    expect(secondPage).toContain("First page");
+    expect(secondPage).toContain(`cursor=${pages[1][1]}`);
+
+    const lastPage = await render(pages[1][1]);
+    expectVisible(lastPage, pages[2]);
+    expect(lastPage).not.toContain("Next page");
+    expect(lastPage).toContain("First page");
+  });
+
+  it("applies the closed issue filter in SQL and preserves it in detail and next-page links", async () => {
+    const value = project();
+    value.issues = [1, 2, 3].map((number) => ({ ...value.issues[0], id: `closed-${number}`, title: `Issue closed-${number}`, status: "CLOSED" }));
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, value, 0, 0, "issues", { issueStatus: "closed", pageSize: "2" });
+    expect(markup).toContain("Issue closed-3");
+    expect(markup).toContain('href="/projects/demo/issues/closed-3?issueStatus=closed"');
+    expect(markup).toContain('href="/projects/demo/issues?pageSize=2&amp;cursor=closed-2&amp;issueStatus=closed"');
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({ where: { projectId: "project", status: "CLOSED" } }));
+  });
+
+  it("caps each tab query at the shared maximum page size", async () => {
+    for (const view of ["revisions", "releases", "issues", "discussions"] as const) {
+      await renderProjectPage({ user: { id: "owner" } }, project(true), 0, 0, view, { pageSize: "1000" });
+      const calls = view === "revisions" ? mocks.findRevisions.mock.calls.filter(([args]) => args.orderBy?.number === "asc")
+        : view === "releases" ? mocks.findReleases.mock.calls
+        : view === "issues" ? mocks.findIssues.mock.calls
+        : mocks.findDiscussions.mock.calls;
+      expect(calls[0][0].take).toBe(101);
+    }
+  });
+
+  it("keeps latest revision source mapping separate from the visible history page", async () => {
+    const value = project();
+    value.revisions = [1, 2, 3, 4, 5].map(revision);
+    await renderProjectPage({ user: { id: "owner" } }, value, 0, 0, "revisions", { pageSize: "2" });
+    const historyQuery = mocks.findRevisions.mock.calls.find(([args]) => args.orderBy?.number === "asc")?.[0];
+    const latestQuery = mocks.findRevisions.mock.calls.find(([args]) => args.orderBy?.number === "desc")?.[0];
+    expect(historyQuery).toEqual(expect.objectContaining({ take: 3, select: expect.not.objectContaining({ sourceKey: true, previews: expect.anything(), appliedProposal: expect.anything() }) }));
+    expect(latestQuery).toEqual(expect.objectContaining({ take: 1, select: expect.objectContaining({ sourceKey: true, previews: expect.anything(), appliedProposal: expect.anything() }) }));
+    expect(mocks.readBundle).toHaveBeenCalledWith("source-5");
   });
 });
 

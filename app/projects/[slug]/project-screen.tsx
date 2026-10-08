@@ -10,7 +10,8 @@ import { FormColumn, PageGrid } from "@/src/components/ui/layout";
 import { RouteNav } from "@/src/components/ui/section-nav";
 export type ProjectView = "overview" | "revisions" | "releases" | "discussions" | "issues" | "new-issue" | "proposals" | "contributors" | "forks" | "settings";
 import { listProjectAttribution, type AttributionPerson, type AttributionRole } from "@/src/lib/attribution";
-import { changeSummary, countVisibleProposals, findVisibleProposal, isVisible, listVisibleProposalSummaries } from "@/src/lib/proposal-handlers";
+import { pageCursor, parsePageSize } from "@/src/lib/pagination";
+import { changeSummary, countVisibleProposals, findVisibleProposal, listVisibleProposalSummaries } from "@/src/lib/proposal-handlers";
 import { publicBundleFiles, readRevisionBundle } from "@/src/lib/revision-bundle";
 import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
@@ -24,9 +25,12 @@ import ProposalList, { type ProposalListItem } from "./proposal-list";
 import RevisionPublishForm from "./revision-publish-form";
 import styles from "./project.module.css";
 
-export default async function ProjectScreen({ params, searchParams, view = "overview" }: { view?: ProjectView; params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; issueStatus?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string }> }) {
+export default async function ProjectScreen({ params, searchParams, view = "overview" }: { view?: ProjectView; params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; issueStatus?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string; pageSize?: string; cursor?: string }> }) {
   const { slug } = await params;
   const query = await searchParams;
+  const pageSize = parsePageSize(query.pageSize ?? null);
+  const cursor = pageCursor(query.cursor ?? null);
+  const issueStatus = query.issueStatus === "closed" ? "CLOSED" : "OPEN";
   const requestedContributionBase = Number(query.baseRevision);
   const contributionReturn = query.contributionTarget?.match(/^[a-z0-9]+(?:-[a-z0-9]+)*$/i) && Number.isInteger(requestedContributionBase) && requestedContributionBase > 0
     ? { targetSlug: query.contributionTarget, baseRevision: requestedContributionBase, relatedIssueId: query.relatedIssue?.slice(0, 200) }
@@ -46,27 +50,31 @@ export default async function ProjectScreen({ params, searchParams, view = "over
 
   // Each view reads only its own collection, so Overview never loads the full
   // revision/release history or nested issue comments, proposals, and discussions.
-  const needsRevisionHistory = view === "revisions" || view === "new-issue";
-  const needsLatestRevision = view === "overview" || view === "proposals";
+  const needsLatestRevision = view === "overview" || view === "proposals" || view === "revisions";
   const revisionSelect = { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } }, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } satisfies Prisma.RevisionSelect;
+  const revisionHistorySelect = { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } } } satisfies Prisma.RevisionSelect;
   const releaseSelect = { id: true, number: true, title: true, description: true, createdAt: true, publishedBy: { select: { name: true } }, _count: { select: { revisions: true } } } satisfies Prisma.ReleaseSelect;
-  const issueInclude = { author: { select: { name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true } } } }, proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], where: { project: session?.user.id ? { slug, OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { slug, isPublic: true }, baseRevision: { project: { slug }, isPublished: true }, sourceRevision: { isPublished: true, project: session?.user.id ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true } } }, select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } } } satisfies Prisma.IssueInclude;
+  const issueSelect = { id: true, title: true, kind: true, status: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.IssueSelect;
   const discussionSelect = { id: true, title: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.DiscussionSelect;
   const forkSelect = { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } satisfies Prisma.ProjectSelect;
-  const [revisions, releases, issues, discussions, forks, openIssueCount, revisionCount, openDesignRequests] = await Promise.all([
-    needsRevisionHistory
-      ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, select: revisionSelect })
-      : needsLatestRevision
-        ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "desc" }, take: 1, select: revisionSelect })
+  const cursorQuery: { cursor?: { id: string }; skip?: number } = cursor ? { cursor: { id: cursor }, skip: 1 } : {};
+  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forks, openIssueCount, revisionCount, openDesignRequests] = await Promise.all([
+    view === "revisions"
+      ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, ...cursorQuery, take: pageSize + 1, select: revisionHistorySelect })
+      : view === "new-issue"
+        ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, select: revisionSelect })
         : Promise.resolve([]),
+    needsLatestRevision
+      ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "desc" }, take: 1, select: revisionSelect })
+      : Promise.resolve([]),
     view === "releases"
-      ? prisma.release.findMany({ where: { projectId: base.id }, orderBy: { number: "desc" }, select: releaseSelect })
+      ? prisma.release.findMany({ where: { projectId: base.id }, orderBy: { number: "desc" }, ...cursorQuery, take: pageSize + 1, select: releaseSelect })
       : Promise.resolve([]),
     view === "issues"
-      ? prisma.issue.findMany({ where: { projectId: base.id }, orderBy: { createdAt: "desc" }, include: issueInclude })
+      ? prisma.issue.findMany({ where: { projectId: base.id, status: issueStatus }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...cursorQuery, take: pageSize + 1, select: issueSelect })
       : Promise.resolve([]),
     view === "discussions"
-      ? prisma.discussion.findMany({ where: { projectId: base.id }, orderBy: { createdAt: "desc" }, select: discussionSelect })
+      ? prisma.discussion.findMany({ where: { projectId: base.id }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...cursorQuery, take: pageSize + 1, select: discussionSelect })
       : Promise.resolve([]),
     view === "forks"
       ? prisma.project.findMany({ where: { forkedFromProjectId: base.id, isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: forkSelect })
@@ -81,27 +89,30 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "DESIGN_REQUEST" }, orderBy: { createdAt: "desc" }, take: 3, select: { id: true, title: true, author: { select: { name: true } } } })
       : Promise.resolve([]),
   ]);
+  const revisions = view === "new-issue" ? revisionRows : revisionRows.slice(0, pageSize);
+  const releases = releaseRows.slice(0, pageSize);
+  const issues = issueRows.slice(0, pageSize);
+  const discussions = discussionRows.slice(0, pageSize);
+  const revisionNextCursor = view === "revisions" && revisionRows.length > pageSize ? revisions.at(-1)?.id ?? null : null;
+  const releaseNextCursor = view === "releases" && releaseRows.length > pageSize ? releases.at(-1)?.id ?? null : null;
+  const issueNextCursor = view === "issues" && issueRows.length > pageSize ? issues.at(-1)?.id ?? null : null;
+  const discussionNextCursor = view === "discussions" && discussionRows.length > pageSize ? discussions.at(-1)?.id ?? null : null;
   const project = { ...base, revisions, releases, issues, discussions, forks };
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
-  const latestRevision = project.revisions.at(-1);
+  const latestRevision = latestRevisionRows[0] ?? project.revisions.at(-1);
+  const needsAttribution = view === "overview" || view === "contributors";
   const [proposalPage, activeProposalPage, activeProposalCount, attribution, latestProposal] = await Promise.all([
     view === "proposals" ? listVisibleProposalSummaries(project.id, session?.user.id, { status: proposalFilter, take: 20 }) : Promise.resolve({ items: [], nextCursor: null }),
     view === "overview" ? listVisibleProposalSummaries(project.id, session?.user.id, { status: "open", take: 3 }) : Promise.resolve({ items: [], nextCursor: null }),
-    countVisibleProposals(project.id, session?.user.id, "open"),
-    listProjectAttribution(project.id, session?.user.id),
+    view === "overview" ? countVisibleProposals(project.id, session?.user.id, "open") : Promise.resolve(0),
+    needsAttribution ? listProjectAttribution(project.id, session?.user.id) : Promise.resolve([]),
     view === "overview" && latestRevision?.appliedProposal ? findVisibleProposal(latestRevision.appliedProposal.id, session?.user.id) : Promise.resolve(null),
   ]);
   const activeProposals = activeProposalPage.items;
   const proposalRows: ProposalListItem[] = proposalPage.items;
   const latestFiles = view === "revisions" ? publicBundleFiles(await readRevisionBundle(latestRevision?.sourceKey)) : [];
   const latestPreview = latestRevision?.previews.find((preview) => preview.mimeType !== "text/html");
-  const visibleIssues = project.issues.map((issue) => ({
-    ...issue,
-    proposals: issue.proposals
-      .filter((proposal) => isVisible(proposal, session?.user.id))
-      .map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })),
-  }));
   const contributors = attribution.length;
   if (view === "settings" && session?.user.id !== project.ownerId) notFound();
   return <>
@@ -156,6 +167,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     {view === "revisions" && <section aria-labelledby="revision-history" className={styles.section} id="revisions">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>History</p><h2 id="revision-history">Revisions</h2></div><span>Commit history</span></header>
       {project.revisions.length ? <ol className={styles.revisionList}>{project.revisions.map((revision) => <RevisionItem capability={<CapabilityBadge adapterConfidence={revision.adapterConfidence} adapterId={revision.adapterId} adapterMaturity={revision.adapterMaturity} adapterVersion={revision.adapterVersion} mode={revision.capabilityMode} unitCount={revision.capabilityUnitCount} />} changeDescription={revision.changeDescription} createdAt={revision.createdAt} href={`/projects/${project.slug}/revisions/${revision.number}`} id={revision.id} key={revision.id} number={revision.number} publisher={revision.publishedBy?.name} tags={revision.tags} title={revision.title} tool={revision.tool ? `${revision.tool}${revision.toolVersion ? ` ${revision.toolVersion}` : ""}` : null} />)}</ol> : <p className={styles.muted}>No revisions published yet.</p>}
+      <ProjectListPagination cursor={cursor} label="Revision" nextCursor={revisionNextCursor} pageSize={pageSize} slug={project.slug} view="revisions" />
     </section>}
 
     {view === "releases" && <section aria-labelledby="releases-heading" className={styles.section} id="releases">
@@ -166,6 +178,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
           <span>{release._count.revisions} {release._count.revisions === 1 ? "revision" : "revisions"} <span aria-hidden="true">·</span> <time dateTime={release.createdAt.toISOString()}>{release.createdAt.toLocaleDateString("en-US", { dateStyle: "medium" })}</time></span>
         </Link>
       </li>)}</ul> : <p className={styles.muted}>No releases yet.</p>}
+      <ProjectListPagination cursor={cursor} label="Release" nextCursor={releaseNextCursor} pageSize={pageSize} slug={project.slug} view="releases" />
     </section>}
 
     {view === "discussions" && <section aria-labelledby="discussions-heading" className={`${styles.section} ${styles.discussionSection}`} id="discussions">
@@ -182,12 +195,14 @@ export default async function ProjectScreen({ params, searchParams, view = "over
         </Link>
       </li>)}</ul> : <p className={styles.muted}>No discussions yet.</p>}
       <p className={styles.discussionSort}>Newest discussions first</p>
+      <ProjectListPagination cursor={cursor} label="Discussion" nextCursor={discussionNextCursor} pageSize={pageSize} slug={project.slug} view="discussions" />
     </section>}
 
     {view === "issues" && <section aria-labelledby="issues-heading" className={styles.section} id="issues">
       <header className={styles.sectionHeader}><h2 id="issues-heading">Issues</h2>{project.isPublic && <Link className={styles.secondaryLink} href={`/projects/${slug}/issues/new`}>New issue</Link>}</header>
       <RouteNav currentHref={`/projects/${slug}/issues?issueStatus=${query.issueStatus === "closed" ? "closed" : "open"}`} items={[{ href: `/projects/${slug}/issues?issueStatus=open`, label: "Open" }, { href: `/projects/${slug}/issues?issueStatus=closed`, label: "Closed" }]} label="Issue status" />
-      {visibleIssues.filter((issue) => issue.status === (query.issueStatus === "closed" ? "CLOSED" : "OPEN")).length ? <ul className={styles.discussionList}>{visibleIssues.filter((issue) => issue.status === (query.issueStatus === "closed" ? "CLOSED" : "OPEN")).map((issue) => <li id={`issue-${issue.id}`} key={issue.id}><Link className={styles.discussionRowLink} href={`/projects/${slug}/issues/${issue.id}${query.issueStatus === "closed" ? "?issueStatus=closed" : ""}`}><strong>{issue.title}</strong><span>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.status === "OPEN" ? "Open" : "Closed"} · Opened by {issue.author.name} · {issue.comments.length} comments</span></Link></li>)}</ul> : <p className={styles.muted}>No {query.issueStatus === "closed" ? "closed" : "open"} issues.</p>}
+      {project.issues.length ? <ul className={styles.discussionList}>{project.issues.map((issue) => <li id={`issue-${issue.id}`} key={issue.id}><Link className={styles.discussionRowLink} href={`/projects/${slug}/issues/${issue.id}${query.issueStatus === "closed" ? "?issueStatus=closed" : ""}`}><strong>{issue.title}</strong><span>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.status === "OPEN" ? "Open" : "Closed"} · Opened by {issue.author.name} · {issue._count.comments} comments</span></Link></li>)}</ul> : <p className={styles.muted}>No {query.issueStatus === "closed" ? "closed" : "open"} issues.</p>}
+      <ProjectListPagination cursor={cursor} issueStatus={query.issueStatus === "closed" ? "closed" : "open"} label="Issue" nextCursor={issueNextCursor} pageSize={pageSize} slug={project.slug} view="issues" />
     </section>}
     {view === "new-issue" && <section className={styles.section}><h2>New issue</h2><Link className={styles.secondaryLink} href={`/projects/${slug}/issues`}>Back to issues</Link><IssueBoard canManage={session?.user.id === project.ownerId} issues={[]} mode="create" revisions={project.revisions} signedIn slug={slug} /></section>}
     {view === "proposals" && <section aria-labelledby="proposals-heading" className={styles.section} id="proposals">
@@ -208,6 +223,20 @@ export default async function ProjectScreen({ params, searchParams, view = "over
 
 function formatDate(value: Date) {
   return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function ProjectListPagination({ slug, view, label, pageSize, cursor, nextCursor, issueStatus }: { slug: string; view: "revisions" | "releases" | "issues" | "discussions"; label: string; pageSize: number; cursor?: string; nextCursor: string | null; issueStatus?: "open" | "closed" }) {
+  if (!cursor && !nextCursor) return null;
+  const href = (next: string | null) => {
+    const params = new URLSearchParams({ pageSize: String(pageSize) });
+    if (next) params.set("cursor", next);
+    if (view === "issues" && issueStatus) params.set("issueStatus", issueStatus);
+    return `/projects/${slug}/${view}?${params.toString()}`;
+  };
+  return <nav aria-label={`${label} pages`} className={styles.pagePagination}>
+    {cursor && <Link className={styles.secondaryLink} href={href(null)}>First page</Link>}
+    {nextCursor && <Link className={styles.secondaryLink} href={href(nextCursor)}>Next page</Link>}
+  </nav>;
 }
 
 function roleLabel(role: AttributionRole) {
