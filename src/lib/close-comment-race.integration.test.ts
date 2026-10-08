@@ -68,13 +68,22 @@ async function waitForBlockedTransactions(tx: Prisma.TransactionClient, holderPi
   const deadline = Date.now() + 3_000;
   while (Date.now() < deadline) {
     await tx.$queryRaw<Array<{ cleared: string }>>`SELECT pg_stat_clear_snapshot()::text AS cleared`;
-    const [result] = await tx.$queryRaw<Array<{ count: number; direct: number }>>`
-      SELECT count(*)::int AS count,
-        count(*) FILTER (WHERE ${holderPid} = ANY(pg_blocking_pids(pid)))::int AS direct
-      FROM pg_stat_activity
-      WHERE query = ${lockQuery} AND wait_event_type = 'Lock' AND cardinality(pg_blocking_pids(pid)) > 0
+    const [result] = await tx.$queryRaw<Array<{ count: number }>>`
+      WITH RECURSIVE lock_chain(pid) AS (
+        SELECT ${holderPid}::int
+        UNION
+        SELECT waiter.pid
+        FROM pg_stat_activity AS waiter
+        JOIN lock_chain AS blocker ON blocker.pid = ANY(pg_blocking_pids(waiter.pid))
+      )
+      SELECT count(DISTINCT activity.pid)::int AS count
+      FROM lock_chain
+      JOIN pg_stat_activity AS activity USING (pid)
+      WHERE activity.pid <> ${holderPid}
+        AND activity.query = ${lockQuery}
+        AND activity.wait_event_type = 'Lock'
     `;
-    if (result.count >= count && result.direct > 0) return;
+    if (result.count === count) return;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
   throw new Error(`Expected ${count} ${table} transaction(s) waiting on PostgreSQL row lock`);
@@ -166,4 +175,3 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
 // ponytail: no row cleanup; the Revision immutability trigger rejects deletes
 // and CI uses an ephemeral database. Fixture ids are UUID-suffixed per test.
-
