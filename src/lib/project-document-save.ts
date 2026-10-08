@@ -17,6 +17,7 @@ export async function validateDocumentImages(tx: Prisma.TransactionClient, docum
     } catch { /* The renderer already rejects invalid image schemes. */ }
   }
   for (const key of keys) {
+    if (await tx.documentImageDeletion.findUnique({ where: { key }, select: { key: true } })) return false;
     if (!await exists(key)) return false;
   }
   return true;

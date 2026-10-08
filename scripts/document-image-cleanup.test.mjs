@@ -8,6 +8,7 @@ beforeEach(() => {
   tx = { $queryRaw: vi.fn(), $executeRawUnsafe: vi.fn() };
   for (const model of ["project", "preview", "revision", "change", "revisionRightsItem"]) tx[model] = { findFirst: vi.fn().mockResolvedValue(null) };
   tx.project.findMany = vi.fn().mockResolvedValue([]);
+  tx.documentImageDeletion = { upsert: vi.fn().mockResolvedValue({ key }) };
   prisma = { $transaction: vi.fn((fn) => fn(tx)) };
   client = { send: vi.fn((command) => {
     if (command.constructor.name === "ListObjectsV2Command") return Promise.resolve({ Contents: [{ Key: key, LastModified: old }] });
@@ -26,6 +27,7 @@ it("dry-run rechecks references and object age without deleting", async () => {
   expect(client.send.mock.calls.map(([c]) => c.constructor.name)).toEqual(["ListObjectsV2Command", "HeadObjectCommand"]);
   expect(tx.$queryRaw).toHaveBeenCalledOnce();
   expect(tx.$executeRawUnsafe).toHaveBeenCalledOnce();
+  expect(tx.documentImageDeletion.upsert).not.toHaveBeenCalled();
 });
 it.each(["project", "preview", "revision", "change", "revisionRightsItem"])("retains objects referenced by %s", async (model) => {
   tx[model].findFirst.mockResolvedValue({ id: "reference" });

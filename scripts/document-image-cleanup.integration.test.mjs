@@ -31,6 +31,7 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => {
   if (enabled) {
+    if (project) await db.documentImageDeletion.deleteMany({ where: { key: { startsWith: `project-documents/${project.id}/` } } });
     if (user) await db.user.delete({ where: { id: user.id } });
     const page = await client.send(new ListObjectsV2Command({ Bucket: bucket }));
     for (const object of page.Contents ?? []) await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: object.Key }));
@@ -46,6 +47,21 @@ it.skipIf(!enabled)("dry-run preserves actual objects; apply removes abandoned/r
   for (const name of ["saved", "shared"]) expect((await client.send(new HeadObjectCommand({ Bucket: bucket, Key: keys[name] }))).ContentLength).toBe(8);
   await db.project.update({ where: { id: project.id }, data: { isPublic: true } });
   expect(await cleanup({ apply: true })).toMatchObject({ deleted: 0, errors: 0 });
+}, 30000);
+it.skipIf(!enabled)("retains deletion intent across an S3 failure so a delayed save cannot adopt the pending object", async () => {
+  const key = `project-documents/${project.id}/${randomUUID()}.png`;
+  await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: Buffer.from([1]) }));
+  const failingClient = { send(command) {
+    if (command instanceof DeleteObjectCommand && command.input.Key === key) throw new Error("Lost deletion response");
+    return client.send(command);
+  } };
+  expect(await cleanup({ client: failingClient, apply: true })).toMatchObject({ errors: 1 });
+  expect(await db.documentImageDeletion.findUnique({ where: { key } })).not.toBeNull();
+  expect((await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))).ContentLength).toBe(1);
+  let checked = false;
+  expect(await db.$transaction((tx) => validateDocumentImages(tx, image(key), async () => { checked = true; return true; }))).toBe(false);
+  expect(checked).toBe(false);
+  expect(await cleanup({ apply: true })).toMatchObject({ deleted: 1, errors: 0 });
 }, 30000);
 it.skipIf(!enabled)("a save that commits first is preserved by the cleanup recheck", async () => {
   const key = `project-documents/${project.id}/${randomUUID()}.png`;

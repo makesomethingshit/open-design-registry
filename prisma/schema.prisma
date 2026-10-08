@@ -120,6 +120,12 @@ model Project {
   @@index([forkedFromRevisionId])
 }
 
+// Durable deletion intent protects delayed saves when S3's response is lost.
+model DocumentImageDeletion {
+  key      String   @id
+  markedAt DateTime @default(now())
+}
+
 model ProjectStar {
   userId    String
   projectId String

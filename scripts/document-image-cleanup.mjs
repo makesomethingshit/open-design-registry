@@ -60,18 +60,27 @@ export async function cleanupDocumentImages({ prisma, client, bucket, endpoint, 
       try {
         const result = await prisma.$transaction(async (tx) => {
           // Serializes cleanup with document saves. The table locks also stop
-          // other asset-reference writers until recheck and S3 deletion finish.
+          // other asset-reference writers until recheck and deletion intent commit.
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(135, 1)::text`;
           await tx.$executeRawUnsafe('LOCK TABLE "Project", "Preview", "Revision", "Change", "RevisionRightsItem" IN SHARE ROW EXCLUSIVE MODE');
           if (await hasReference(tx, key, { bucket, endpoint, region })) return "retained";
           const current = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
           if (!current.LastModified || current.LastModified.getTime() >= cutoff) return "retained";
           if (!apply) return "candidate";
-          await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-          return "deleted";
+          await tx.documentImageDeletion.upsert({ where: { key }, create: { key }, update: {} });
+          return "marked";
         }, { maxWait: 10000, timeout: 20000 });
         if (result === "retained") summary.retained++;
-        else { summary.candidates++; if (result === "deleted") summary.deleted++; log(JSON.stringify({ action: result, key })); }
+        else {
+          summary.candidates++;
+          if (result === "marked") {
+            // A timeout or lost response cannot make the key usable again:
+            // the committed marker rejects future document saves before HEAD.
+            await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+            summary.deleted++;
+          }
+          log(JSON.stringify({ action: result === "marked" ? "deleted" : result, key }));
+        }
       } catch (error) {
         if (error?.$metadata?.httpStatusCode === 404) { summary.retained++; continue; }
         summary.errors++;
