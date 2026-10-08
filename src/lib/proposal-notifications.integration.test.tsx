@@ -10,6 +10,7 @@ vi.mock("./revision-bundle", () => ({ readRevisionBundle: vi.fn().mockResolvedVa
 if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 const { prisma } = await import("./prisma");
 const { createProjectProposal, reviewProposalChange, applyProposal, isVisible } = await import("./proposal-handlers");
+const { POST: createIssue } = await import("@/app/api/projects/[slug]/issues/route");
 const { GET } = await import("@/app/api/notifications/route");
 const { PATCH } = await import("@/app/api/notifications/[id]/route");
 const { default: NotificationsPage } = await import("@/app/notifications/page");
@@ -42,6 +43,24 @@ async function withNotificationFailure(projectId: string, run: () => Promise<voi
 
 databaseDescribe("Proposal lifecycle notifications in PostgreSQL", () => {
   afterAll(() => prisma.$disconnect());
+
+  it("rolls back issue creation on notification failure and allows the same request to retry", async () => {
+    const f = await fixture();
+    mocks.getSession.mockResolvedValue({ user: f.author });
+    const body = { title: "Issue notification rollback", body: "Retry after notification failure" };
+    const create = () => createIssue(request(body), { params: Promise.resolve({ slug: f.target.slug }) });
+
+    await withNotificationFailure(f.target.id, async () => { await expect(create()).rejects.toThrow("notification unavailable"); });
+    expect(await prisma.issue.count({ where: { projectId: f.target.id, title: body.title } })).toBe(0);
+
+    const response = await create();
+    expect(response.status).toBe(201);
+    const issue = await response.json();
+    expect(issue).toMatchObject({ title: body.title, author: { id: f.author.id } });
+    expect(await prisma.issue.count({ where: { projectId: f.target.id, title: body.title } })).toBe(1);
+    expect(await prisma.notification.count({ where: { issueId: issue.id } })).toBe(1);
+    expect(await prisma.notification.findFirstOrThrow({ where: { issueId: issue.id } })).toMatchObject({ recipientId: f.owner.id, actorId: f.author.id, type: "ISSUE_CREATED" });
+  });
 
   it("records one notification per mutation, serializes retries, and rolls back notification failures", async () => {
     const f = await fixture();

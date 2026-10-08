@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), findRevision: vi.fn(), findDiscussion: vi.fn(), createIssue: vi.fn(), createNotification: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findProject: vi.fn(), findRevision: vi.fn(), findDiscussion: vi.fn(), createIssue: vi.fn(), createNotification: vi.fn(), transaction: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findFirst: mocks.findRevision }, discussion: { findFirst: mocks.findDiscussion }, issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject }, revision: { findFirst: mocks.findRevision }, discussion: { findFirst: mocks.findDiscussion }, $transaction: mocks.transaction } }));
 
 const { POST } = await import("./route");
 
@@ -17,6 +17,7 @@ describe("issue creation route", () => {
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.findDiscussion.mockResolvedValue({ id: "discussion" });
     mocks.createIssue.mockResolvedValue({ id: "issue", title: "Broken component", body: "Details", kind: "ISSUE", author: { id: "reporter", name: "Reporter" }, revision: null });
+    mocks.transaction.mockImplementation(async (callback) => callback({ issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } as never));
   });
 
   it("requires authentication before creating an issue", async () => {
@@ -33,6 +34,14 @@ describe("issue creation route", () => {
     expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "ISSUE" }) }));
     expect(mocks.createIssue.mock.calls[0][0].data.sourceDiscussionId).toBeUndefined();
     expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "owner", actorId: "reporter", type: "ISSUE_CREATED", projectId: "project", issueId: "issue" } });
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates notification failures from the issue transaction", async () => {
+    mocks.createNotification.mockRejectedValueOnce(new Error("notification unavailable"));
+    await expect(POST(request({ title: "Broken component", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) })).rejects.toThrow("notification unavailable");
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
   });
 
   it("preserves provenance for a Discussion in the same project", async () => {
@@ -70,6 +79,8 @@ describe("issue creation route", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
     const response = await POST(request({ title: "Own issue", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 

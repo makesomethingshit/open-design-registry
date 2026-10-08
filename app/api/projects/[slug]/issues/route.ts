@@ -34,9 +34,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const discussion = await prisma.discussion.findFirst({ where: { id: sourceDiscussionId, projectId: project.id }, select: { id: true } });
     if (!discussion) return NextResponse.json({ error: "Discussion not found in this project" }, { status: 400 });
   }
-  const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, kind: parsed.data.kind, revisionId, sourceDiscussionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
-  if (project.ownerId !== session.user.id) {
-    await prisma.notification.create({ data: { recipientId: project.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: issue.id } });
-  }
+  const issue = await prisma.$transaction(async (tx) => {
+    const created = await tx.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, kind: parsed.data.kind, revisionId, sourceDiscussionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
+    if (project.ownerId !== session.user.id) {
+      await tx.notification.create({ data: { recipientId: project.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: created.id } });
+    }
+    return created;
+  });
   return NextResponse.json(issue, { status: 201 });
 }
