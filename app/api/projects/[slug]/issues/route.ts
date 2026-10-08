@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
+import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import { issueSchema } from "@/src/lib/project-validation";
 
 const notFound = () => NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -11,8 +12,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (!project) return notFound();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!project.isPublic && session?.user.id !== project.ownerId) return notFound();
-  const issues = await prisma.issue.findMany({ where: { projectId: project.id }, orderBy: { createdAt: "desc" }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } } } });
-  return NextResponse.json(issues);
+  const searchParams = new URL(request.url).searchParams;
+  const isPaginated = paginationRequested(searchParams);
+  const limit = parsePageSize(searchParams.get("limit") ?? searchParams.get("take") ?? searchParams.get("pageSize"));
+  const cursor = pageCursor(searchParams.get("cursor"));
+  const issues = await prisma.issue.findMany({
+    where: { projectId: project.id },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(isPaginated ? { cursor: cursor ? { id: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
+    include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } }, sourceDiscussion: { select: { id: true, title: true } }, comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } } },
+  });
+  const hasMore = issues.length > limit;
+  const page = issues.slice(0, limit);
+  if (!isPaginated) {
+    const response = NextResponse.json(page);
+    response.headers.set("X-Has-More", String(hasMore));
+    if (hasMore) response.headers.set("X-Next-Cursor", issues[limit - 1]?.id ?? "");
+    return response;
+  }
+  return NextResponse.json({ items: page, nextCursor: hasMore ? issues[limit - 1]?.id ?? null : null });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
