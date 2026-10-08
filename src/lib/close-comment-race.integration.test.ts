@@ -20,6 +20,55 @@ function request(body: unknown) {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (cause: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+async function withRowLock<T>(table: "Issue" | "Project", id: string, run: () => Promise<T>) {
+  const locked = deferred<void>();
+  const release = deferred<void>();
+  let lockError: unknown;
+  const holder = prisma.$transaction(async (tx) => {
+    if (table === "Issue") await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${id} FOR UPDATE`;
+    else await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${id} FOR UPDATE`;
+    locked.resolve(undefined);
+    await release.promise;
+  }).catch((cause) => {
+    lockError = cause;
+    locked.reject(cause);
+  });
+
+  try {
+    await locked.promise;
+    return await run();
+  } finally {
+    release.resolve(undefined);
+    await holder;
+    if (lockError) throw lockError;
+  }
+}
+
+async function waitForBlockedTransactions(table: "Issue" | "Project", count: number) {
+  // Synchronize on PostgreSQL's lock state; the deadline only bounds a failed barrier.
+  const lockQuery = table === "Issue"
+    ? 'SELECT id FROM "Issue" WHERE id = $1 FOR UPDATE'
+    : 'SELECT id, "ownerId", license, "isPublic" FROM "Project" WHERE id = $1 FOR UPDATE';
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const [result] = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT count(*)::int AS count
+      FROM pg_stat_activity
+      WHERE query = ${lockQuery} AND wait_event_type = 'Lock' AND cardinality(pg_blocking_pids(pid)) > 0
+    `;
+    if (result.count >= count) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`Expected ${count} ${table} transaction(s) waiting on PostgreSQL row lock`);
+}
+
 async function fixture() {
   const suffix = crypto.randomUUID();
   const owner = await prisma.user.create({ data: { id: `race-owner-${suffix}`, name: "Race owner", email: `race-owner-${suffix}@example.test` } });
@@ -43,13 +92,15 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("rejects an issue comment when close commits while the comment is in flight", async () => {
     const f = await fixture();
-    const pending = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${f.issue.id} FOR UPDATE`;
-      const late = postIssueComment(request({ body: "late" }), { id: f.issue.id });
-      await tx.issue.update({ where: { id: f.issue.id }, data: { status: "CLOSED", closedAt: new Date(), closedBy: f.owner.id } });
-      return late;
+    const { close, comment } = await withRowLock("Issue", f.issue.id, async () => {
+      const close = patchIssue(request({ status: "CLOSED" }), { id: f.issue.id });
+      await waitForBlockedTransactions("Issue", 1);
+      const comment = postIssueComment(request({ body: "late" }), { id: f.issue.id });
+      await waitForBlockedTransactions("Issue", 2);
+      return { close, comment };
     });
-    const response = await pending;
+    expect((await close).status).toBe(200);
+    const response = await comment;
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "Issue is closed" });
     expect(await prisma.issueComment.count({ where: { issueId: f.issue.id } })).toBe(0);
@@ -57,25 +108,30 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("keeps an in-flight issue comment and closes afterwards", async () => {
     const f = await fixture();
-    const pending = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${f.issue.id} FOR UPDATE`;
-      return postIssueComment(request({ body: "early" }), { id: f.issue.id });
+    const { comment, close } = await withRowLock("Issue", f.issue.id, async () => {
+      const comment = postIssueComment(request({ body: "early" }), { id: f.issue.id });
+      await waitForBlockedTransactions("Issue", 1);
+      const close = patchIssue(request({ status: "CLOSED" }), { id: f.issue.id });
+      await waitForBlockedTransactions("Issue", 2);
+      return { comment, close };
     });
-    expect((await pending).status).toBe(201);
+    expect((await comment).status).toBe(201);
     expect(await prisma.issueComment.count({ where: { issueId: f.issue.id } })).toBe(1);
-    expect((await patchIssue(request({ status: "CLOSED" }), { id: f.issue.id })).status).toBe(200);
+    expect((await close).status).toBe(200);
     expect(await prisma.issue.findUniqueOrThrow({ where: { id: f.issue.id }, select: { status: true } })).toMatchObject({ status: "CLOSED" });
   });
 
   it("rejects a proposal comment when close commits while the comment is in flight", async () => {
     const f = await fixture();
-    const pending = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${f.proposal.projectId} FOR UPDATE`;
-      const late = postProposalComment(request({ body: "late" }), { id: f.proposal.id });
-      await tx.proposal.update({ where: { id: f.proposal.id }, data: { status: "CLOSED" } });
-      return late;
+    const { close, comment } = await withRowLock("Project", f.proposal.projectId, async () => {
+      const close = closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id });
+      await waitForBlockedTransactions("Project", 1);
+      const comment = postProposalComment(request({ body: "late" }), { id: f.proposal.id });
+      await waitForBlockedTransactions("Project", 2);
+      return { close, comment };
     });
-    const response = await pending;
+    expect((await close).status).toBe(200);
+    const response = await comment;
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "Proposal is closed" });
     expect(await prisma.proposalComment.count({ where: { proposalId: f.proposal.id } })).toBe(0);
@@ -83,13 +139,16 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("keeps an in-flight proposal comment and closes afterwards", async () => {
     const f = await fixture();
-    const pending = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${f.proposal.projectId} FOR UPDATE`;
-      return postProposalComment(request({ body: "early" }), { id: f.proposal.id });
+    const { comment, close } = await withRowLock("Project", f.proposal.projectId, async () => {
+      const comment = postProposalComment(request({ body: "early" }), { id: f.proposal.id });
+      await waitForBlockedTransactions("Project", 1);
+      const close = closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id });
+      await waitForBlockedTransactions("Project", 2);
+      return { comment, close };
     });
-    expect((await pending).status).toBe(201);
+    expect((await comment).status).toBe(201);
     expect(await prisma.proposalComment.count({ where: { proposalId: f.proposal.id } })).toBe(1);
-    expect((await closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id })).status).toBe(200);
+    expect((await close).status).toBe(200);
     expect(await prisma.proposal.findUniqueOrThrow({ where: { id: f.proposal.id }, select: { status: true } })).toMatchObject({ status: "CLOSED" });
   });
 });
