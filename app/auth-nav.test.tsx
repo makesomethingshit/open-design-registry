@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ state: [] as unknown[], stateIndex: 0, pathname: "/stars", push: vi.fn(), refresh: vi.fn() }));
 
@@ -24,12 +24,34 @@ const { default: AuthNav } = await import("./auth-nav");
 
 function renderNav(pathname = "/stars", signedIn = true, role = "user", unread = 0) {
   mocks.pathname = pathname;
-  mocks.state = [signedIn ? { name: "Jun", role } : null, unread, true, false];
+  mocks.state = [signedIn ? { name: "Jun", role } : null, unread, true, false, ""];
   mocks.stateIndex = 0;
   return renderToStaticMarkup(AuthNav({ initialTheme: "light" }));
 }
 
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.unstubAllGlobals());
+
+function findSignOutButton(node: unknown): { props: { onClick: () => Promise<void> } } | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const button = findSignOutButton(child);
+      if (button) return button;
+    }
+    return null;
+  }
+  if (!node || typeof node !== "object" || !("props" in node)) return null;
+  const element = node as { type: unknown; props: { children?: unknown; onClick?: () => Promise<void> } };
+  if (element.type === "button" && element.props.children === "Sign out" && element.props.onClick) {
+    return element as { props: { onClick: () => Promise<void> } };
+  }
+  return findSignOutButton(element.props.children);
+}
+
+function renderCurrentNav() {
+  mocks.stateIndex = 0;
+  return AuthNav({ initialTheme: "light" });
+}
 
 describe("AuthNav Starred link", () => {
   it("groups personal actions in a closed Account panel and marks /stars current", () => {
@@ -62,6 +84,43 @@ describe("AuthNav account access", () => {
     expect(markup).toContain('aria-label="Notifications, 120 unread"');
     expect(markup).toContain('99+');
     expect(markup).not.toContain('Activity');
+  });
+
+  it.each([
+    ["a non-OK response", () => Promise.resolve({ ok: false })],
+    ["a network failure", () => Promise.reject(new Error("offline"))],
+  ])("keeps the user signed in and shows an Account error after %s", async (_failure, response) => {
+    const signedInUser = { name: "Jun", role: "user" };
+    mocks.state = [signedInUser, 0, true, true, ""];
+    const fetchMock = vi.fn(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const button = findSignOutButton(renderCurrentNav());
+    expect(button).not.toBeNull();
+    await button!.props.onClick();
+
+    expect(mocks.state[0]).toEqual(signedInUser);
+    expect(mocks.state[3]).toBe(true);
+    const markup = renderToStaticMarkup(renderCurrentNav());
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Could not sign out. Please try again.");
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("clears the user and navigates after a successful sign out", async () => {
+    mocks.state = [{ name: "Jun", role: "user" }, 0, true, true, ""];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+
+    const button = findSignOutButton(renderCurrentNav());
+    expect(button).not.toBeNull();
+    await button!.props.onClick();
+
+    expect(mocks.state[0]).toBeNull();
+    expect(mocks.state[3]).toBe(false);
+    expect(renderToStaticMarkup(renderCurrentNav())).toContain('href="/login"');
+    expect(mocks.push).toHaveBeenCalledWith("/");
+    expect(mocks.refresh).toHaveBeenCalledOnce();
   });
 
   it("keeps Reports admin-only and leaves visitors with Sign in", () => {
