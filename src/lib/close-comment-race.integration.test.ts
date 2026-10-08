@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
+import type { Prisma } from "@prisma/client";
 
 const mocks = vi.hoisted(() => ({ getSession: vi.fn() }));
 vi.mock("./auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
@@ -27,14 +28,21 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-async function withRowLock<T>(table: "Issue" | "Project", id: string, run: () => Promise<T>) {
-  const locked = deferred<void>();
+async function withRowLock<T>(table: "Issue" | "Project", id: string, run: (tx: Prisma.TransactionClient, holderPid: number, track: <R>(promise: Promise<R>) => Promise<R>) => Promise<T>) {
+  const locked = deferred<{ tx: Prisma.TransactionClient; pid: number }>();
   const release = deferred<void>();
+  const requests: Promise<unknown>[] = [];
   let lockError: unknown;
+  const track = <R>(promise: Promise<R>) => {
+    requests.push(promise);
+    void promise.catch(() => undefined);
+    return promise;
+  };
   const holder = prisma.$transaction(async (tx) => {
     if (table === "Issue") await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${id} FOR UPDATE`;
     else await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${id} FOR UPDATE`;
-    locked.resolve(undefined);
+    const [{ pid }] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+    locked.resolve({ tx, pid });
     await release.promise;
   }).catch((cause) => {
     lockError = cause;
@@ -42,28 +50,31 @@ async function withRowLock<T>(table: "Issue" | "Project", id: string, run: () =>
   });
 
   try {
-    await locked.promise;
-    return await run();
+    const { tx, pid } = await locked.promise;
+    return await run(tx, pid, track);
   } finally {
     release.resolve(undefined);
     await holder;
+    await Promise.allSettled(requests);
     if (lockError) throw lockError;
   }
 }
 
-async function waitForBlockedTransactions(table: "Issue" | "Project", count: number) {
+async function waitForBlockedTransactions(tx: Prisma.TransactionClient, holderPid: number, table: "Issue" | "Project", count: number) {
   // Synchronize on PostgreSQL's lock state; the deadline only bounds a failed barrier.
   const lockQuery = table === "Issue"
     ? 'SELECT id FROM "Issue" WHERE id = $1 FOR UPDATE'
     : 'SELECT id, "ownerId", license, "isPublic" FROM "Project" WHERE id = $1 FOR UPDATE';
   const deadline = Date.now() + 3_000;
   while (Date.now() < deadline) {
-    const [result] = await prisma.$queryRaw<Array<{ count: number }>>`
-      SELECT count(*)::int AS count
+    await tx.$queryRaw<Array<{ cleared: string }>>`SELECT pg_stat_clear_snapshot()::text AS cleared`;
+    const [result] = await tx.$queryRaw<Array<{ count: number; direct: number }>>`
+      SELECT count(*)::int AS count,
+        count(*) FILTER (WHERE ${holderPid} = ANY(pg_blocking_pids(pid)))::int AS direct
       FROM pg_stat_activity
       WHERE query = ${lockQuery} AND wait_event_type = 'Lock' AND cardinality(pg_blocking_pids(pid)) > 0
     `;
-    if (result.count >= count) return;
+    if (result.count >= count && result.direct > 0) return;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
   throw new Error(`Expected ${count} ${table} transaction(s) waiting on PostgreSQL row lock`);
@@ -92,11 +103,11 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("rejects an issue comment when close commits while the comment is in flight", async () => {
     const f = await fixture();
-    const { close, comment } = await withRowLock("Issue", f.issue.id, async () => {
-      const close = patchIssue(request({ status: "CLOSED" }), { id: f.issue.id });
-      await waitForBlockedTransactions("Issue", 1);
-      const comment = postIssueComment(request({ body: "late" }), { id: f.issue.id });
-      await waitForBlockedTransactions("Issue", 2);
+    const { close, comment } = await withRowLock("Issue", f.issue.id, async (tx, pid, track) => {
+      const close = track(patchIssue(request({ status: "CLOSED" }), { id: f.issue.id }));
+      await waitForBlockedTransactions(tx, pid, "Issue", 1);
+      const comment = track(postIssueComment(request({ body: "late" }), { id: f.issue.id }));
+      await waitForBlockedTransactions(tx, pid, "Issue", 2);
       return { close, comment };
     });
     expect((await close).status).toBe(200);
@@ -108,11 +119,11 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("keeps an in-flight issue comment and closes afterwards", async () => {
     const f = await fixture();
-    const { comment, close } = await withRowLock("Issue", f.issue.id, async () => {
-      const comment = postIssueComment(request({ body: "early" }), { id: f.issue.id });
-      await waitForBlockedTransactions("Issue", 1);
-      const close = patchIssue(request({ status: "CLOSED" }), { id: f.issue.id });
-      await waitForBlockedTransactions("Issue", 2);
+    const { comment, close } = await withRowLock("Issue", f.issue.id, async (tx, pid, track) => {
+      const comment = track(postIssueComment(request({ body: "early" }), { id: f.issue.id }));
+      await waitForBlockedTransactions(tx, pid, "Issue", 1);
+      const close = track(patchIssue(request({ status: "CLOSED" }), { id: f.issue.id }));
+      await waitForBlockedTransactions(tx, pid, "Issue", 2);
       return { comment, close };
     });
     expect((await comment).status).toBe(201);
@@ -123,11 +134,11 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("rejects a proposal comment when close commits while the comment is in flight", async () => {
     const f = await fixture();
-    const { close, comment } = await withRowLock("Project", f.proposal.projectId, async () => {
-      const close = closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id });
-      await waitForBlockedTransactions("Project", 1);
-      const comment = postProposalComment(request({ body: "late" }), { id: f.proposal.id });
-      await waitForBlockedTransactions("Project", 2);
+    const { close, comment } = await withRowLock("Project", f.proposal.projectId, async (tx, pid, track) => {
+      const close = track(closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id }));
+      await waitForBlockedTransactions(tx, pid, "Project", 1);
+      const comment = track(postProposalComment(request({ body: "late" }), { id: f.proposal.id }));
+      await waitForBlockedTransactions(tx, pid, "Project", 2);
       return { close, comment };
     });
     expect((await close).status).toBe(200);
@@ -139,11 +150,11 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
 
   it("keeps an in-flight proposal comment and closes afterwards", async () => {
     const f = await fixture();
-    const { comment, close } = await withRowLock("Project", f.proposal.projectId, async () => {
-      const comment = postProposalComment(request({ body: "early" }), { id: f.proposal.id });
-      await waitForBlockedTransactions("Project", 1);
-      const close = closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id });
-      await waitForBlockedTransactions("Project", 2);
+    const { comment, close } = await withRowLock("Project", f.proposal.projectId, async (tx, pid, track) => {
+      const comment = track(postProposalComment(request({ body: "early" }), { id: f.proposal.id }));
+      await waitForBlockedTransactions(tx, pid, "Project", 1);
+      const close = track(closeProposal(request({ status: "CLOSED" }), { id: f.proposal.id }));
+      await waitForBlockedTransactions(tx, pid, "Project", 2);
       return { comment, close };
     });
     expect((await comment).status).toBe(201);
