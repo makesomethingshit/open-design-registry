@@ -19,7 +19,7 @@ test("keeps public and account actions visible with keyboard disclosure and sign
     await expect(page.getByRole("navigation", { name: "Public" })).toBeVisible();
     await expect(page.getByRole("link", { name: "New project", exact: true })).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    if (width === 1440 || width === 440) await header.screenshot({ path: testInfo.outputPath(`header-closed-${width}.png`) });
+    if (width === 1440 || width === 440) await header.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`header-closed-${width}.png`) });
     await trigger.focus();
     await page.keyboard.press("Space");
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -34,7 +34,7 @@ test("keeps public and account actions visible with keyboard disclosure and sign
     if (width === 1440 || width === 440) {
       const panel = (await page.getByRole("navigation", { name: "Account", exact: true }).boundingBox())!;
       const headerBox = (await header.boundingBox())!;
-      await page.screenshot({ path: testInfo.outputPath(`header-open-${width}.png`), clip: { x: 0, y: 0, width, height: Math.ceil(Math.max(headerBox.height, panel.y + panel.height)) + 8 } });
+      await page.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`header-open-${width}.png`), clip: { x: 0, y: 0, width, height: Math.ceil(Math.max(headerBox.height, panel.y + panel.height)) + 8 } });
     }
     await page.keyboard.press("Escape");
     await expect(trigger).toBeFocused();
@@ -47,12 +47,12 @@ test("keeps public and account actions visible with keyboard disclosure and sign
   await page.getByLabel("Theme", { exact: true }).selectOption("dark");
   await page.getByRole("button", { name: /^Account/ }).click();
   await expect(page.getByRole("link", { name: "Notifications, 3 unread" })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("header-account-dark-440.png") });
+  await page.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath("header-account-dark-440.png") });
   await page.getByRole("button", { name: "Sign out" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   expect(signOutCalls).toBe(1);
   await page.getByLabel("Theme", { exact: true }).selectOption("dark");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.locator(".site-header").screenshot({ path: testInfo.outputPath("header-visitor-dark.png") });
+  await page.locator(".site-header").screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath("header-visitor-dark.png") });
 });

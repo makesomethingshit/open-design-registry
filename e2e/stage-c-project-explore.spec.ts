@@ -20,7 +20,7 @@ test("keeps Project and Explore components readable across gallery breakpoints",
     if (!box) throw new Error("Portrait gallery frame is not measurable");
     expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
     await expect(page.getByRole("heading", { name: "Fixture project overview" })).toBeVisible();
-    await section.screenshot({ path: testInfo.outputPath(`stage-c-${viewport.width}.png`) });
+    await section.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`stage-c-${viewport.width}.png`) });
   }
 });
 
@@ -41,14 +41,14 @@ test("reveals the project action without moving the card or its neighbors", asyn
     await expect(label).toHaveCSS("opacity", "1");
     expect(await card.boundingBox()).toEqual(before);
     expect(await Promise.all(neighbors.map((neighbor) => neighbor.boundingBox()))).toEqual(neighborBoxes);
-    await card.screenshot({ path: testInfo.outputPath(`card-hover-${width}.png`) });
+    await card.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`card-hover-${width}.png`) });
     await page.mouse.move(0, 0);
     await page.keyboard.press("Tab");
     await link.focus();
     await expect(label).toHaveCSS("opacity", "1");
     await expect(label).toHaveCSS("transition-property", "none");
     expect(await card.boundingBox()).toEqual(before);
-    await card.screenshot({ path: testInfo.outputPath(`card-focus-${width}.png`) });
+    await card.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`card-focus-${width}.png`) });
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/#project-components-heading$/);
   }
@@ -59,7 +59,7 @@ test("reveals the project action without moving the card or its neighbors", asyn
     const link = mobile.getByRole("link", { name: "View Aster coffee identity" });
     await link.scrollIntoViewIfNeeded();
     await expect(link.getByText("Open project")).toHaveCSS("opacity", "1");
-    await link.locator("xpath=..").screenshot({ path: testInfo.outputPath("card-touch.png") });
+    await link.locator("xpath=..").screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath("card-touch.png") });
   } finally {
     await touch.close();
   }

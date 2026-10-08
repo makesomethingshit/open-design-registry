@@ -18,7 +18,7 @@ test("shows source-led landing and contextual creation without overflow", async 
       await expect(example.getByRole("img")).toBeVisible();
       await expect(example.getByText("aster-identity.zip")).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await page.screenshot({ path: testInfo.outputPath(`landing-${theme}-${width}.png`), fullPage: true });
+      await page.screenshot({ style: "nextjs-portal { display: none; }", path: testInfo.outputPath(`landing-${theme}-${width}.png`), fullPage: true });
     }
   }
   await page.getByRole("link", { name: "Create a project" }).focus();
