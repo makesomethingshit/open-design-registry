@@ -1,5 +1,5 @@
-.landing { display: grid; gap: 5rem; }
-.hero { position: relative; display: grid; justify-items: center; gap: 1.5rem; padding: 1rem 0 0; text-align: center; }
+.landing { display: grid; gap: 3rem; }
+.hero { position: relative; display: grid; justify-items: center; gap: 1rem; padding: 0; text-align: center; }
 .eyebrow, .panelLabel, .sampleLabel { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; line-height: 1.6; text-transform: uppercase; }
 .eyebrow { color: var(--odr-accent); }
 .hero h1 { margin: 0; font-size: clamp(3rem, 6.2vw, 5.5rem); font-weight: 600; line-height: 1.04; letter-spacing: -0.055em; }
@@ -8,7 +8,7 @@
 .heroActions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.25rem; }
 .heroActions a { min-width: 12rem; }
 .heroNote { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-label); }
-.stage { margin: -1.5rem 0 0; padding: 2.5rem 4rem 3.5rem; border-radius: 1.5rem; background: radial-gradient(ellipse at 50% 100%, var(--odr-border-default), transparent 70%), var(--odr-accent-soft); }
+.stage { padding: 1.5rem; border-radius: 1rem; background: var(--odr-accent-soft); }
 .projectWindow { overflow: hidden; margin: 0; border: 1px solid var(--odr-border-default); border-radius: 0.875rem; background: var(--odr-surface-panel); box-shadow: 0 1.5rem 3rem -2rem #20202050; }
 .sampleLabel { color: var(--odr-text-muted); font-size: 0.5625rem; }
 .projectWindow > .sampleLabel { padding: 1.25rem 1.5rem 0; }
@@ -33,7 +33,10 @@
 .history li > span { color: var(--odr-text-muted); font-family: var(--odr-font-mono); }
 .history li:first-child strong { color: var(--odr-accent); }
 .history small { display: block; margin-top: 0.25rem; color: var(--odr-text-muted); font-size: 0.6875rem; }
-.tools { display: grid; gap: 1.5rem; justify-items: center; margin-top: -2.5rem; text-align: center; }
+.tools { display: grid; gap: 1.5rem; justify-items: center; margin-top: 0; text-align: center; }
+.createCallout { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--odr-space-3); padding: var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
+.createCallout p { margin: var(--odr-space-1) 0 0; color: var(--odr-text-secondary); font-size: var(--odr-font-label); }
+.createCallout a { min-height: var(--odr-touch-target); }
 .tools ul { display: flex; justify-content: center; flex-wrap: wrap; gap: 2rem; padding: 0; margin: 0; list-style: none; font-size: 1.5rem; font-weight: 500; letter-spacing: -0.03em; }
 .tools li + li::before { content: "/"; margin-right: 2rem; color: var(--odr-border-control); font-weight: 400; }
 .features > h2 { margin: 1rem 0 2.5rem; font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.2; letter-spacing: -0.04em; }
@@ -69,21 +72,21 @@
 .start p { margin: 1rem 0 0; color: var(--odr-text-secondary); }
 .start a { min-width: 12rem; }
 @media (max-width: 71.999rem) {
-  .stage { padding: 2rem; }
+  .stage { padding: 1.5rem; }
   .projectBody { grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr); gap: 1rem; }
   .featureGrid article { padding: 1.5rem; }
   .contributionExample { grid-template-columns: minmax(0, 1fr); }
   .contributionExample img { max-height: 11rem; }
 }
 @media (max-width: 47.999rem) {
-  .landing { gap: 3.5rem; }
-  .hero { gap: 1.5rem; padding-top: 0.5rem; }
+  .landing { gap: 2rem; }
+  .hero { gap: 1rem; padding-top: 0; }
   .hero h1 { font-size: clamp(2.125rem, 10.6vw, 3.75rem); }
   .intro { font-size: 1rem; }
   .desktopBreak { display: none; }
   .heroActions { width: 100%; gap: 0.5rem; }
   .heroActions a { min-width: 0; flex: 1 1 0; padding-inline: 0.5rem; }
-  .stage { margin-top: -1rem; padding: 1rem; border-radius: 1rem; }
+  .stage { padding: 0.75rem; border-radius: 1rem; }
   .projectWindow > .sampleLabel { padding: 1rem 1rem 0; font-size: 0.5rem; }
   .projectHeading { padding: 0.875rem 1rem; }
   .projectHeading h2 { font-size: 1.125rem; }
@@ -94,7 +97,7 @@
   .projectBody { grid-template-columns: minmax(0, 1fr); padding: 1rem; gap: 1rem; }
   .projectArtwork { min-height: 0; height: auto; max-height: none; }
   .context { padding: 1.125rem; }
-  .tools { margin-top: -1.5rem; gap: 1rem; }
+  .tools { margin-top: 0; gap: 1rem; }
   .tools ul { gap: 1rem; font-size: 1.125rem; }
   .tools li + li::before { margin-right: 1rem; }
   .features > h2 { font-size: 2rem; margin-bottom: 1.5rem; }
