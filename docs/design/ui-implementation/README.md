@@ -1,6 +1,6 @@
 ## Application captures for PR #117
 
-These PNGs show the application components implementing design PRs [#110](https://github.com/makesomethingshit/open-design-registry/pull/110), [#111](https://github.com/makesomethingshit/open-design-registry/pull/111) and [#112](https://github.com/makesomethingshit/open-design-registry/pull/112) together. The authenticated reference attachments were inspected before this correction.
+These repository-local PNGs show the application components implementing design PRs [#110](https://github.com/makesomethingshit/open-design-registry/pull/110), [#111](https://github.com/makesomethingshit/open-design-registry/pull/111) and [#112](https://github.com/makesomethingshit/open-design-registry/pull/112) together. They use the fixtures described below and do not establish production deployment status.
 
 - Landing: original Aster artwork, source and history, original copy, one hero Explore action and the B4 creation callout after the example.
 - Header: ODR wordmark, 88px desktop row, original public navigation order and spacing, quiet theme selector, Account disclosure. At 440px the header follows the original three rows; narrower screens give New project its own row to preserve readable actions.
@@ -19,4 +19,4 @@ Run the repeatable browser checks with:
 npx playwright test e2e/landing-ui.spec.ts e2e/header-ui.spec.ts e2e/stage-c-project-explore.spec.ts --workers=1
 ```
 
-The repository is private. View these files through authenticated GitHub blob links or the Multica attachments; anonymous raw URLs return 404. Visual acceptance still requires human review. The implementation retains the existing Pretendard font and semantic theme tokens, so these captures are not a pixel-for-pixel copy of the static reference boards.
+View these files directly from this directory. Visual acceptance still requires human review. The implementation retains the existing Pretendard font and semantic theme tokens, so these captures are not a pixel-for-pixel copy of the static reference boards.
