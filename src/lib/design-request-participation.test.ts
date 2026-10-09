@@ -70,6 +70,13 @@ describe("design request participation handlers", () => {
     expect(participantIds).toEqual(new Set(["user-b"]));
   });
 
+  it("lets an existing participant withdraw after the project becomes private", async () => {
+    participantIds = new Set(["user-a", "user-b"]);
+    issue.project.isPublic = false;
+    expect((await deleteDesignRequestParticipation(request, { id: "issue" })).status).toBe(204);
+    expect(participantIds).toEqual(new Set(["user-b"]));
+  });
+
   it("allows idempotent withdrawal after close as specified by the DELETE contract", async () => {
     issue.status = "CLOSED";
     expect((await deleteDesignRequestParticipation(request, { id: "issue" })).status).toBe(204);

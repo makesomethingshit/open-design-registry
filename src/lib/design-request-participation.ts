@@ -37,9 +37,15 @@ async function lockedIssue(tx: Prisma.TransactionClient, issueId: string) {
   return tx.issue.findUnique({ where: { id: issueId }, select: participationAccess }) as Promise<ParticipationIssue | null>;
 }
 
-function requirePublicDesignRequest(issue: ParticipationIssue | null) {
-  if (!issue || !issue.project.isPublic || issue.kind !== "DESIGN_REQUEST") throw new ParticipationRequestError("Issue not found", 404);
+function requireDesignRequest(issue: ParticipationIssue | null) {
+  if (!issue || issue.kind !== "DESIGN_REQUEST") throw new ParticipationRequestError("Issue not found", 404);
   return issue;
+}
+
+function requirePublicDesignRequest(issue: ParticipationIssue | null) {
+  const designRequest = requireDesignRequest(issue);
+  if (!designRequest.project.isPublic) throw new ParticipationRequestError("Issue not found", 404);
+  return designRequest;
 }
 
 export async function postDesignRequestParticipation(request: Request, scope: IssueScope): Promise<NextResponse> {
@@ -68,7 +74,9 @@ export async function deleteDesignRequestParticipation(request: Request, scope: 
 
   try {
     await prisma.$transaction(async (tx) => {
-      requirePublicDesignRequest(await lockedIssue(tx, scope.id));
+      const issue = requireDesignRequest(await lockedIssue(tx, scope.id));
+      const existing = await tx.designRequestParticipation.findUnique({ where: { issueId_userId: { issueId: scope.id, userId: session.user.id } }, select: { issueId: true } });
+      if (!issue.project.isPublic && !existing) throw new ParticipationRequestError("Issue not found", 404);
       await tx.designRequestParticipation.deleteMany({ where: { issueId: scope.id, userId: session.user.id } });
     });
     return new NextResponse(null, { status: 204 });

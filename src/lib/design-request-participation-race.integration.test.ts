@@ -75,7 +75,7 @@ async function fixture() {
   fixtureUserIds.push(participant.id);
   const project = await prisma.project.create({ data: { slug: `participation-project-${suffix}`, title: "Participation project", description: "", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: owner.id } });
   const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: owner.id, title: "Open design request", body: "Work on this", kind: "DESIGN_REQUEST" } });
-  return { owner, participant, issue };
+  return { owner, participant, project, issue };
 }
 
 databaseDescribe("design request participation and close race in PostgreSQL", () => {
@@ -128,6 +128,24 @@ databaseDescribe("design request participation and close race in PostgreSQL", ()
 
     expect(responses.map((response) => response.status).sort()).toEqual([200, 201]);
     expect(await prisma.designRequestParticipation.count({ where: { issueId: f.issue.id } })).toBe(1);
+  });
+
+  it("lets a private participant withdraw without restoring their name when republished", async () => {
+    const f = await fixture();
+    mocks.getSession.mockImplementation(async ({ headers }: { headers: Headers }) => ({ user: { id: headers.get("x-test-user") } }));
+    await prisma.designRequestParticipation.createMany({ data: [
+      { issueId: f.issue.id, userId: f.participant.id },
+      { issueId: f.issue.id, userId: f.owner.id },
+    ] });
+    await prisma.project.update({ where: { id: f.project.id }, data: { isPublic: false } });
+
+    expect((await deleteDesignRequestParticipation(request("DELETE", f.participant.id), { id: f.issue.id })).status).toBe(204);
+    expect(await prisma.designRequestParticipation.findUnique({ where: { issueId_userId: { issueId: f.issue.id, userId: f.participant.id } } })).toBeNull();
+    expect(await prisma.designRequestParticipation.findUnique({ where: { issueId_userId: { issueId: f.issue.id, userId: f.owner.id } } })).not.toBeNull();
+
+    await prisma.project.update({ where: { id: f.project.id }, data: { isPublic: true } });
+    const snapshot = await prisma.$transaction((tx) => readDesignRequestParticipationSnapshot(tx, f.issue.id, f.participant.id));
+    expect(snapshot).toEqual({ count: 1, names: ["Request owner"], participating: false });
   });
 
   it("keeps count, names, and viewer state in one snapshot across a concurrent join and withdraw", async () => {

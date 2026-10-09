@@ -66,6 +66,20 @@ test.describe("Design Request participation", () => {
         await expect(participant.getByText(/2 people are working on this: Browser owner/)).toBeVisible();
         await expect(participant.getByRole("button", { name: "Stop working on this", exact: true })).toBeVisible();
         await participant.screenshot({ path: testInfo.outputPath("mobile-third-party.png"), fullPage: true });
+
+        // A stale participant page must still allow withdrawal after visibility changes.
+        expect((await page.request.patch(`/api/projects/${project.slug}`, { data: { isPublic: false } })).status()).toBe(200);
+        expect((await participant.request.get(`/api/projects/${project.slug}`)).status()).toBe(404);
+        const withdrawal = participant.waitForResponse((response) => response.url().endsWith(`/api/issues/${issue.id}/participation`) && response.request().method() === "DELETE");
+        await participant.getByRole("button", { name: "Stop working on this", exact: true }).click();
+        expect((await withdrawal).status()).toBe(204);
+        expect(await prisma.designRequestParticipation.count({ where: { issueId: issue.id, userId: participantId } })).toBe(0);
+        expect((await page.request.patch(`/api/projects/${project.slug}`, { data: { isPublic: true, rightsConfirmed: true } })).status()).toBe(200);
+        await participant.goto(issuePath);
+        await expect(participant.getByText(/1 person is working on this: Browser owner/)).toBeVisible();
+        await expect(participant.getByRole("button", { name: "Working on this", exact: true })).toBeVisible();
+        await participant.getByRole("button", { name: "Working on this", exact: true }).click();
+        await expect(participant.getByRole("button", { name: "Stop working on this", exact: true })).toBeVisible();
       } finally {
         await participantContext.close();
       }
