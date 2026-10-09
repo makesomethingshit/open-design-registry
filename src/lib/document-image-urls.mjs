@@ -9,6 +9,10 @@ export function documentImageKeyFromUrl(value, options = {}) {
   try {
     const url = new URL(value, "http://document.local");
     if (url.pathname === "/api/assets") {
+      if (!value.startsWith("/") || value.startsWith("//")) {
+        const appUrl = options.appUrl ?? process.env.BETTER_AUTH_URL;
+        if (!appUrl || url.origin !== new URL(appUrl).origin) return undefined;
+      }
       const key = url.searchParams.get("key");
       if (key) return keyPattern.test(key) ? key : undefined;
       const legacy = url.searchParams.get("url");
@@ -23,8 +27,11 @@ export function documentImageKeyFromUrl(value, options = {}) {
       if (!path.startsWith(prefix)) return undefined;
       key = path.slice(prefix.length);
     } else {
-      if (url.hostname.toLowerCase() !== `${bucket}.s3.${region}.amazonaws.com`.toLowerCase()) return undefined;
-      key = decodeURIComponent(url.pathname).replace(/^\//, "");
+      const host = url.hostname.toLowerCase();
+      const path = decodeURIComponent(url.pathname).replace(/^\//, "");
+      if (host === `${bucket}.s3.${region}.amazonaws.com`.toLowerCase()) key = path;
+      else if (host === `s3.${region}.amazonaws.com`.toLowerCase() && path.startsWith(`${bucket}/`)) key = path.slice(bucket.length + 1);
+      else return undefined;
     }
     return keyPattern.test(key) ? key : undefined;
   } catch { return undefined; }

@@ -42,6 +42,12 @@ it("retains equivalent lowercase percent-encoded document references", async () 
   tx.$queryRawUnsafe.mockResolvedValue([{ kind: "document", document: `![image](/api/assets?key=${encodeURIComponent(key).replaceAll("%2F", "%2f")})` }]);
   expect(await run({ apply: true })).toMatchObject({ retained: 1, deleted: 0 });
 });
+it("retains a rights or Revision URL using AWS path-style storage", async () => {
+  tx.$queryRawUnsafe.mockResolvedValue([{ kind: "url", value: `https://s3.us-east-1.amazonaws.com/test/${key.replace("project", "%70roject")}?v=1#download` }]);
+  expect(await run({ apply: true, endpoint: "" })).toMatchObject({ retained: 1, deleted: 0 });
+  expect(client.send).toHaveBeenCalledOnce();
+  expect(tx.documentImageDeletion.upsert).not.toHaveBeenCalled();
+});
 it("skips recent, malformed and non-document objects", async () => {
   client.send.mockResolvedValue({ Contents: [{ Key: key, LastModified: now }, { Key: "covers/image.png", LastModified: old }, { Key: "project-documents/project/manual.png", LastModified: old }, { Key: key }] });
   expect(await run({ apply: true })).toMatchObject({ retained: 4, deleted: 0 });

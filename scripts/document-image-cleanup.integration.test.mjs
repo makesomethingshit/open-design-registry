@@ -21,6 +21,7 @@ const image = (key) => `![design](/api/assets?key=${encodeURIComponent(key)})`;
 const cleanup = (options = {}) => cleanupDocumentImages({ prisma: db, client, bucket, endpoint, now: new Date(Date.now() + 8 * 86400000), log: () => {}, ...options });
 beforeAll(async () => {
   if (!enabled) return;
+  vi.stubEnv("BETTER_AUTH_URL", "http://local");
   await client.send(new CreateBucketCommand({ Bucket: bucket }));
   user = await db.user.create({ data: { id: randomUUID(), name: "Cleanup fixture", email: `${randomUUID()}@example.test` } });
   const create = (slug) => db.project.create({ data: { slug, title: "Cleanup fixture", description: "test", license: "MIT", coverUrl: "cover/unused", ownerId: user.id } });
@@ -45,6 +46,7 @@ afterAll(async () => {
     await client.send(new DeleteBucketCommand({ Bucket: bucket }));
   }
   await db.$disconnect(); client.destroy();
+  vi.unstubAllEnvs();
 });
 it.skipIf(!enabled)("dry-run preserves actual objects; apply removes abandoned/removed images and preserves private/shared references", async () => {
   expect(await cleanup()).toMatchObject({ candidates: 3, deleted: 0, errors: 0 });

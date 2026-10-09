@@ -137,7 +137,7 @@ node --env-file=.env scripts/document-image-cleanup.mjs --grace-hours 336
 
 본문 저장뿐 아니라 Revision 원본 URL·권리 선언의 sourceUrl, licenseUrl, sourceLicenseUrl 저장도 공통 shared advisory lock을 먼저 얻고 삭제 marker와 S3 객체 존재를 확인합니다. 정리가 먼저 완료된 오래된 초안을 늦게 저장하면 API가 409와 이미지 재업로드 안내를 반환합니다. 저장이 먼저 커밋되면 정리는 그 참조를 확인해 이미지를 보존합니다. 기존 절대 객체 URL과 asset API URL은 같은 key로 정규화하며 query·fragment·동등한 percent encoding을 허용합니다.
 
-참조 검사는 DB에서 동등한 key encoding을 필터링하고 후보 URL만 정규화하므로 객체마다 모든 문서 본문을 내려받지 않습니다. 이미지 참조 저장 트랜잭션은 최대 60초이며, S3 HEAD는 최대 8개씩 병렬 실행하고 전체 25초 제한을 공유합니다. 상시 worker·자동 타이머는 추가하지 않습니다.
+참조 검사는 DB에서 동등한 key encoding을 필터링하고 후보 URL만 정규화하므로 객체마다 모든 문서 본문을 내려받지 않습니다. AWS 객체 URL은 regional virtual-hosted·path-style 형식을 인식합니다. 절대 asset API URL은 `BETTER_AUTH_URL`과 origin이 같을 때만 로컬 객체로 취급하며, 다른 사이트의 이미지는 로컬 S3에서 검사하지 않습니다. 이미지 참조 저장 트랜잭션은 최대 60초이며, S3 HEAD는 최대 8개씩 병렬 실행하고 전체 25초 제한을 공유합니다. 상시 worker·자동 타이머는 추가하지 않습니다.
 
 격리 테스트 DB·스토리지에서 `RUN_DOCUMENT_IMAGE_CLEANUP_TEST=1 npx vitest run scripts/document-image-cleanup.integration.test.mjs`로 실제 객체 보존·삭제, 본문·권리 선언 저장과 정리의 양방향 경합, 잠금 대기 후 저장을 검증할 수 있습니다. CI의 e2e 작업은 PostgreSQL·MinIO 준비 후 이 테스트도 실행합니다.
 

@@ -25,6 +25,12 @@ it("does not require objects for examples, code or external images", async () =>
   expect(await validateDocumentImages({ $queryRaw: vi.fn() } as never, `\`${image}\`\n\n![external](https://example.com/image.png)`)).toBe(true);
   expect(exists).not.toHaveBeenCalled();
 });
+it("does not check another registry's absolute proxy image against local storage", async () => {
+  vi.stubEnv("BETTER_AUTH_URL", "https://registry.example");
+  const tx = { $queryRaw: vi.fn() } as never;
+  expect(await validateDocumentImages(tx, `![remote](https://other.example/api/assets?key=${encodeURIComponent(key)})`)).toBe(true);
+  expect(exists).not.toHaveBeenCalled(); vi.unstubAllEnvs();
+});
 it("rejects missing objects while preserving storage outages", async () => {
   const tx = { $queryRaw: vi.fn(), documentImageDeletion: deletion } as never;
   exists.mockResolvedValue(false);

@@ -54,10 +54,12 @@ describe("revision rights API", () => {
     await expect(response.json()).resolves.toMatchObject({ revisionId: "revision", revisionLicense: "CC BY 4.0", declaration: null });
   });
   it("returns a recoverable 409 instead of saving a marked rights URL", async () => {
+    vi.stubEnv("BETTER_AUTH_URL", "http://local");
     mocks.deletedImage.mockResolvedValueOnce({ key: "expired" });
     const key = "project-documents/p/00000000-0000-4000-8000-000000000001.png";
     const response = await POST(request({ sourceRightsMode: "UNKNOWN", items: [{ type: "IMAGE", name: "Expired", licenseUrl: `http://local/api/assets?key=${encodeURIComponent(key)}` }] }), params);
     expect(response!.status).toBe(409); expect(mocks.createDeclaration).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 
   it("stores explicit same-as-revision, unknown, restricted, and external declarations", async () => {
