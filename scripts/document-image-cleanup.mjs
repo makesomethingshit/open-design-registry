@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { pathToFileURL } from "node:url";
+import { documentImageKeyFromUrl, encodedKeyPattern } from "../src/lib/document-image-urls.mjs";
 
 const documentKey = /^project-documents\/([a-zA-Z0-9_-]+)\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(?:png|jpg)$/;
 export const defaultGraceHours = 168;
@@ -17,33 +18,22 @@ export function cleanupOptions(args) {
   return { apply, graceHours };
 }
 
-function legacyUrl(key, bucket, endpoint, region) {
-  return endpoint ? `${endpoint.replace(/\/$/, "")}/${bucket}/${key}` : `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-}
-
 // Conservative: even a reference in code, an unrelated document or a private
 // project retains the object. Reading protection is not a deletion criterion.
 export async function hasReference(tx, key, { bucket, endpoint, region }) {
-  const values = [key, `/api/assets?key=${encodeURIComponent(key)}`, legacyUrl(key, bucket, endpoint, region)];
-  const [project, documents, preview, revision, change, rights] = await Promise.all([
-    tx.project.findFirst({ where: { OR: [
-      { coverUrl: { in: values } },
-      ...[key, encodeURIComponent(key)].map((value) => ({ document: { contains: value } })),
-    ] }, select: { id: true } }),
-    tx.project.findMany({ where: { document: { not: "" } }, select: { document: true } }),
-    tx.preview.findFirst({ where: { OR: [{ key }, { url: { in: values } }] }, select: { id: true } }),
-    tx.revision.findFirst({ where: { OR: [{ sourceKey: key }, { sourceUrl: { in: values } }] }, select: { id: true } }),
-    tx.change.findFirst({ where: { assetKey: key }, select: { id: true } }),
-    tx.revisionRightsItem.findFirst({ where: { sourceUrl: { in: values } }, select: { id: true } }),
-  ]);
-  const documentReference = documents.some(({ document }) => {
-    // Accept equivalent percent encodings too, including lowercase escapes.
-    const decoded = document.replace(/(?:%[0-9a-f]{2})+/gi, (value) => {
-      try { return decodeURIComponent(value); } catch { return value; }
-    });
-    return decoded.includes(key);
-  });
-  return Boolean(project || documentReference || preview || revision || change || rights);
+  const references = await tx.$queryRawUnsafe(`
+    SELECT 'document' AS kind, '' AS value WHERE EXISTS (SELECT 1 FROM "Project" WHERE document ~* $1)
+    UNION ALL SELECT 'key', "sourceKey" FROM "Revision" WHERE "sourceKey" = $2
+    UNION ALL SELECT 'key', key FROM "Preview" WHERE key = $2
+    UNION ALL SELECT 'key', "assetKey" FROM "Change" WHERE "assetKey" = $2
+    UNION ALL SELECT 'url', "coverUrl" FROM "Project" WHERE "coverUrl" ~* $1
+    UNION ALL SELECT 'url', url FROM "Preview" WHERE url ~* $1
+    UNION ALL SELECT 'url', "sourceUrl" FROM "Revision" WHERE "sourceUrl" ~* $1
+    UNION ALL SELECT 'url', "sourceLicenseUrl" FROM "RevisionRightsDeclaration" WHERE "sourceLicenseUrl" ~* $1
+    UNION ALL SELECT 'url', "sourceUrl" FROM "RevisionRightsItem" WHERE "sourceUrl" ~* $1
+    UNION ALL SELECT 'url', "licenseUrl" FROM "RevisionRightsItem" WHERE "licenseUrl" ~* $1
+  `, encodedKeyPattern(key), key);
+  return references.some(({ kind, value }) => kind !== "url" || documentImageKeyFromUrl(value, { bucket, endpoint, region }) === key);
 }
 
 export async function cleanupDocumentImages({ prisma, client, bucket, endpoint, region = "us-east-1", apply = false, graceHours = defaultGraceHours, now = new Date(), log = console.log }) {
@@ -62,7 +52,7 @@ export async function cleanupDocumentImages({ prisma, client, bucket, endpoint, 
           // Serializes cleanup with document saves. The table locks also stop
           // other asset-reference writers until recheck and deletion intent commit.
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(135, 1)::text`;
-          await tx.$executeRawUnsafe('LOCK TABLE "Project", "Preview", "Revision", "Change", "RevisionRightsItem" IN SHARE ROW EXCLUSIVE MODE');
+          await tx.$executeRawUnsafe('LOCK TABLE "Project", "Preview", "Revision", "Change", "RevisionRightsDeclaration", "RevisionRightsItem" IN SHARE ROW EXCLUSIVE MODE');
           if (await hasReference(tx, key, { bucket, endpoint, region })) return "retained";
           const current = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
           if (!current.LastModified || current.LastModified.getTime() >= cutoff) return "retained";

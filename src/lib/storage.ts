@@ -33,9 +33,9 @@ export async function getObject(key: string) {
   return client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
 }
 
-export async function documentImageExists(key: string) {
+export async function documentImageExists(key: string, abortSignal = AbortSignal.timeout(5000)) {
   try {
-    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal });
     return true;
   } catch (error) {
     if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return false;

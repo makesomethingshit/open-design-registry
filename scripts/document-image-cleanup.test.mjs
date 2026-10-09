@@ -5,7 +5,7 @@ const now = new Date("2026-10-10T00:00:00Z");
 const old = new Date("2026-09-01T00:00:00Z");
 let tx, prisma, client;
 beforeEach(() => {
-  tx = { $queryRaw: vi.fn(), $executeRawUnsafe: vi.fn() };
+  tx = { $queryRaw: vi.fn(), $queryRawUnsafe: vi.fn().mockResolvedValue([]), $executeRawUnsafe: vi.fn() };
   for (const model of ["project", "preview", "revision", "change", "revisionRightsItem"]) tx[model] = { findFirst: vi.fn().mockResolvedValue(null) };
   tx.project.findMany = vi.fn().mockResolvedValue([]);
   tx.documentImageDeletion = { upsert: vi.fn().mockResolvedValue({ key }) };
@@ -30,7 +30,7 @@ it("dry-run rechecks references and object age without deleting", async () => {
   expect(tx.documentImageDeletion.upsert).not.toHaveBeenCalled();
 });
 it.each(["project", "preview", "revision", "change", "revisionRightsItem"])("retains objects referenced by %s", async (model) => {
-  tx[model].findFirst.mockResolvedValue({ id: "reference" });
+  tx.$queryRawUnsafe.mockResolvedValue([{ kind: "key", value: key }]);
   expect(await run({ apply: true })).toMatchObject({ retained: 1, deleted: 0 });
   expect(client.send).toHaveBeenCalledOnce();
 });
@@ -39,7 +39,7 @@ it("does not delete a recently replaced candidate", async () => {
   expect(await run({ apply: true })).toMatchObject({ retained: 1, deleted: 0 });
 });
 it("retains equivalent lowercase percent-encoded document references", async () => {
-  tx.project.findMany.mockResolvedValue([{ document: `![image](/api/assets?key=${encodeURIComponent(key).replaceAll("%2F", "%2f")})` }]);
+  tx.$queryRawUnsafe.mockResolvedValue([{ kind: "document", document: `![image](/api/assets?key=${encodeURIComponent(key).replaceAll("%2F", "%2f")})` }]);
   expect(await run({ apply: true })).toMatchObject({ retained: 1, deleted: 0 });
 });
 it("skips recent, malformed and non-document objects", async () => {

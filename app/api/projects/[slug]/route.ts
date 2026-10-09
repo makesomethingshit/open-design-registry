@@ -3,7 +3,7 @@ import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { projectUpdateSchema } from "@/src/lib/project-validation";
 import { publicAssetUrl } from "@/src/lib/storage";
-import { validateDocumentImages } from "@/src/lib/project-document-save";
+import { imageReferenceTransactionOptions, validateDocumentImages } from "@/src/lib/project-document-save";
 
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
     : await prisma.$transaction(async (tx) => {
       if (!await validateDocumentImages(tx, data.document!)) return null;
       return tx.project.update({ where: { slug }, data: updateData });
-    });
+    }, imageReferenceTransactionOptions);
   if (!updated) return NextResponse.json({ error: "An image has expired. Upload it again before saving." }, { status: 409 });
   return NextResponse.json({ ...updated, coverUrl: publicAssetUrl(updated.coverUrl) });
 }

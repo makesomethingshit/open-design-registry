@@ -135,9 +135,11 @@ node --env-file=.env scripts/document-image-cleanup.mjs --grace-hours 336
 
 삭제 직전 DB 참조와 S3의 현재 수정 시각을 재확인합니다. 객체별 트랜잭션에서 문서 저장과 공통 advisory lock을 잡고 참조 테이블의 쓰기를 잠시 차단하므로 **트래픽이 낮은 시간에 실행**하세요. apply는 `DocumentImageDeletion`에 삭제 의도를 먼저 커밋한 뒤 S3 삭제를 실행합니다. 삭제 응답이 유실되거나 실패해도 해당 key의 늦은 저장은 거부되며, 다음 실행은 남은 객체 삭제를 재시도합니다. marker는 프로젝트 삭제 뒤에도 유지합니다. 삭제 실패는 key별 JSON 로그와 종료 코드 1로 보고합니다. dry-run은 marker를 쓰지 않으며 같은 참조 재확인을 적용합니다. S3 객체 삭제는 DB rollback으로 복구되지 않으므로 먼저 백업·dry-run을 확인해야 합니다.
 
-정리가 먼저 완료된 오래된 초안을 늦게 저장하면 API가 409와 이미지 재업로드 안내를 반환합니다. 저장이 먼저 커밋되면 정리는 그 참조를 확인해 이미지를 보존합니다. 상시 worker·자동 타이머는 추가하지 않습니다.
+본문 저장뿐 아니라 Revision 원본 URL·권리 선언의 sourceUrl, licenseUrl, sourceLicenseUrl 저장도 공통 shared advisory lock을 먼저 얻고 삭제 marker와 S3 객체 존재를 확인합니다. 정리가 먼저 완료된 오래된 초안을 늦게 저장하면 API가 409와 이미지 재업로드 안내를 반환합니다. 저장이 먼저 커밋되면 정리는 그 참조를 확인해 이미지를 보존합니다. 기존 절대 객체 URL과 asset API URL은 같은 key로 정규화하며 query·fragment·동등한 percent encoding을 허용합니다.
 
-격리 테스트 DB·스토리지에서 `RUN_DOCUMENT_IMAGE_CLEANUP_TEST=1 npx vitest run scripts/document-image-cleanup.integration.test.mjs`로 실제 객체 보존·삭제와 저장 경합을 검증할 수 있습니다. CI의 e2e 작업은 PostgreSQL·MinIO 준비 후 이 테스트도 실행합니다.
+참조 검사는 DB에서 동등한 key encoding을 필터링하고 후보 URL만 정규화하므로 객체마다 모든 문서 본문을 내려받지 않습니다. 이미지 참조 저장 트랜잭션은 최대 60초이며, S3 HEAD는 최대 8개씩 병렬 실행하고 전체 25초 제한을 공유합니다. 상시 worker·자동 타이머는 추가하지 않습니다.
+
+격리 테스트 DB·스토리지에서 `RUN_DOCUMENT_IMAGE_CLEANUP_TEST=1 npx vitest run scripts/document-image-cleanup.integration.test.mjs`로 실제 객체 보존·삭제, 본문·권리 선언 저장과 정리의 양방향 경합, 잠금 대기 후 저장을 검증할 수 있습니다. CI의 e2e 작업은 PostgreSQL·MinIO 준비 후 이 테스트도 실행합니다.
 
 1. 배포할 커밋 SHA와 환경을 고정하고 해당 코드의 마이그레이션 상태를 확인합니다. 테스트 기록의 SHA와 다르면 같은 결과로 취급하지 않습니다.
 2. DB와 S3 객체를 함께 복구할 수 있는 백업을 확보하고 격리 환경에서 마이그레이션을 검증합니다. `prisma db push`는 SQL 트리거를 포함한 마이그레이션 이력의 대체가 아닙니다.

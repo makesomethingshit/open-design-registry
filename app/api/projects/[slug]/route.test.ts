@@ -11,7 +11,7 @@ vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/prisma", () => ({
   prisma: { project: { findUnique: mocks.findUnique, update: mocks.update }, $transaction: (run: (tx: unknown) => unknown) => run({ project: { update: mocks.update } }) },
 }));
-vi.mock("@/src/lib/project-document-save", () => ({ validateDocumentImages: mocks.validateDocumentImages }));
+vi.mock("@/src/lib/project-document-save", () => ({ validateDocumentImages: mocks.validateDocumentImages, imageReferenceTransactionOptions: { timeout: 60000 } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value }));
 
 const { GET, PATCH } = await import("./route");
