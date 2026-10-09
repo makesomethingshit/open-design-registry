@@ -5,13 +5,19 @@ on:
     branches: [main]
   pull_request:
     branches: [main, fix-project-document-overview]
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or branch to verify (defaults to the selected workflow ref)
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -57,6 +63,8 @@ jobs:
           --health-retries=5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -70,6 +78,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -82,6 +92,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -90,6 +102,7 @@ jobs:
       - run: npm run build
 
   e2e:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       S3_ENDPOINT: http://127.0.0.1:9000
@@ -109,6 +122,8 @@ jobs:
           --health-retries=5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -128,10 +143,13 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - name: Upload failed browser traces
-        if: failure()
+      - name: Upload browser results and traces
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-failures
-          path: test-results/
+          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
           retention-days: 3
