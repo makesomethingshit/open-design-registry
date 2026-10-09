@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 const mocks = vi.hoisted(() => ({ getSession: vi.fn() }));
 vi.mock("./auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
@@ -7,7 +7,7 @@ vi.mock("./auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 const { prisma } = await import("./prisma");
 const { patchIssue } = await import("./issue-handlers");
-const { postDesignRequestParticipation } = await import("./design-request-participation");
+const { deleteDesignRequestParticipation, postDesignRequestParticipation, readDesignRequestParticipationSnapshot } = await import("./design-request-participation");
 
 const databaseDescribe = process.env.TEST_DATABASE_URL ? describe : describe.skip;
 
@@ -128,5 +128,32 @@ databaseDescribe("design request participation and close race in PostgreSQL", ()
 
     expect(responses.map((response) => response.status).sort()).toEqual([200, 201]);
     expect(await prisma.designRequestParticipation.count({ where: { issueId: f.issue.id } })).toBe(1);
+  });
+
+  it("keeps count, names, and viewer state in one snapshot across a concurrent join and withdraw", async () => {
+    const joinFixture = await fixture();
+    const withdrawFixture = await fixture();
+    mocks.getSession.mockImplementation(async ({ headers }: { headers: Headers }) => ({ user: { id: headers.get("x-test-user") } }));
+    await prisma.designRequestParticipation.create({ data: { issueId: withdrawFixture.issue.id, userId: withdrawFixture.participant.id } });
+
+    const joinSnapshot = await prisma.$transaction(async (tx) => {
+      const countBeforeJoin = await tx.designRequestParticipation.count({ where: { issueId: joinFixture.issue.id } });
+      const join = postDesignRequestParticipation(request("POST", joinFixture.participant.id), { id: joinFixture.issue.id });
+      await Promise.all([join, tx.$queryRaw`SELECT 1`]);
+      expect((await join).status).toBe(201);
+      return { countBeforeJoin, details: await readDesignRequestParticipationSnapshot(tx, joinFixture.issue.id, joinFixture.participant.id) };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    expect(joinSnapshot).toEqual({ countBeforeJoin: 0, details: { count: 0, names: [], participating: false } });
+    expect(await prisma.designRequestParticipation.count({ where: { issueId: joinFixture.issue.id } })).toBe(1);
+
+    const withdrawSnapshot = await prisma.$transaction(async (tx) => {
+      const countBeforeWithdraw = await tx.designRequestParticipation.count({ where: { issueId: withdrawFixture.issue.id } });
+      const withdraw = deleteDesignRequestParticipation(request("DELETE", withdrawFixture.participant.id), { id: withdrawFixture.issue.id });
+      await Promise.all([withdraw, tx.$queryRaw`SELECT 1`]);
+      expect((await withdraw).status).toBe(204);
+      return { countBeforeWithdraw, details: await readDesignRequestParticipationSnapshot(tx, withdrawFixture.issue.id, withdrawFixture.participant.id) };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    expect(withdrawSnapshot).toEqual({ countBeforeWithdraw: 1, details: { count: 1, names: ["Request participant"], participating: true } });
+    expect(await prisma.designRequestParticipation.count({ where: { issueId: withdrawFixture.issue.id } })).toBe(0);
   });
 });

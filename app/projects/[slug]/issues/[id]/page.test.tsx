@@ -2,11 +2,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findFirst: vi.fn(), participationCount: vi.fn(), participationFindMany: vi.fn(), participationFindUnique: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findFirst: vi.fn(), transaction: vi.fn(), readParticipation: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NEXT_NOT_FOUND"); }, useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children, ...props }: { href: string; children?: unknown; [key: string]: unknown }) => createElement("a", { href, ...props }, children as never) }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { issue: { findFirst: mocks.findFirst }, designRequestParticipation: { count: mocks.participationCount, findMany: mocks.participationFindMany, findUnique: mocks.participationFindUnique } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
+vi.mock("@/src/lib/design-request-participation", () => ({ readDesignRequestParticipationSnapshot: mocks.readParticipation }));
 
 const { default: IssuePage } = await import("./page");
 
@@ -33,9 +34,8 @@ async function markup(session: { user: { id: string } } | null, value = issue())
 describe("project issue detail page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.participationCount.mockResolvedValue(0);
-    mocks.participationFindMany.mockResolvedValue([]);
-    mocks.participationFindUnique.mockResolvedValue(null);
+    mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ issue: { findFirst: mocks.findFirst } }));
+    mocks.readParticipation.mockResolvedValue({ count: 0, names: [], participating: false });
   });
 
   it("shows request purpose, body, status, project, revision, and a related contribution link", async () => {
@@ -55,15 +55,14 @@ describe("project issue detail page", () => {
 
   it("shows stable participant names, count, own state, and the public-name notice", async () => {
     mocks.getSession.mockResolvedValue({ user: { id: "participant" } });
-    mocks.participationCount.mockResolvedValue(6);
-    mocks.participationFindMany.mockResolvedValue([{ user: { name: "Ari" } }, { user: { name: "Bo" } }, { user: { name: "Cy" } }, { user: { name: "Dee" } }, { user: { name: "Eli" } }]);
-    mocks.participationFindUnique.mockResolvedValue({ issueId: "request-1" });
+    mocks.readParticipation.mockResolvedValue({ count: 6, names: ["Ari", "Bo", "Cy", "Dee", "Eli"], participating: true });
     const html = await markup({ user: { id: "participant" } });
 
     expect(html).toContain("6 people are working on this: Ari, Bo, Cy, Dee, Eli and 1 more.");
     expect(html).toContain("Stop working on this");
     expect(html).toContain("Your display name will be visible to visitors");
     expect(html).not.toContain("@example");
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead" });
   });
 
   it("keeps closed issues readable without offering contribution", async () => {

@@ -7,6 +7,15 @@ import { prisma } from "./prisma";
 type IssueScope = { id: string };
 type ParticipationIssue = { kind: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; project: { isPublic: boolean } };
 
+export async function readDesignRequestParticipationSnapshot(tx: Prisma.TransactionClient, issueId: string, userId?: string) {
+  const [count, participants, currentUser] = await Promise.all([
+    tx.designRequestParticipation.count({ where: { issueId } }),
+    tx.designRequestParticipation.findMany({ where: { issueId }, orderBy: [{ createdAt: "asc" }, { userId: "asc" }], take: 5, select: { user: { select: { name: true } } } }),
+    userId ? tx.designRequestParticipation.findUnique({ where: { issueId_userId: { issueId, userId } }, select: { issueId: true } }) : Promise.resolve(null),
+  ]);
+  return { count, names: participants.map(({ user }) => user.name), participating: Boolean(currentUser) };
+}
+
 const participationAccess = {
   kind: true,
   status: true,

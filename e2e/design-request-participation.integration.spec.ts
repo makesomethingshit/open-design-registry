@@ -88,6 +88,36 @@ test.describe("Design Request participation", () => {
       await prisma.user.delete({ where: { id: user.id } });
     }
   });
+
+  test("refreshes a stale participation control after close returns 409", async ({ page }) => {
+    const suffix = crypto.randomUUID();
+    const email = `participation-stale-${suffix}@example.test`;
+    const password = "participation-browser-password-123";
+    await signUp(page, `Browser stale ${suffix}`, email, password);
+    const session = await page.request.get("/api/auth/get-session");
+    const user = (await session.json()).user as { id: string };
+    const project = await prisma.project.create({ data: { slug: `participation-stale-${suffix}`, title: "Stale participation project", description: "", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: user.id } });
+    const issue = await prisma.issue.create({ data: { projectId: project.id, authorId: user.id, title: "A stale design request", body: "Try a clearer stale path", kind: "DESIGN_REQUEST" } });
+    const issuePath = `/projects/${project.slug}/issues/${issue.id}`;
+
+    try {
+      await page.goto(issuePath);
+      const join = page.getByRole("button", { name: "Working on this", exact: true });
+      await expect(join).toBeVisible();
+      const close = await page.request.patch(`/api/issues/${issue.id}`, { data: { status: "CLOSED" } });
+      expect(close.status()).toBe(200);
+
+      const conflict = page.waitForResponse((response) => response.url().endsWith(`/api/issues/${issue.id}/participation`) && response.request().method() === "POST" && response.status() === 409);
+      await join.click();
+      await conflict;
+      await expect(page.getByRole("heading", { name: "Working interest", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Working on this", exact: true })).toHaveCount(0);
+      await expect(page.getByText("Closed", { exact: true })).toBeVisible();
+    } finally {
+      await prisma.project.delete({ where: { id: project.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
 });
 
 async function signUp(page: Page, name: string, email: string, password: string) {

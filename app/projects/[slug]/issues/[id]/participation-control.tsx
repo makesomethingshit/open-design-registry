@@ -25,6 +25,7 @@ export default function ParticipationControl({ issueId, count: initialCount, nam
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
         setError(response.status === 409 ? "This request is closed." : payload?.error ?? "Could not update participation.");
+        if (response.status === 409) router.refresh();
         return;
       }
       router.refresh();
