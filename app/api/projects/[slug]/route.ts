@@ -26,12 +26,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
   const { rightsConfirmed, ...data } = parsed.data;
   if (data.isPublic === true && !project.isPublic && !rightsConfirmed) return NextResponse.json({ error: "Confirm the license and your right to share the source publicly." }, { status: 400 });
   const updateData = { ...data, ...(data.isPublic === true && !project.isPublic ? { publicationConfirmedAt: new Date(), publicationConfirmedBy: session.user.id } : {}) };
-  const updated = data.document === undefined
-    ? await prisma.project.update({ where: { slug }, data: updateData })
-    : await prisma.$transaction(async (tx) => {
-      if (!await validateDocumentImages(tx, data.document!)) return null;
-      return tx.project.update({ where: { slug }, data: updateData });
-    }, imageReferenceTransactionOptions);
-  if (!updated) return NextResponse.json({ error: "An image has expired. Upload it again before saving." }, { status: 409 });
-  return NextResponse.json({ ...updated, coverUrl: publicAssetUrl(updated.coverUrl) });
+  const outcome = await prisma.$transaction(async (tx) => {
+    // Serialize an owner's visibility change with administrator moderation.
+    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
+    const hold = await tx.moderationProjectHold.findUnique({ where: { projectId: project.id } });
+    if (hold?.active && data.isPublic === true) return { kind: "moderated" as const };
+    // If the owner explicitly chooses private, later moderation restore must respect it.
+    if (hold?.active && data.isPublic === false && hold.wasPublic) {
+      await tx.moderationProjectHold.update({ where: { projectId: project.id }, data: { wasPublic: false } });
+    }
+    if (data.document !== undefined && !await validateDocumentImages(tx, data.document)) return { kind: "expired" as const };
+    return { kind: "updated" as const, project: await tx.project.update({ where: { slug }, data: updateData }) };
+  }, imageReferenceTransactionOptions);
+  if (outcome.kind === "moderated") return NextResponse.json({ error: "This project was hidden by moderation. Contact an administrator to restore it." }, { status: 409 });
+  if (outcome.kind === "expired") return NextResponse.json({ error: "An image has expired. Upload it again before saving." }, { status: 409 });
+  return NextResponse.json({ ...outcome.project, coverUrl: publicAssetUrl(outcome.project.coverUrl) });
 }
