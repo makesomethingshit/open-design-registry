@@ -56,8 +56,16 @@ export async function POST(request: Request) {
   });
   const rightsConfirmed = form.get("rightsConfirmed") === "on" || form.get("rightsConfirmed") === "true";
   const cover = form.get("cover");
-  if (!parsed.success || (parsed.data.isPublic && !rightsConfirmed) || !(cover instanceof File) || !imageTypes.has(cover.type) || cover.size > maxImageBytes) {
+  if (!parsed.success || (parsed.data.isPublic && !rightsConfirmed) || !(cover instanceof File) || !imageTypes.has(cover.type) || !cover.size || cover.size > maxImageBytes) {
     return NextResponse.json({ error: "Check the title, license, and PNG/JPG cover image (up to 10 MB)." }, { status: 400 });
+  }
+  // File.type is client-controlled; reject an empty or mislabeled cover before S3 writes.
+  const header = new Uint8Array(await cover.slice(0, 8).arrayBuffer());
+  const validSignature = cover.type === "image/png"
+    ? [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => header[index] === byte)
+    : header[0] === 255 && header[1] === 216 && header[2] === 255;
+  if (!validSignature) {
+    return NextResponse.json({ error: "The file is not a valid PNG or JPG image." }, { status: 400 });
   }
   const baseSlug = slugify(parsed.data.title);
   const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
