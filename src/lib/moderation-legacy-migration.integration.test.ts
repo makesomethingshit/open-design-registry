@@ -24,6 +24,7 @@ db("legacy moderation migration", () => {
     const legacyMigrationSql = await readFile(resolve(process.cwd(), "prisma/migrations/20261012000000_legacy_moderation_review/migration.sql"), "utf8");
     const scopeStartedAt = new Date("2026-10-10T00:00:00.000Z");
     const oldReviewedAt = new Date("2026-10-09T23:00:00.000Z");
+    const postReviewPreMigration = new Date("2026-10-09T23:15:00.000Z");
     const existingHoldReviewedAt = new Date("2026-10-09T23:30:00.000Z");
     const freshReviewedAt = new Date("2026-10-10T01:00:00.000Z");
 
@@ -48,7 +49,12 @@ db("legacy moderation migration", () => {
           (${`blank-target-${suffix}`}, '', false),
           (${`blank-peer-${suffix}`}, '', false),
           (${`blank-public-${suffix}`}, '', true)`;
-        await tx.$executeRaw`INSERT INTO "Project" ("id", "coverUrl", "isPublic", "createdAt") VALUES (${`new-peer-${suffix}`}, ${`covers/${suffix}/shared`}, false, ${freshReviewedAt})`;
+        // These projects predate the migration but did NOT exist when the old
+        // decision was made; neither shared nor blank covers imply an old hide.
+        await tx.$executeRaw`INSERT INTO "Project" ("id", "coverUrl", "isPublic", "createdAt") VALUES
+          (${`post-review-peer-${suffix}`}, ${`covers/${suffix}/shared`}, false, ${postReviewPreMigration}),
+          (${`post-review-blank-${suffix}`}, '', false, ${postReviewPreMigration}),
+          (${`new-peer-${suffix}`}, ${`covers/${suffix}/shared`}, false, ${freshReviewedAt})`;
         await tx.$executeRaw`INSERT INTO "Revision" ("id", "projectId") VALUES (${`revision-row-${suffix}`}, ${`revision-${suffix}`})`;
         await tx.$executeRaw`INSERT INTO "Report" ("id", "projectId", "revisionId", "reason", "details", "status", "reviewedBy", "reviewedAt") VALUES
           (${`old-report-${suffix}`}, ${`old-direct-${suffix}`}, NULL, 'Old direct reason', 'Old direct details', 'RESOLVED', 'old-moderator', ${oldReviewedAt}),
@@ -84,7 +90,7 @@ db("legacy moderation migration", () => {
           expect.objectContaining({ id: `legacy-hide:revision-${suffix}`, projectId: `revision-${suffix}`, actorId: "legacy-migration", reportReason: "Revision reason", reportDetails: "Revision details", resolutionNote: expect.stringContaining("original reviewer: unknown") }),
           expect.objectContaining({ id: `legacy-hide:blank-peer-${suffix}`, projectId: `blank-peer-${suffix}`, reportReason: "Blank cover reason", reportDetails: "Blank cover details", resolutionNote: expect.stringContaining("original cover: ") }),
         ]));
-        expect(holds.some((hold) => hold.projectId === `new-peer-${suffix}` || hold.projectId === `fresh-${suffix}` || hold.projectId === `evented-${suffix}` || hold.projectId === `unrelated-${suffix}` || hold.projectId === `public-peer-${suffix}` || hold.projectId === `blank-public-${suffix}`)).toBe(false);
+        expect(holds.some((hold) => hold.projectId === `post-review-peer-${suffix}` || hold.projectId === `post-review-blank-${suffix}` || hold.projectId === `new-peer-${suffix}` || hold.projectId === `fresh-${suffix}` || hold.projectId === `evented-${suffix}` || hold.projectId === `unrelated-${suffix}` || hold.projectId === `public-peer-${suffix}` || hold.projectId === `blank-public-${suffix}`)).toBe(false);
         expect(await tx.$queryRawUnsafe<Array<{ count: bigint }>>(`SELECT COUNT(*) AS count FROM "ModerationAssetBlock"`)).toEqual([{ count: BigInt(0) }]);
       }, { timeout: 120_000 });
     } finally {

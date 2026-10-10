@@ -57,6 +57,53 @@ db("moderation decision retention in PostgreSQL", () => {
       await prisma.user.delete({ where: { id: user.id } });
     }
   });
+
+  it("shows each retained active decision, not an unrelated newer restoration note", async () => {
+    const suffix = crypto.randomUUID();
+    const user = await prisma.user.create({ data: { id: suffix, name: "Moderator", email: suffix + "@example.test" } });
+    const project = await prisma.project.create({ data: { slug: suffix, title: "Audit scope", description: "", coverUrl: "", license: "MIT", ownerId: user.id, isPublic: false } });
+    const coverReportId = "retained-cover-" + suffix;
+    const hideReportId = "retained-hide-" + suffix;
+    const keyA = "covers/" + suffix + "/a";
+    const keyB = "covers/" + suffix + "/b";
+    const oldTime = new Date("2026-10-01T10:00:00.000Z");
+    const decisionTime = new Date("2026-10-01T11:00:00.000Z");
+    const laterTime = new Date("2026-10-01T12:00:00.000Z");
+    try {
+      await prisma.moderationProjectHold.create({ data: { projectId: project.id, reportId: hideReportId, hiddenById: user.id, wasPublic: true } });
+      await prisma.moderationAssetBlock.createMany({ data: [
+        { key: keyA, reportId: coverReportId, blockedById: user.id, reason: "Cover A active reason" },
+        { key: keyB, reportId: coverReportId, blockedById: user.id, reason: "Cover B active reason" },
+      ] });
+      await prisma.moderationEvent.createMany({ data: [
+        { reportId: coverReportId, actorId: user.id, action: "HIDE_PROJECT", projectId: project.id, resolutionNote: "Old hidden project", createdAt: oldTime },
+        { reportId: coverReportId, actorId: user.id, action: "BLOCK_COVER", assetKey: keyA, reportReason: "Reported content", reportDetails: "Original cover details", resolutionNote: "Cover A active reason", createdAt: decisionTime },
+        { reportId: coverReportId, actorId: user.id, action: "BLOCK_COVER", assetKey: keyB, reportReason: "Reported content", reportDetails: "Original cover details", resolutionNote: "Cover B active reason", createdAt: decisionTime },
+        { reportId: coverReportId, actorId: user.id, action: "RESTORE_PROJECT", projectId: project.id, resolutionNote: "Unrelated project restore note", createdAt: laterTime },
+        { reportId: hideReportId, actorId: user.id, action: "HIDE_PROJECT", projectId: project.id, reportReason: "Reported private project", resolutionNote: "Actual active project hide note", createdAt: oldTime },
+        { reportId: hideReportId, actorId: user.id, action: "BLOCK_COVER", assetKey: "covers/" + suffix + "/restored", resolutionNote: "Older unrelated cover note", createdAt: decisionTime },
+        { reportId: hideReportId, actorId: user.id, action: "UNBLOCK_COVER", assetKey: "covers/" + suffix + "/restored", resolutionNote: "Unrelated cover unblock note", createdAt: laterTime },
+      ] });
+      const html = renderToStaticMarkup(await AdminReportsPage());
+      expect(html).toContain("Reported content");
+      expect(html).toContain("Original cover details");
+      expect(html).toContain("Cover A active reason");
+      expect(html).toContain("Cover B active reason");
+      expect(html).toContain(keyA);
+      expect(html).toContain(keyB);
+      expect(html).toContain("Reported private project");
+      expect(html).toContain("Actual active project hide note");
+      expect(html).not.toContain("Unrelated project restore note");
+      expect(html).not.toContain("Unrelated cover unblock note");
+      expect(html).not.toContain("Older unrelated cover note");
+    } finally {
+      await prisma.moderationEvent.deleteMany({ where: { reportId: { in: [coverReportId, hideReportId] } } });
+      await prisma.moderationAssetBlock.deleteMany({ where: { reportId: coverReportId } });
+      await prisma.moderationProjectHold.deleteMany({ where: { projectId: project.id } });
+      await prisma.project.delete({ where: { id: project.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
   it("does not silently resolve a duplicate hide and restores after reporter deletion", async () => {
     const suffix = crypto.randomUUID();
     const user = await prisma.user.create({ data: { id: suffix, name: "Reporter", email: suffix + "@example.test" } });

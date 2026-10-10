@@ -49,6 +49,9 @@ WITH scope_migration AS (
     ON legacy_reports."targetProjectId" = project."id"
     OR legacy_reports."targetCoverUrl" = project."coverUrl"
   WHERE project."isPublic" = false
+    -- A project created after the report was reviewed could not have been
+    -- affected by that legacy hide, even if it later reused the same cover.
+    AND project."createdAt" <= legacy_reports."reviewedAt"
     AND project."createdAt" < legacy_reports."scopeStartedAt"
     AND NOT EXISTS (
       SELECT 1

@@ -30,11 +30,25 @@ export default async function AdminReportsPage() {
   const retainedIds = [...new Set([...hiddenReports, ...blockedReports])].filter(id => !existingIds.has(id));
   const events = retainedIds.length ? await prisma.moderationEvent.findMany({ where: { reportId: { in: retainedIds } }, orderBy: { createdAt: "desc" } }) : [];
   const retained = retainedIds.map(id => {
-    const event = events.find(event => event.reportId === id);
+    const activeHold = holds.find(hold => hold.reportId === id);
     const savedBlocks = blocks.filter(block => block.reportId === id);
+    const relevantEvents = events.filter(event => event.reportId === id);
+    // A later restore event must not masquerade as the reason for an
+    // independently active hold or asset block.
+    const holdEvent = activeHold
+      ? relevantEvents.find(event => event.projectId === activeHold.projectId && (event.action === "HIDE_PROJECT" || event.action === "LEGACY_REVIEW_HOLD"))
+      : undefined;
+    const blockDecisions = savedBlocks.map(block => ({
+      block, event: relevantEvents.find(event => event.action === "BLOCK_COVER" && event.assetKey === block.key),
+    }));
+    const activeEvent = holdEvent ?? blockDecisions.find(({ event }) => event)?.event;
     return {
-      id, reason: event?.reportReason || "Retained moderation decision",
-      details: [event?.reportDetails, event?.resolutionNote || savedBlocks[0]?.reason, ...savedBlocks.map(block => block.key)].filter(Boolean).join("\n"),
+      id, reason: activeEvent?.reportReason || "Retained moderation decision",
+      details: [
+        activeEvent?.reportDetails,
+        ...(activeHold ? [`Project hide: ${holdEvent?.resolutionNote || "No retained moderation note"}`] : []),
+        ...blockDecisions.map(({ block, event }) => `Blocked cover ${block.key}: ${block.reason || event?.resolutionNote || "No retained moderation reason"}`),
+      ].filter(Boolean).join("\n"),
       status: "RESOLVED", sourceMissing: true, coverSharedCount: 0,
       projectHidden: hiddenReports.has(id), coverBlocked: blockedReports.has(id),
       reporter: { name: "Source report deleted", email: "" },
