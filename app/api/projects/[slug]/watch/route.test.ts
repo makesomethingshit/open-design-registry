@@ -31,9 +31,9 @@ describe("project watch route", () => {
     expect(mocks.deleteWatches).not.toHaveBeenCalled();
   });
 
-  it.each(["PUT", "DELETE"] as const)("hides missing projects for %s", async (method) => {
+  it("hides missing projects for PUT", async () => {
     mocks.findProject.mockResolvedValue(null);
-    const response = await (method === "PUT" ? PUT(request(method), params) : DELETE(request(method), params));
+    const response = await PUT(request("PUT"), params);
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Project not found" });
@@ -41,14 +41,22 @@ describe("project watch route", () => {
     expect(mocks.deleteWatches).not.toHaveBeenCalled();
   });
 
-  it.each(["PUT", "DELETE"] as const)("hides private projects for %s", async (method) => {
+  it("hides private projects for PUT", async () => {
     mocks.findProject.mockResolvedValue({ id: "project", isPublic: false });
-    const response = await (method === "PUT" ? PUT(request(method), params) : DELETE(request(method), params));
+    const response = await PUT(request("PUT"), params);
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Project not found" });
     expect(mocks.upsertWatch).not.toHaveBeenCalled();
     expect(mocks.deleteWatches).not.toHaveBeenCalled();
+  });
+
+  it.each(["public", "private", "missing"])("returns the same successful response for a %s DELETE", async () => {
+    mocks.deleteWatches.mockResolvedValue({ count: 0 });
+    const response = await DELETE(request("DELETE"), params);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ watched: false });
   });
 
   it("makes repeated PUTs idempotent", async () => {
@@ -82,7 +90,8 @@ describe("project watch route", () => {
     const response = await DELETE(request("DELETE"), params);
 
     expect(response.status).toBe(200);
-    expect(mocks.deleteWatches).toHaveBeenCalledWith({ where: { userId: "user-a", projectId: "project" } });
+    expect(mocks.deleteWatches).toHaveBeenCalledWith({ where: { userId: "user-a", project: { slug: "demo" } } });
+    expect(mocks.findProject).not.toHaveBeenCalled();
   });
 
   it("does not touch the Star relation", async () => {
