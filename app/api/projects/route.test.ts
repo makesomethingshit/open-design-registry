@@ -68,7 +68,7 @@ function uploadCover(bytes: Uint8Array, type = "image/png", publicProject = true
   form.set("license", "MIT");
   form.set("isPublic", String(publicProject));
   form.set("rightsConfirmed", "true");
-  form.set("cover", new File([bytes], "cover.png", { type }));
+  form.set("cover", new File([Uint8Array.from(bytes).buffer], "cover.png", { type }));
   return new Request("http://localhost/api/projects", { method: "POST", body: form });
 }
 
@@ -77,6 +77,7 @@ describe("project cover uploads", () => {
     vi.clearAllMocks();
     mocks.authSession.mockResolvedValue({ user: { id: "owner" } });
     mocks.putCover.mockResolvedValue("/api/assets?key=covers%2Fowner%2Fstudio");
+    mocks.deleteObject.mockResolvedValue(undefined);
     mocks.projectCreate.mockResolvedValue({
       id: "project1", slug: "studio", title: "Studio kit", description: "A reusable project",
       license: "MIT", isPublic: true, coverUrl: "/api/assets?key=covers%2Fowner%2Fstudio", ownerId: "owner",
