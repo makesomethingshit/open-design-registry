@@ -60,3 +60,48 @@ export function legacyObjectUrl(key: string) {
 }
 
 export const objectUrl = legacyObjectUrl;
+
+// Resolve the canonical S3 key used by both the moderation route and asset proxy.
+// Only our own proxy or configured bucket URLs are accepted; arbitrary URLs are not.
+export function assetKeyFromStoredUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (value.startsWith("/api/assets?")) {
+    try {
+      const url = new URL(value, "http://localhost");
+      const hasKey = url.searchParams.has("key");
+      const hasUrl = url.searchParams.has("url");
+      if (hasKey === hasUrl) return null;
+      const candidate = hasKey ? url.searchParams.get("key") : legacyAssetKey(url.searchParams.get("url"));
+      return candidate && validAssetKey(candidate) ? candidate : null;
+    } catch {
+      return null;
+    }
+  }
+  const candidate = legacyAssetKey(value);
+  return candidate && validAssetKey(candidate) ? candidate : null;
+}
+
+export function legacyAssetKey(value: string | null | undefined): string | null {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    const endpoint = process.env.S3_ENDPOINT;
+    if (endpoint) {
+      const configured = new URL(endpoint);
+      if (url.origin !== configured.origin) return null;
+      const prefix = [configured.pathname.replace(/^\/+|\/+$/g, ""), bucket].filter(Boolean).join("/");
+      const path = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+      return path.startsWith(prefix + "/") ? path.slice(prefix.length + 1) : null;
+    }
+    const region = process.env.S3_REGION ?? "us-east-1";
+    if (url.hostname.toLowerCase() !== bucket.toLowerCase() + ".s3." + region.toLowerCase() + ".amazonaws.com") return null;
+    return decodeURIComponent(url.pathname).replace(/^\/+/, "");
+  } catch {
+    return null;
+  }
+}
+
+function validAssetKey(key: string): boolean {
+  return key.length > 0 && key.length <= 1024 && !key.startsWith("/") && !key.split("/").includes("..");
+}
+
