@@ -35,7 +35,7 @@ const { default: ProjectScreen } = await import("./project-screen");
 type Project = Awaited<ReturnType<typeof prisma.project.create>>;
 
 function forkSlugs(markup: string) {
-  return [...markup.matchAll(/href="\/projects\/([^"]+)">Fork /g)].map((match) => match[1]).filter((slug) => slug.includes("-fork-"));
+  return [...markup.matchAll(/href="\/projects\/([^"]+)">Fork /g)].map((match) => match[1]);
 }
 
 function nextCursor(markup: string) {
@@ -67,11 +67,12 @@ databaseDescribe("ProjectScreen fork pagination in PostgreSQL", () => {
         })),
       });
     }
+    const unrelatedParent = await prisma.project.create({ data: { slug: `${prefix}-unrelated-parent`, title: "Unrelated parent", description: "", license: "MIT", coverUrl: "cover.png", ownerId } });
     const parent = created.at(-1)!;
     await prisma.project.createMany({
       data: [
         { slug: `${prefix}-private`, title: "Fork private", description: "", license: "MIT", coverUrl: "cover.png", ownerId, forkedFromProjectId: parent.id, isPublic: false, createdAt: new Date("2026-01-01T00:00:00Z") },
-        { slug: `${prefix}-foreign`, title: "Fork foreign", description: "", license: "MIT", coverUrl: "cover.png", ownerId, forkedFromProjectId: created[0].id, createdAt: new Date("2026-01-01T00:00:00Z") },
+        { slug: `${prefix}-foreign`, title: "Fork foreign", description: "", license: "MIT", coverUrl: "cover.png", ownerId, forkedFromProjectId: unrelatedParent.id, createdAt: new Date("2026-01-01T00:00:00Z") },
       ],
     });
   });
@@ -93,7 +94,9 @@ databaseDescribe("ProjectScreen fork pagination in PostgreSQL", () => {
   it("renders empty, one, twenty, and twenty-one fork parents with the shared page size", async () => {
     for (const [index, count] of [0, 1, 20, 21].entries()) {
       const markup = await render(created[index], { pageSize: "20" });
-      expect(forkSlugs(markup)).toHaveLength(Math.min(count, 20));
+      const slugs = forkSlugs(markup);
+      expect(slugs).toHaveLength(Math.min(count, 20));
+      expect(slugs.every((slug) => slug.startsWith(`${prefix}-fork-${count}-`))).toBe(true);
       expect(markup.includes("Next page")).toBe(count > 20);
     }
   });
