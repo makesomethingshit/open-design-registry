@@ -20,6 +20,13 @@ export async function GET(request: Request) {
   const requestedUrl = query.get("url")?.trim();
   const key = requestedKey || keyFromLegacyUrl(requestedUrl);
   if (!key || !safeKey(key)) return notFound();
+  // A moderation block overrides every public or owner reference to this key.
+  // Check before resolving ownership, so different project URLs cannot bypass it.
+  const moderated = await prisma.moderationAssetBlock.findUnique({
+    where: { key },
+    select: { blocked: true },
+  });
+  if (moderated?.blocked) return notFound();
 
   const storedUrls = new Set<string>(hasUrl ? [requestedUrl!] : []);
   if (hasKey) [assetUrl(key), legacyObjectUrl(key), key].forEach((value) => storedUrls.add(value));
