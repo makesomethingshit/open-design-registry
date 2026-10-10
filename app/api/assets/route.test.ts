@@ -15,7 +15,7 @@ vi.mock("@/src/lib/prisma", () => ({ prisma: {
   project: { findMany: mocks.projectFindMany, findUnique: mocks.documentProject },
   preview: { findMany: mocks.previewFindMany },
   revision: { findMany: mocks.revisionFindMany },
-  moderationAssetBlock: { findUnique: mocks.moderationAssetFindFirst },
+  moderationAssetBlock: { findFirst: mocks.moderationAssetFindFirst },
 } }));
 vi.mock("@/src/lib/storage", () => ({
   assetUrl: (key: string) => `/api/assets?key=${encodeURIComponent(key)}`,
