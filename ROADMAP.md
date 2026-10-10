@@ -12,6 +12,43 @@
 
 화면별 남은 문제와 완료 기준은 [저장소의 열린 이슈](https://github.com/makesomethingshit/open-design-registry/issues)에 기록합니다. 기능의 구현과 사용자의 이해도·시각 품질 검증을 구분합니다.
 
+## 제품 확장 방향 (검토안)
+
+ODR의 기본 단위는 **Project**이며, 목표는 더 많은 게시물 생성이 아니라 디자인의 **발견 → 기여 → 시각적 검토 → 채택 → 계보와 이동성**을 개선하는 것입니다. 아래 기능은 검토 후보이며 아직 구현 완료·릴리스 일정·배포 약속을 뜻하지 않습니다. 실제 지원 범위는 [현재 기능](docs/current-capabilities.md)을 따릅니다.
+
+### A. 발견과 참여의 진입 장벽 낮추기
+
+- **Project Entry Point** ([#155](https://github.com/makesomethingshit/open-design-registry/issues/155)): 기존 Overview에서 목적·최신 작업물·열린 요청·다음 행동을 연결합니다. #92·#75의 완료 범위를 반복하지 않습니다.
+- **Contribution Brief** ([#156](https://github.com/makesomethingshit/open-design-registry/issues/156)): Design Request에 목적·제약·기대 산출물·검토 기준을 선택적으로 안내합니다. 초기에는 기존 `Issue.body`와 관련 경로를 재사용합니다.
+- **Open Questions** ([#158](https://github.com/makesomethingshit/open-design-registry/issues/158)): 결정이 필요한 디자인 논점을 기존 Discussion·Issue와 연결해 발견합니다. 무엇을 '미결정'으로 표시할지는 사람의 제품 결정이 우선입니다.
+- **Project Health**: 발행·미해결 요청·리뷰 대기처럼 실제 저장된 상태를 요약하되 근거 없는 건강 점수나 인기도 순위를 만들지 않습니다.
+
+### B. 디자인 변경과 판단의 맥락 강화
+
+- **Visual Proposal Review** ([#157](https://github.com/makesomethingshit/open-design-registry/issues/157)): 이미 구현된 Side-by-side·Overlay·Zoom을 복제하지 않고, stale Proposal의 기준/base·제안/source·최신/latest 비교 맥락을 검토합니다.
+- **Review Criteria**: 변경의 종류별 검토 기준을 읽기 쉽게 전달하고, 승인/선택 적용의 기존 책임 경계를 유지합니다.
+- **Design Decision Log**: 왜 변경을 채택하거나 보류했는지 판단 근거를 이력으로 연결합니다. 불변 Revision을 수정하지 않습니다.
+- **매체별 Preview·Review**: 그래픽·타이포그래피·영상·편집디자인에 적합한 미리보기를 점진적으로 탐색합니다. 지원하지 않는 포맷을 지원하는 것처럼 표시하지 않습니다.
+
+### C. 변경의 계보와 판본 이해하기
+
+- **Fork Upstream Status**: 원본에 새 Revision이 발행되면 출처 대비 변경을 안내하되 자동 병합을 의미하지 않습니다.
+- **Release Story**: Release의 주요 변경·시각 결과·참여자 및 결정 이유를 보여주되 Release를 완료/안정 판정으로 취급하지 않습니다.
+- **Design Lineage Graph**: 직접 Fork, 참고, 영향, 재해석 같은 관계를 구별하고, 확인할 수 없는 출처를 자동으로 추정하지 않습니다.
+
+### D. 공개 생태계와 이동성 확장
+
+- **Portable Design Package**: 파일·Preview·Revision·출처·라이선스를 버전 있는 패키지로 내보내며 비공개 자산 권한과 권리 고지를 유지합니다.
+- **Tool Connectors**: 제작 도구의 산출물을 ODR Revision 발행으로 연결하는 얇은 통합을 우선 검토합니다. 실시간 공동 편집·범용 파일 내부 병합은 범위 밖입니다.
+- **Curated Collections**: 목적·분야·문제에 따라 공개 Project를 묶되 사람 중심 SNS나 인기순 랭킹으로 발전시키지 않습니다.
+
+### 개발 순서와 검증 기준
+
+1. 먼저 #155·#156의 최소 UI 개선과 실제 신규 기여자 관찰을 진행합니다. #157·#158은 해당 이슈의 **P1 의사결정**을 완료한 뒤 구현 범위를 확정합니다.
+2. 기존 Project / Issue / Discussion / Proposal / Revision 데이터와 권한 경계를 우선 재사용합니다. 새로운 모델은 기존 책임으로 표현할 수 없는 요구가 입증될 때만 도입합니다.
+3. 각 작업은 독립적으로 테스트·리뷰·머지할 수 있는 PR로 나눕니다. UI 결과는 모바일/키보드/실제 작업 사례로 확인하고, 권한·이력·자산 변경은 실제 DB·S3 경계를 별도로 검증합니다.
+4. Contributor Canvas([#129](https://github.com/makesomethingshit/open-design-registry/issues/129)–[#132](https://github.com/makesomethingshit/open-design-registry/issues/132))는 별개 Epic으로 유지하며, 논의용 가변 작업 공간을 정식 Proposal·Revision의 승인/불변 기록으로 혼동하지 않습니다.
+
 ## 계속 필요한 운영 기반
 
 - 업로드 실패의 고아 객체, DB 성공 뒤 응답 유실, 알림 실패를 관측하고 안전하게 재처리합니다.
