@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   previewFindMany: vi.fn(),
   revisionFindMany: vi.fn(),
   getObject: vi.fn(),
+  moderationAssetFindUnique: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
@@ -14,6 +15,7 @@ vi.mock("@/src/lib/prisma", () => ({ prisma: {
   project: { findMany: mocks.projectFindMany, findUnique: mocks.documentProject },
   preview: { findMany: mocks.previewFindMany },
   revision: { findMany: mocks.revisionFindMany },
+  moderationAssetBlock: { findUnique: mocks.moderationAssetFindUnique },
 } }));
 vi.mock("@/src/lib/storage", () => ({
   assetUrl: (key: string) => `/api/assets?key=${encodeURIComponent(key)}`,
@@ -33,6 +35,7 @@ describe("asset proxy route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue(null);
+    mocks.moderationAssetFindUnique.mockResolvedValue(null);
     mocks.projectFindMany.mockResolvedValue([]);
     mocks.documentProject.mockResolvedValue(null);
     mocks.previewFindMany.mockResolvedValue([]);
@@ -124,4 +127,25 @@ describe("asset proxy route", () => {
     mocks.getSession.mockResolvedValue({ user: { id: "other-owner" } });
     expect((await GET(request(query))).status).toBe(404);
   });
+  it("blocks a moderated object regardless of public/owner references or legacy URL", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.projectFindMany.mockResolvedValue([{ isPublic: true, ownerId: "owner" }]);
+    mocks.moderationAssetFindUnique.mockResolvedValue({ blocked: true });
+    const path = "covers/owner/project";
+    const modern = await GET(request(`key=${encodeURIComponent(path)}`));
+    const legacy = await GET(request(`url=${encodeURIComponent("https://open-design-registry.s3.us-east-1.amazonaws.com/" + path)}`));
+    expect(modern.status).toBe(404);
+    expect(legacy.status).toBe(404);
+    expect(mocks.getObject).not.toHaveBeenCalled();
+    expect(mocks.projectFindMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves normal access control after a moderation block is lifted", async () => {
+    mocks.moderationAssetFindUnique.mockResolvedValue({ blocked: false });
+    mocks.projectFindMany.mockResolvedValue([{ isPublic: true, ownerId: "owner" }]);
+    expect((await GET(request("key=covers%2Fowner%2Fproject")).status)).toBe(200);
+    mocks.projectFindMany.mockResolvedValue([{ isPublic: false, ownerId: "owner" }]);
+    expect((await GET(request("key=covers%2Fowner%2Fproject")).status)).toBe(404);
+  });
+
 });
