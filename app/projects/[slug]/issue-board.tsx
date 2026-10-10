@@ -54,6 +54,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
       : String(form.get("body") ?? "");
     if (body.length > 10000) {
       setCreateFieldErrors({ body: "Keep the combined description within 10,000 characters." });
+      formElement.querySelector<HTMLTextAreaElement>("#issue-body")?.focus();
       return;
     }
     setCreateFieldErrors({});
@@ -170,7 +171,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
           <h3>Open an issue</h3>
           <Field error={createFieldErrors.title} id="issue-title" invalid={Boolean(createFieldErrors.title)} label="Issue title" required><Input name="title" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={200} /></Field>
           {canManage && <Field id="issue-kind" label="Type"><Select name="kind" value={issueKind} onChange={(event) => setIssueKind(event.currentTarget.value === "DESIGN_REQUEST" ? "DESIGN_REQUEST" : "ISSUE")}><option value="ISSUE">Issue</option><option value="DESIGN_REQUEST">Design request</option></Select></Field>}
-          {canManage && issueKind === "DESIGN_REQUEST" && <section aria-labelledby="brief-heading">
+          {canManage && <section aria-labelledby="brief-heading" hidden={issueKind !== "DESIGN_REQUEST"} onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })}>
             <Stack gap={3}>
               <h4 id="brief-heading">Contribution brief (optional)</h4>
               <p className="meta">Describe the work without filling every field. Only completed sections are saved in the request description.</p>
