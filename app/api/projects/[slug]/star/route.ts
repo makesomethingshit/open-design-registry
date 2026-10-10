@@ -23,9 +23,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
 
   const { slug } = await params;
-  const project = await prisma.project.findUnique({ where: { slug }, select: { id: true, isPublic: true } });
-  if (!project?.isPublic) return NextResponse.json({ error: "Project not found" }, { status: 404 });
-
-  await prisma.projectStar.deleteMany({ where: { userId: session.user.id, projectId: project.id } });
+  await prisma.projectStar.deleteMany({ where: { userId: session.user.id, project: { slug } } });
   return NextResponse.json({ starred: false });
 }
