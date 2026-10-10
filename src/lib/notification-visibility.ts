@@ -4,7 +4,8 @@ export function visibleNotificationWhere(recipientId: string): Prisma.Notificati
   const proposalTypes = ["PROPOSAL_CREATED", "PROPOSAL_CHANGES_REQUESTED", "PROPOSAL_APPROVED", "PROPOSAL_APPLIED"] as const;
   const readableProject = { OR: [{ isPublic: true }, { ownerId: recipientId }] };
   return { recipientId, OR: [
-    { type: { notIn: ["REVISION_PUBLISHED", "RELEASE_PUBLISHED", ...proposalTypes] } },
+    { type: { notIn: ["REVISION_PUBLISHED", "RELEASE_PUBLISHED", "FORK_CREATED", ...proposalTypes] } },
+    { type: "FORK_CREATED", project: readableProject, forkedProject: readableProject },
     { type: { in: ["REVISION_PUBLISHED", "RELEASE_PUBLISHED"] }, project: { isPublic: true } },
     { type: { in: [...proposalTypes] }, proposal: {
       project: readableProject,
