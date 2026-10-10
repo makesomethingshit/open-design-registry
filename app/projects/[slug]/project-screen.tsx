@@ -25,7 +25,7 @@ import ProposalList, { type ProposalListItem } from "./proposal-list";
 import RevisionPublishForm from "./revision-publish-form";
 import styles from "./project.module.css";
 
-export default async function ProjectScreen({ params, searchParams, view = "overview" }: { view?: ProjectView; params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; issueStatus?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string; pageSize?: string; cursor?: string }> }) {
+export default async function ProjectScreen({ params, searchParams, view = "overview" }: { view?: ProjectView; params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; issueStatus?: string; publish?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string; pageSize?: string; cursor?: string }> }) {
   const { slug } = await params;
   const query = await searchParams;
   const pageSize = parsePageSize(query.pageSize ?? null);
@@ -140,8 +140,8 @@ export default async function ProjectScreen({ params, searchParams, view = "over
               ? !project.isPublic
                 ? <Link className={styles.secondaryLink} href={`/projects/${slug}/settings`}>Manage private project</Link>
                 : latestRevision
-                  ? <Link className={styles.secondaryLink} href={`/projects/${slug}/issues/new`}>Open a design request</Link>
-                  : <Link className={styles.secondaryLink} href={`/projects/${slug}/revisions#owner-tools`}>Publish the first revision</Link>
+                  ? <Link className={styles.secondaryLink} href={`/projects/${slug}/issues/new`}>Open an issue or design request</Link>
+                  : <Link className={styles.secondaryLink} href={`/projects/${slug}/revisions?publish=1#owner-tools`}>Publish the first revision</Link>
               : latestRevision
                 ? <Link className={styles.secondaryLink} href={`/projects/${slug}/contribute`}>Contribute from the latest revision</Link>
                 : <Link className={styles.secondaryLink} href={`/projects/${slug}/discussions`}>Explore project discussions</Link>}
@@ -178,7 +178,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
 
     {view === "revisions" && session?.user.id === project.ownerId && <>
       {contributionReturn && <Banner title="Prepare your working revision" tone="info">Edit the source in an external design tool, then publish a new revision here. Publishing returns to the target contribution workspace.</Banner>}
-      <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn)}><summary>Publish revision</summary><div><PageGrid><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>
+      <details className={styles.ownerTools} id="owner-tools" open={Boolean(contributionReturn) || query.publish === "1"}><summary>Publish revision</summary><div><PageGrid><FormColumn><RevisionPublishForm contributionReturn={contributionReturn} existingFiles={latestFiles} slug={project.slug} /></FormColumn></PageGrid></div></details>
     </>}
     {view === "settings" && <section aria-labelledby="settings-heading" className={styles.section}><h2 id="settings-heading">Project settings</h2><PageGrid><FormColumn><ProjectSettingsForm activityStatus={project.activityStatus} description={project.description} isPublic={project.isPublic} key={JSON.stringify([project.title, project.description, project.license, project.activityStatus, project.isPublic])} license={project.license} slug={project.slug} title={project.title} /></FormColumn></PageGrid></section>}
 

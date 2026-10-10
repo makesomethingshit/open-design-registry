@@ -347,6 +347,15 @@ describe("Project Discussions section", () => {
 });
 
 describe("Project Overview next actions", () => {
+  it("opens revision publishing only for the owner's explicit publishing route", async () => {
+    const opened = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions", { publish: "1" });
+    expect(opened).toMatch(/<details[^>]*id="owner-tools"[^>]*open=""/);
+    const ordinary = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions");
+    expect(ordinary).not.toMatch(/<details[^>]*id="owner-tools"[^>]*open=""/);
+    const visitor = await renderProjectPage({ user: { id: "visitor" } }, project(), 0, 0, "revisions", { publish: "1" });
+    expect(visitor).not.toContain('id="owner-tools"');
+  });
+
   it("puts current work and participation paths before the long project document", async () => {
     const value = project();
     value.revisions = [revision(10)];
@@ -366,7 +375,7 @@ describe("Project Overview next actions", () => {
     expect(visitor).not.toContain("Publish the first revision");
 
     const owner = await renderProjectPage({ user: { id: "owner" } }, project());
-    expect(owner).toContain('href="/projects/demo/revisions#owner-tools">Publish the first revision</a>');
+    expect(owner).toContain('href="/projects/demo/revisions?publish=1#owner-tools">Publish the first revision</a>');
     expect(owner).not.toContain("Contribute from the latest revision");
   });
 
@@ -374,7 +383,7 @@ describe("Project Overview next actions", () => {
     const publicProject = project();
     publicProject.revisions = [revision(10)];
     const owner = await renderProjectPage({ user: { id: "owner" } }, publicProject);
-    expect(owner).toContain('href="/projects/demo/issues/new">Open a design request</a>');
+    expect(owner).toContain('href="/projects/demo/issues/new">Open an issue or design request</a>');
 
     const privateProject = project();
     privateProject.isPublic = false;

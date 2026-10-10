@@ -12,6 +12,18 @@ test("separates project tabs, preserves detail navigation and history, and prote
   expect(created.status()).toBe(201);
   const { slug } = await created.json();
   const base = `/projects/${slug}`;
+  // The empty-project next action must reach an open, keyboard-usable form.
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(base);
+    const next = page.getByRole("navigation", { name: "Project next steps" });
+    await next.getByRole("link", { name: "Publish the first revision", exact: true }).press("Enter");
+    await expect(page.locator("#owner-tools")).toHaveAttribute("open", "");
+    await expect(page.getByRole("textbox", { name: "Revision title", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.goto(base);
+    await page.screenshot({ path: testInfo.outputPath(`mobile-overview-${width}.png`), fullPage: true });
+  }
   expect((await page.request.patch(`/api${base}`, { data: { document: "# Working guide\n\nRead this guide in Overview." } })).status()).toBe(200);
   for (let index = 0; index < 4; index++) {
     const issue = await page.request.post(`/api${base}/issues`, { data: { title: `Request ${index}`, body: "Full issue body belongs in detail", kind: "DESIGN_REQUEST" } });
