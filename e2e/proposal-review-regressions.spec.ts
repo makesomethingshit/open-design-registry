@@ -7,7 +7,7 @@ test.describe("proposal review regression fixtures", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const workspace = await openWorkspace(page);
     await workspace.getByLabel("Show stale revision state").check();
-    await workspace.getByRole("button", { name: /^Add A deliberately long added unit name/ }).press("Enter");
+    await workspace.getByRole("combobox", { name: "Change", exact: true }).selectOption("fixture-add");
     const context = workspace.locator('[aria-live="polite"]').filter({ hasText: /^Comparing/ });
     await expect(context).toContainText("Base Revision 11 (Original) with Proposal Revision 12 (Proposal)");
     await expect(workspace.getByText("Not present in the original revision", { exact: true })).toBeVisible();
