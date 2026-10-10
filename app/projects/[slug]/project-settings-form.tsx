@@ -21,6 +21,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
+  const [visibilityChanged, setVisibilityChanged] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,11 +37,12 @@ export default function ProjectSettingsForm({ slug, title, description, license,
     setSaving(true);
     const form = new FormData(formElement);
     try {
-      const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), license: form.get("license"), isPublic: form.get("isPublic") === "on", activityStatus: form.get("activityStatus"), rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
+      const response = await fetch(`/api/projects/${slug}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: form.get("title"), description: form.get("description"), license: form.get("license"), ...(visibilityChanged ? { isPublic: form.get("isPublic") === "on" } : {}), activityStatus: form.get("activityStatus"), rightsConfirmed: form.get("rightsConfirmed") === "on" }) });
       if (!response.ok) {
         setError((await response.json().catch(() => null))?.error ?? "Could not save project settings.");
         return;
       }
+      setVisibilityChanged(false);
       setSuccess("Project settings saved.");
       router.refresh();
     } catch {
@@ -57,7 +59,7 @@ export default function ProjectSettingsForm({ slug, title, description, license,
         <Field error={fieldErrors.description} id="settings-description" invalid={Boolean(fieldErrors.description)} label="Description"><Textarea name="description" defaultValue={description} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.description; return next; })} maxLength={2000} /></Field>
         <Field error={fieldErrors.license} id="settings-license" invalid={Boolean(fieldErrors.license)} label="License" required><Input name="license" defaultValue={license} onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.license; return next; })} required maxLength={80} /></Field>
         <Field id="settings-activity-status" label="Activity status" description="This describes project activity. It does not affect proposals, search, or publishing."><Select name="activityStatus" defaultValue={activityStatus}>{activityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
-        <Checkbox defaultChecked={isPublic} label="Public project" name="isPublic" />
+        <Checkbox defaultChecked={isPublic} label="Public project" name="isPublic" onChange={() => setVisibilityChanged(true)} />
         {!isPublic && <Checkbox label="I confirm that I have the right to share the source publicly." name="rightsConfirmed" />}
         {error && <Banner tone="error" title="Could not save project settings">{error}</Banner>}
         {success && <Banner tone="success" title="Saved">{success}</Banner>}

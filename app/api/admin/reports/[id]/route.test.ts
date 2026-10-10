@@ -96,6 +96,18 @@ describe("admin report scope moderation", () => {
     }));
   });
 
+  it("does not attribute a previous review note to a new action without a note", async () => {
+    mocks.reportFindUnique.mockResolvedValue({ id: "report-1", projectId: "source", reason: "Copyright", details: "Original", resolutionNote: "An earlier review" });
+    expect((await PATCH(request({ status: "RESOLVED", action: "BLOCK_COVER" }), params)).status).toBe(200);
+    expect(mocks.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ resolutionNote: "" }) });
+    expect(mocks.reportUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ resolutionNote: null }) }));
+  });
+
+  it.each([["RESOLVED", "REVIEW"], ["DISMISSED", "DISMISS"]])("retains a %s review decision independently of the report", async (status, action) => {
+    expect((await PATCH(request({ status, action: "NONE", resolutionNote: "Terminal decision" }), params)).status).toBe(200);
+    expect(mocks.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ action, reportId: "report-1", actorId: "admin", resolutionNote: "Terminal decision" }) });
+  });
+
   it("hides only the reported project, not every project sharing its cover", async () => {
     const response = await PATCH(request({ status: "RESOLVED", hide: true }), params);
     expect(response.status).toBe(200);

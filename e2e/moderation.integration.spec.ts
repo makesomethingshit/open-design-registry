@@ -95,7 +95,26 @@ test("moderation restores retained decisions with shared S3 covers and deleted r
     await reverse.getByRole("button", { name: "Block shared cover and resolve" }).click();
     await expect(reverse).toContainText("The shared cover was blocked");
     expect((await page.request.patch(`/api/projects/${b.slug}`, { data: { isPublic: true, rightsConfirmed: true } })).status()).toBe(409);
-    expect((await page.request.patch(`/api/projects/${b.slug}`, { data: { isPublic: false } })).status()).toBe(200);
+    await page.goto(`/projects/${b.slug}/settings`);
+    const settings = page.getByRole("region", { name: "Edit project settings" });
+    await settings.getByRole("textbox", { name: "Title", exact: true }).fill("Fork B metadata edited while hidden");
+    const metadataResponse = page.waitForResponse(res => res.request().method() === "PATCH" && res.url().endsWith(`/api/projects/${b.slug}`));
+    const metadataRequest = page.waitForRequest(req => req.method() === "PATCH" && req.url().endsWith(`/api/projects/${b.slug}`));
+    await settings.getByRole("button", { name: "Save settings", exact: true }).click();
+    expect((await metadataRequest).postDataJSON()).not.toHaveProperty("isPublic");
+    expect((await metadataResponse).status()).toBe(200);
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: b.id } })).title).toBe("Fork B metadata edited while hidden");
+    expect((await prisma.moderationProjectHold.findUniqueOrThrow({ where: { projectId: b.id } })).wasPublic).toBe(true);
+    expect((await decide(reports[3].id, "RESTORE_PROJECT")).status()).toBe(200);
+    expect((await request.get(`/api/projects/${b.slug}`)).status()).toBe(200);
+    expect((await decide(reports[3].id, "HIDE_PROJECT")).status()).toBe(200);
+    await page.reload();
+    await settings.getByRole("checkbox", { name: "Public project", exact: true }).check();
+    await settings.getByRole("checkbox", { name: "Public project", exact: true }).uncheck();
+    const privateResponse = page.waitForResponse(res => res.request().method() === "PATCH" && res.url().endsWith(`/api/projects/${b.slug}`));
+    await settings.getByRole("button", { name: "Save settings", exact: true }).click();
+    expect((await privateResponse).status()).toBe(200);
+    expect((await prisma.moderationProjectHold.findUniqueOrThrow({ where: { projectId: b.id } })).wasPublic).toBe(false);
     expect((await decide(reports[3].id, "RESTORE_PROJECT")).status()).toBe(200);
     expect((await request.get(`/api/projects/${b.slug}`)).status()).toBe(404);
     expect((await page.request.patch(`/api/projects/${b.slug}`, { data: { isPublic: true, rightsConfirmed: true } })).status()).toBe(200);
@@ -106,7 +125,11 @@ test("moderation restores retained decisions with shared S3 covers and deleted r
     await prisma.user.delete({ where: { id: reporter.id } });
     expect(await prisma.report.count({ where: { id: { in: reports.map(r => r.id) } } })).toBe(0);
     expect((await asset()).status()).toBe(404);
-    await page.reload();
+    expect(await prisma.moderationEvent.findMany({ where: { reportId: { in: [reports[4].id, reports[5].id] } } })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reportId: reports[4].id, action: "REVIEW", actorId: admin.id, reportReason: reports[4].reason }),
+      expect.objectContaining({ reportId: reports[5].id, action: "DISMISS", actorId: admin.id, reportReason: reports[5].reason }),
+    ]));
+    await page.goto("/admin/reports");
     const retained = page.getByRole("region", { name: "Retained decisions with deleted reports" });
     await expect(retained).toContainText("Synthetic preserved original reason");
     await expect(retained).toContainText("Synthetic moderator decision");

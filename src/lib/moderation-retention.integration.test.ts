@@ -10,6 +10,53 @@ const db = process.env.TEST_DATABASE_URL ? describe : describe.skip;
 const decide = (id: string, action: string, note: string | null = "Verified synthetic violation") => PATCH(new Request("http://localhost/api/admin/reports/" + id, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "RESOLVED", action, ...(note === null ? {} : { resolutionNote: note }) }) }), { params: Promise.resolve({ id }) });
 db("moderation decision retention in PostgreSQL", () => {
   afterAll(() => prisma.$disconnect());
+  it("lets administrators clear an inferred legacy hold without publishing the project", async () => {
+    const suffix = crypto.randomUUID();
+    const user = await prisma.user.create({ data: { id: suffix, name: "Moderator", email: suffix + "@example.test" } });
+    const project = await prisma.project.create({ data: { slug: suffix, title: "Legacy private", description: "", coverUrl: "", license: "MIT", ownerId: user.id, isPublic: false } });
+    const reportId = "legacy-hide:" + project.id;
+    mocks.session.mockResolvedValue({ user: { id: user.id } });
+    try {
+      await prisma.moderationProjectHold.create({ data: { projectId: project.id, reportId, wasPublic: false, hiddenById: "legacy-migration" } });
+      await prisma.moderationEvent.create({ data: { action: "LEGACY_REVIEW_HOLD", reportId, projectId: project.id, actorId: "legacy-migration", reportReason: "Possible legacy hide", resolutionNote: "Unknown original visibility" } });
+      const html = renderToStaticMarkup(await AdminReportsPage());
+      expect(html).toContain("Unknown original visibility");
+      expect(html).toContain("Restore project visibility");
+      expect((await decide(reportId, "RESTORE_PROJECT", null)).status).toBe(200);
+      expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).isPublic).toBe(false);
+      expect((await prisma.moderationProjectHold.findUniqueOrThrow({ where: { projectId: project.id } })).active).toBe(false);
+      expect(await prisma.moderationEvent.findFirst({ where: { reportId, action: "RESTORE_PROJECT" } })).toMatchObject({ resolutionNote: "Unknown original visibility" });
+    } finally {
+      await prisma.moderationEvent.deleteMany({ where: { projectId: project.id } });
+      await prisma.moderationProjectHold.deleteMany({ where: { projectId: project.id } });
+      await prisma.project.delete({ where: { id: project.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
+  it("retains review and dismissal events after deletion without reusing an earlier note", async () => {
+    const suffix = crypto.randomUUID();
+    const user = await prisma.user.create({ data: { id: suffix, name: "Moderator", email: suffix + "@example.test" } });
+    const project = await prisma.project.create({ data: { slug: suffix, title: "Audit target", description: "", coverUrl: "/api/assets?key=covers%2F" + suffix, license: "MIT", ownerId: user.id } });
+    const reports = await Promise.all(["Reviewed", "Dismissed"].map(reason => prisma.report.create({ data: { projectId: project.id, reporterId: user.id, reason, details: "Retained detail" } })));
+    mocks.session.mockResolvedValue({ user: { id: user.id } });
+    try {
+      expect((await decide(reports[0].id, "NONE", "Earlier review note")).status).toBe(200);
+      expect((await PATCH(new Request("http://localhost", { method: "PATCH", body: JSON.stringify({ status: "DISMISSED", action: "NONE", resolutionNote: "Dismissal note" }) }), { params: Promise.resolve({ id: reports[1].id }) })).status).toBe(200);
+      expect((await decide(reports[0].id, "BLOCK_COVER", null)).status).toBe(200);
+      expect((await prisma.report.findUniqueOrThrow({ where: { id: reports[0].id } })).resolutionNote).toBeNull();
+      await prisma.report.deleteMany({ where: { id: { in: reports.map(r => r.id) } } });
+      expect(await prisma.moderationEvent.findMany({ where: { reportId: { in: reports.map(r => r.id) } } })).toEqual(expect.arrayContaining([
+        expect.objectContaining({ action: "REVIEW", resolutionNote: "Earlier review note", actorId: user.id }),
+        expect.objectContaining({ action: "DISMISS", resolutionNote: "Dismissal note", actorId: user.id }),
+        expect.objectContaining({ action: "BLOCK_COVER", resolutionNote: "", reportDetails: "Retained detail" }),
+      ]));
+    } finally {
+      await prisma.moderationEvent.deleteMany({ where: { projectId: project.id } });
+      await prisma.moderationAssetBlock.deleteMany({ where: { reportId: { in: reports.map(r => r.id) } } });
+      await prisma.project.delete({ where: { id: project.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
   it("does not silently resolve a duplicate hide and restores after reporter deletion", async () => {
     const suffix = crypto.randomUUID();
     const user = await prisma.user.create({ data: { id: suffix, name: "Reporter", email: suffix + "@example.test" } });

@@ -29,12 +29,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // Serialize retries even when the original report or project no longer exists.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`moderation-report:${id}`}))::text`;
       const report = await tx.report.findUnique({ where: { id } });
-      const previous = restoring ? await tx.moderationEvent.findFirst({ where: { reportId: id, action: action === "RESTORE_PROJECT" ? "HIDE_PROJECT" : "BLOCK_COVER" }, orderBy: { createdAt: "desc" } }) : null;
+      const previous = restoring ? await tx.moderationEvent.findFirst({ where: { reportId: id, action: action === "RESTORE_PROJECT" ? { in: ["HIDE_PROJECT", "LEGACY_REVIEW_HOLD"] } : "BLOCK_COVER" }, orderBy: { createdAt: "desc" } }) : null;
       const audit = {
         action, reportId: id, actorId: session.user.id,
         reportReason: previous?.reportReason || report?.reason || "Legacy moderation decision",
         reportDetails: previous?.reportDetails || report?.details || "",
-        resolutionNote: note ?? previous?.resolutionNote ?? report?.resolutionNote ?? "",
+        resolutionNote: note ?? (restoring ? previous?.resolutionNote ?? "" : ""),
       };
       if (action === "UNBLOCK_COVER") {
         const blocks = await tx.moderationAssetBlock.findMany({ where: { reportId: id, blocked: true } });
@@ -89,7 +89,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           }
         }
       }
-      return tx.report.update({ where: { id }, data: { status: status as "RESOLVED" | "DISMISSED", reviewedBy: session.user.id, reviewedAt: new Date(), resolutionNote: note } });
+      if (action === "NONE") {
+        await tx.moderationEvent.create({ data: { ...audit, action: status === "DISMISSED" ? "DISMISS" : "REVIEW", projectId } });
+      }
+      return tx.report.update({ where: { id }, data: { status: status as "RESOLVED" | "DISMISSED", reviewedBy: session.user.id, reviewedAt: new Date(), resolutionNote: note ?? null } });
     });
     return NextResponse.json(result);
   } catch (error) {
