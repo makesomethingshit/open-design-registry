@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findProject: vi.fn(),
+  findForkCursor: vi.fn(),
   findForks: vi.fn(),
   findRevisions: vi.fn(),
   revisionItem: vi.fn(),
@@ -28,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), usePathname: () => "/projects/demo", useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, findMany: mocks.findForks }, revision: { findMany: mocks.findRevisions, count: mocks.countRevisions }, release: { findMany: mocks.findReleases }, issue: { findMany: mocks.findIssues, count: mocks.countIssues }, discussion: { findMany: mocks.findDiscussions }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, findFirst: mocks.findForkCursor, findMany: mocks.findForks }, revision: { findMany: mocks.findRevisions, count: mocks.countRevisions }, release: { findMany: mocks.findReleases }, issue: { findMany: mocks.findIssues, count: mocks.countIssues }, discussion: { findMany: mocks.findDiscussions }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
@@ -87,6 +88,13 @@ function release(number: number) {
   return { id: `release-${number}`, number, title: `Release ${number}`, description: `Description ${number}`, createdAt: new Date(`2026-09-${String(number).padStart(2, "0")}T00:00:00Z`), publishedBy: { name: "Owner" }, _count: { revisions: number } };
 }
 
+function fork(slug: string, createdAt = new Date("2026-09-12T00:00:00Z"), options: { forkedFromProjectId?: string; isPublic?: boolean } = {}) {
+  return {
+    id: `fork-${slug}`, slug, title: `Fork ${slug}`, description: `Description for ${slug}`, license: "MIT", createdAt, owner: { name: "Fork owner" },
+    forkedFromProjectId: options.forkedFromProjectId ?? "project", isPublic: options.isPublic ?? true,
+  };
+}
+
 function project(withRelease = false) {
   return {
     id: "project", slug: "demo", title: "Demo", description: "A project", license: "MIT", coverUrl: "cover.png", ownerId: "owner", isPublic: true, owner: { name: "Owner" },
@@ -105,7 +113,7 @@ function project(withRelease = false) {
         { ...visibleProposal, id: "unpublished-proposal", title: "Unpublished proposal", changeNames: ["Unpublished change"], sourceRevision: { isPublished: false, project: { ownerId: "source-owner", isPublic: true } } },
       ],
     }],
-    forks: [], _count: { forks: 0 }, forkedFrom: null, forkedFromRevision: null, forkedFromLicense: null,
+    forks: [] as ReturnType<typeof fork>[], _count: { forks: 0 }, forkedFrom: null, forkedFromRevision: null, forkedFromLicense: null,
   };
 }
 
@@ -197,7 +205,16 @@ function mockProjectQueries(value: ReturnType<typeof project>) {
   mocks.countRevisions.mockResolvedValue(value.revisions.length);
   mocks.findReleases.mockImplementation(async (args?: { cursor?: { id: string }; skip?: number; take?: number }) => cursorPage([...value.releases].sort((a, b) => b.number - a.number), args));
   mocks.findDiscussions.mockImplementation(async (args?: { cursor?: { id: string }; skip?: number; take?: number }) => cursorPage([...value.discussions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id)), args));
-  mocks.findForks.mockResolvedValue(value.forks);
+  mocks.findForkCursor.mockImplementation(async (args?: { where?: { slug?: string; forkedFromProjectId?: string; isPublic?: boolean } }) => {
+    const row = value.forks.find((fork) => fork.slug === args?.where?.slug && fork.forkedFromProjectId === args.where.forkedFromProjectId && fork.isPublic === args.where.isPublic);
+    return row ? { slug: row.slug } : null;
+  });
+  mocks.findForks.mockImplementation(async (args?: { where?: { forkedFromProjectId?: string; isPublic?: boolean }; cursor?: { slug: string }; skip?: number; take?: number }) => {
+    const rows = value.forks
+      .filter((fork) => fork.forkedFromProjectId === args?.where?.forkedFromProjectId && fork.isPublic === args?.where?.isPublic)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.slug.localeCompare(a.slug));
+    return cursorPageBySlug(rows, args);
+  });
   mocks.findIssues.mockImplementation(async (args?: { where?: { status?: string; kind?: string }; select?: { _count?: unknown }; cursor?: { id: string }; skip?: number; take?: number }) => {
     let rows = value.issues.filter((row) => (!args?.where?.status || row.status === args.where.status) && (!args?.where?.kind || row.kind === args.where.kind));
     rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
@@ -211,6 +228,12 @@ function mockProjectQueries(value: ReturnType<typeof project>) {
 
 function cursorPage<T extends { id: string }>(rows: T[], args?: { cursor?: { id: string }; skip?: number; take?: number }) {
   const cursorIndex = args?.cursor ? rows.findIndex((row) => row.id === args.cursor?.id) : -1;
+  const start = cursorIndex < 0 ? 0 : cursorIndex + (args?.skip ?? 0);
+  return rows.slice(start, args?.take === undefined ? undefined : start + args.take);
+}
+
+function cursorPageBySlug<T extends { slug: string }>(rows: T[], args?: { cursor?: { slug: string }; skip?: number; take?: number }) {
+  const cursorIndex = args?.cursor ? rows.findIndex((row) => row.slug === args.cursor?.slug) : -1;
   const start = cursorIndex < 0 ? 0 : cursorIndex + (args?.skip ?? 0);
   return rows.slice(start, args?.take === undefined ? undefined : start + args.take);
 }
@@ -412,6 +435,53 @@ describe("Project tab pagination", () => {
     expectVisible(lastPage, pages[2]);
     expect(lastPage).not.toContain("Next page");
     expect(lastPage).toContain("First page");
+  });
+
+  it.each([0, 1, 20, 21, 45])("renders %s public child forks with slug cursor pagination", async (count) => {
+    const value = project();
+    value.forks = Array.from({ length: count }, (_, index) => fork(`fork-${String(index + 1).padStart(3, "0")}`));
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, value, 0, 0, "forks", { pageSize: "20" });
+    const visible = markup.match(/Fork fork-\d{3}/g) ?? [];
+    expect(visible).toHaveLength(Math.min(count, 20));
+    expect(mocks.findForks).toHaveBeenCalledWith(expect.objectContaining({
+      where: { forkedFromProjectId: "project", isPublic: true },
+      orderBy: [{ createdAt: "desc" }, { slug: "desc" }],
+      take: 21,
+    }));
+    if (count > 0) expect(markup).toContain(`Fork fork-${String(count).padStart(3, "0")}`);
+    if (count > 20) {
+      expect(markup).toContain(`href="/projects/demo/forks?pageSize=20&amp;cursor=fork-${String(count - 19).padStart(3, "0")}"`);
+      expect(markup).not.toContain("First page");
+    } else {
+      expect(markup).not.toContain("Next page");
+    }
+  });
+
+  it("uses tied timestamps and preserves a valid slug cursor while filtering forks", async () => {
+    const value = project();
+    value.forks = [
+      ...Array.from({ length: 3 }, (_, index) => fork(`fork-${String(index + 1).padStart(3, "0")}`)),
+      fork("private-fork", undefined, { isPublic: false }),
+      fork("foreign-fork", undefined, { forkedFromProjectId: "other-project" }),
+    ];
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, value, 0, 0, "forks", { pageSize: "2", cursor: "fork-003" });
+    expect(markup).toContain("Fork fork-002");
+    expect(markup).toContain("Fork fork-001");
+    expect(markup).not.toContain("private-fork");
+    expect(markup).not.toContain("foreign-fork");
+    expect(markup).toContain("First page");
+    expect(mocks.findForkCursor).toHaveBeenCalledWith({ where: { slug: "fork-003", forkedFromProjectId: "project", isPublic: true }, select: { slug: true } });
+    expect(mocks.findForks).toHaveBeenCalledWith(expect.objectContaining({ cursor: { slug: "fork-003" }, skip: 1, take: 3 }));
+  });
+
+  it.each(["not-a-fork", "fork-deleted", "fork-foreign", "fork-private"])("treats %s as a safe first-page cursor", async (cursor) => {
+    const value = project();
+    value.forks = [fork("fork-002"), fork("fork-001"), fork("fork-private", undefined, { isPublic: false }), fork("fork-foreign", undefined, { forkedFromProjectId: "other-project" })];
+    const markup = await renderProjectPage({ user: { id: "viewer" } }, value, 0, 0, "forks", { pageSize: "2", cursor });
+    expect(markup).toContain("Fork fork-002");
+    expect(markup).toContain("Fork fork-001");
+    expect(markup).not.toContain("First page");
+    expect(mocks.findForks).toHaveBeenCalledWith(expect.objectContaining({ where: { forkedFromProjectId: "project", isPublic: true }, take: 3 }));
   });
 
   it("applies the closed issue filter in SQL and preserves it in detail and next-page links", async () => {
