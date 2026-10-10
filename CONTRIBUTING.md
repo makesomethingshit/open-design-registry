@@ -51,7 +51,10 @@ test database and storage, and run the checks relevant to your change. Describe
 the problem, resulting behavior, validation, and remaining human review in the
 PR template. Preserve existing license and attribution notices for bundled assets.
 
-Normal PRs run `test`, `typecheck`, `build`, and `pr-title`. Full E2E runs on
+Normal PRs run `test`, `typecheck`, `build`, `pr-title`, and `secrets`. The secrets
+check scans fetched Git history with Gitleaks and redacts detected values in logs.
+Do not bypass a detection by adding an allowlist for an actual credential;
+revoke or rotate it and remove the exposed material before review. Full E2E runs on
 `main` pushes and manual dispatch; high-risk changes need a maintainer's manual
 E2E run against the exact PR HEAD before merging. See the operations guide for
 the command and how to record the tested SHA. Fork PRs may require workflow

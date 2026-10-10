@@ -16,7 +16,7 @@ Capture review exposed a load-event race: a preview could load before hydration 
 Run the repeatable browser checks with:
 
 ```sh
-npx playwright test e2e/landing-ui.spec.ts e2e/header-ui.spec.ts e2e/stage-c-project-explore.spec.ts --workers=1
+npm run test:e2e -- e2e/landing-ui.spec.ts e2e/header-ui.spec.ts e2e/stage-c-project-explore.spec.ts --workers=1
 ```
 
 View these files directly from this directory. Visual acceptance still requires human review. The implementation retains the existing Pretendard font and semantic theme tokens, so these captures are not a pixel-for-pixel copy of the static reference boards.

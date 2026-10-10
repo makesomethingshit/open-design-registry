@@ -108,7 +108,7 @@ npx playwright install chromium
 `.env`에 `E2E_INTEGRATION=1`을 추가하거나 현재 셸 환경 변수로 설정한 뒤 실행합니다.
 
 ```sh
-node --env-file=.env node_modules/@playwright/test/cli.js test
+node --env-file=.env scripts/run-playwright.mjs
 ```
 
 기존 서버를 재사용하면 그 서버의 DB·스토리지 설정이 이번 테스트 설정과 같은지 확인합니다. [MVP 통합 시나리오](../e2e/mvp.integration.spec.ts)는 가입·프로젝트·Revision·복원·Issue·Fork 외에 공개 Design request → 로그인 복귀 → Fork → 수정본 발행 → Proposal → 수정 요청 → 새 Proposal → 승인·적용을 실제 DB·스토리지로 검증합니다. 데스크톱·모바일에서 단계별 안내와 결과 링크도 확인합니다. **이 한 흐름으로 모든 충돌·부분 적용·동시성 조합이나 실제 신규 디자이너의 이해도까지 검증됐다고 확대 해석하지 않습니다.**
@@ -121,7 +121,7 @@ node --env-file=.env node_modules/@playwright/test/cli.js test
 
 일반 PR의 opened·reopened·synchronize 이벤트는 PR 제목 형식, test·typecheck·build를 검사합니다. PR 제목·본문 등 메타데이터 수정은 CI를 다시 실행하지 않습니다. 제목 검사는 다음 PR 실행 시 새 제목을 검사합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화되며, `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`로 Proposal 경합 테스트도 실행합니다.
 
-전체 E2E는 `main` push와 `workflow_dispatch`에서만 실행합니다. 일반 PR에서 e2e job은 skipped로 완료되며 PostgreSQL·MinIO·브라우저 설치를 시작하지 않습니다. 필수 PR 검사는 test·typecheck·build·pr-title로 설정하고, E2E가 필요한 위험도 높은 PR은 병합 전에 수동으로 검증합니다. main 실행 결과는 병합 후 검증이며 병합 전 검증을 대신하지 않습니다.
+전체 E2E는 `main` push와 `workflow_dispatch`에서만 실행합니다. 일반 PR에서 e2e job은 skipped로 완료되며 PostgreSQL·MinIO·브라우저 설치를 시작하지 않습니다. 필수 PR 검사는 test·typecheck·build·pr-title·secrets로 설정하고, E2E가 필요한 위험도 높은 PR은 병합 전에 수동으로 검증합니다. main 실행 결과는 병합 후 검증이며 병합 전 검증을 대신하지 않습니다.
 
 이 워크플로가 기본 브랜치에 반영된 뒤 GitHub Actions의 CI → Run workflow에서 `ref`에 검증할 PR의 최신 커밋 SHA를 입력하거나 다음 명령을 사용합니다.
 

@@ -12,6 +12,10 @@ body:
 
         Describe the problem or desired outcome before focusing on implementation.
 
+        This issue and its attachments may become public. Remove API keys,
+        session tokens, personal data, and private URLs from text and evidence.
+        Report vulnerabilities privately using [SECURITY.md](https://github.com/makesomethingshit/open-design-registry/blob/main/SECURITY.md).
+
         Replace P? in the title with one review level: P0, P1, P2, or P3.
 
   - type: dropdown
@@ -66,6 +70,6 @@ body:
     id: alternatives
     attributes:
       label: Alternatives or references
-      description: Add alternatives, mockups, screenshots, related issues, or references if useful.
+      description: Add sanitized mockups, screenshots, or references. Remove credentials, personal data, and private URLs before attaching them.
     validations:
       required: false

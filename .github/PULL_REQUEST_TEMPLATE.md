@@ -1,7 +1,9 @@
 <!-- PR title: [P{0-3}][bug|feature] Short summary (#issue).
 Classify this PR by its actual changes and remaining human review needs; use the
 related issue's type. The level may differ from the issue; explain it below.
-Choose one level, never P2/P3. See CONTRIBUTING.md. -->
+Choose one level, never P2/P3. See CONTRIBUTING.md.
+This PR and attachments may become public. Remove API keys, session tokens,
+personal data and private URLs; use SECURITY.md for private vulnerability reports. -->
 
 ## Related issue
 
@@ -44,7 +46,8 @@ or bypass required reviewers or branch protection. -->
 
 ## Screenshots / recordings
 
-<!-- Add before/after screenshots or recordings for visible UI changes. Remove this section when not applicable. -->
+<!-- Add sanitized screenshots or recordings. Remove credentials, cookies,
+personal data and private URLs before attaching evidence. Remove this section when not applicable. -->
 
 
 ## Checklist

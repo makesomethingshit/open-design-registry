@@ -9,7 +9,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-playwright.mjs",
     "test:storage:prepare": "node scripts/prepare-test-storage.mjs",
     "storage:cleanup-documents": "node scripts/document-image-cleanup.mjs",
     "prisma:generate": "prisma generate",
