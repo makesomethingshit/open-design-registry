@@ -3,6 +3,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { createRightsDeclaration, validateRightsAgainstRevision, validateRightsSourceFiles } from "@/src/lib/revision-rights";
 import { parseRightsDeclaration } from "@/src/lib/rights";
+import { ExpiredDocumentImageError, imageReferenceTransactionOptions } from "@/src/lib/project-document-save";
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -46,9 +47,10 @@ async function save(request: Request, { params }: { params: Promise<{ slug: stri
     if (revisionRightsError) return error(revisionRightsError, 400);
     const sourceError = await validateRightsSourceFiles(result.revision, parsed.data.items);
     if (sourceError) return error(sourceError, 400);
-    const declaration = await prisma.$transaction((tx) => createRightsDeclaration(tx, result.revision.id, userId, parsed.data));
+    const declaration = await prisma.$transaction((tx) => createRightsDeclaration(tx, result.revision.id, userId, parsed.data), imageReferenceTransactionOptions);
     return NextResponse.json({ revisionId: result.revision.id, revisionLicense: result.revision.license, declaration }, { status: 201 });
   } catch (cause) {
+    if (cause instanceof ExpiredDocumentImageError) return error(cause.message, 409);
     console.error("rights declaration save failed", cause);
     return error("Rights declaration could not be saved", 500);
   }

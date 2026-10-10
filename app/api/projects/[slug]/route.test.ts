@@ -4,12 +4,14 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
+  validateDocumentImages: vi.fn(),
 }));
 
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/prisma", () => ({
-  prisma: { project: { findUnique: mocks.findUnique, update: mocks.update } },
+  prisma: { project: { findUnique: mocks.findUnique, update: mocks.update }, $transaction: (run: (tx: unknown) => unknown) => run({ project: { update: mocks.update } }) },
 }));
+vi.mock("@/src/lib/project-document-save", () => ({ validateDocumentImages: mocks.validateDocumentImages, imageReferenceTransactionOptions: { timeout: 60000 } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value }));
 
 const { GET, PATCH } = await import("./route");
@@ -42,6 +44,7 @@ describe("project document save and read permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.findUnique.mockResolvedValue(storedProject());
+    mocks.validateDocumentImages.mockResolvedValue(true);
     mocks.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
       ...storedProject(),
       ...data,
@@ -62,6 +65,21 @@ describe("project document save and read permissions", () => {
     mocks.getSession.mockResolvedValue(null);
     const response = await PATCH(patchRequest({ document: "# Hello" }), { params: Promise.resolve(params) });
     expect(response.status).toBe(401);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a draft whose image expired instead of saving a broken reference", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.validateDocumentImages.mockResolvedValue(false);
+    const response = await PATCH(patchRequest({ document: "![draft](/api/assets?key=expired)" }), { params: Promise.resolve(params) });
+    expect(response.status).toBe(409);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("preserves storage errors instead of claiming the document was saved", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.validateDocumentImages.mockRejectedValue(new Error("Storage unavailable"));
+    await expect(PATCH(patchRequest({ document: "# draft" }), { params: Promise.resolve(params) })).rejects.toThrow("Storage unavailable");
     expect(mocks.update).not.toHaveBeenCalled();
   });
 

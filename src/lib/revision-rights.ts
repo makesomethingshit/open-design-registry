@@ -1,6 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { readRevisionBundle, type RevisionBundle } from "./revision-bundle";
 import type { RightsDeclarationInput } from "./rights";
+import { ExpiredDocumentImageError, validateDocumentImageReferences } from "./project-document-save";
+
+export async function validateRightsImageReferences(tx: Prisma.TransactionClient, input: RightsDeclarationInput) {
+  if (!await validateDocumentImageReferences(tx, [input.sourceLicenseUrl, ...input.items.flatMap((item) => [item.sourceUrl, item.licenseUrl])])) throw new ExpiredDocumentImageError();
+}
 
 export function validateRightsAgainstRevision(
   revision: { license?: string | null },
@@ -32,6 +37,7 @@ export async function createRightsDeclaration(
   createdById: string,
   input: RightsDeclarationInput,
 ) {
+  await validateRightsImageReferences(tx, input);
   await tx.$queryRaw`SELECT id FROM "Revision" WHERE id = ${revisionId} FOR UPDATE`;
   const previous = await tx.revisionRightsDeclaration.findFirst({ where: { revisionId }, orderBy: { version: "desc" } });
   return tx.revisionRightsDeclaration.create({

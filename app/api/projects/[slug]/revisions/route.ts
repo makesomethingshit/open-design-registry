@@ -7,7 +7,8 @@ import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
-import { validateRightsAgainstRevision, validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
+import { validateRightsAgainstRevision, validateRightsImageReferences, validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
+import { ExpiredDocumentImageError, imageReferenceTransactionOptions, validateDocumentImageReferences } from "@/src/lib/project-document-save";
 import { parseRightsDeclaration, type RightsDeclarationInput } from "@/src/lib/rights";
 import {
   maxRevisionPreviewBytes,
@@ -216,6 +217,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       uploadedPreviews.push({ key, url, mimeType: file.type, size: file.size, position: index, altText: altTexts[index] });
     }
     const revision = await prisma.$transaction(async (tx) => {
+      if (!await validateDocumentImageReferences(tx, [sourceUrl])) throw new ExpiredDocumentImageError();
+      if (rightsInput) await validateRightsImageReferences(tx, rightsInput);
       const [lockedProject] = await tx.$queryRaw<Array<{ license: string; isPublic: boolean }>>`SELECT license, "isPublic" FROM "Project" WHERE id = ${project.id} FOR UPDATE`;
       if (!lockedProject) throw new PublishError("Project not found", 404);
       if (rightsInput) {
@@ -313,10 +316,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         }
       }
       return published;
-    });
+    }, imageReferenceTransactionOptions);
     return NextResponse.json(toPublicRevision(revision), { status: 201 });
   } catch (cause) {
     await Promise.allSettled(uploadedKeys.map((key) => deleteObject(key)));
+    if (cause instanceof ExpiredDocumentImageError) return error(cause.message, 409);
     if (cause instanceof PublishError) return error(cause.message, cause.status);
     console.error("revision publish failed", cause);
     return error("Revision could not be published", 500);
