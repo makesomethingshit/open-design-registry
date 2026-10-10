@@ -143,9 +143,9 @@ describe("asset proxy route", () => {
   it("preserves normal access control after a moderation block is lifted", async () => {
     mocks.moderationAssetFindUnique.mockResolvedValue({ blocked: false });
     mocks.projectFindMany.mockResolvedValue([{ isPublic: true, ownerId: "owner" }]);
-    expect((await GET(request("key=covers%2Fowner%2Fproject")).status)).toBe(200);
+    expect((await GET(request("key=covers%2Fowner%2Fproject"))).status).toBe(200);
     mocks.projectFindMany.mockResolvedValue([{ isPublic: false, ownerId: "owner" }]);
-    expect((await GET(request("key=covers%2Fowner%2Fproject")).status)).toBe(404);
+    expect((await GET(request("key=covers%2Fowner%2Fproject"))).status).toBe(404);
   });
 
 });
