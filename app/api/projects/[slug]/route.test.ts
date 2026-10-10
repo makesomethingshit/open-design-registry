@@ -4,12 +4,22 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
+  lock: vi.fn(),
+  holdFindUnique: vi.fn(),
+  holdUpdate: vi.fn(),
   validateDocumentImages: vi.fn(),
 }));
 
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/prisma", () => ({
-  prisma: { project: { findUnique: mocks.findUnique, update: mocks.update }, $transaction: (run: (tx: unknown) => unknown) => run({ project: { update: mocks.update } }) },
+  prisma: {
+    project: { findUnique: mocks.findUnique, update: mocks.update },
+    $transaction: (run: (tx: unknown) => unknown) => run({
+      $queryRaw: mocks.lock,
+      project: { update: mocks.update },
+      moderationProjectHold: { findUnique: mocks.holdFindUnique, update: mocks.holdUpdate },
+    }),
+  },
 }));
 vi.mock("@/src/lib/project-document-save", () => ({ validateDocumentImages: mocks.validateDocumentImages, imageReferenceTransactionOptions: { timeout: 60000 } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value }));
@@ -45,6 +55,9 @@ describe("project document save and read permissions", () => {
     vi.clearAllMocks();
     mocks.findUnique.mockResolvedValue(storedProject());
     mocks.validateDocumentImages.mockResolvedValue(true);
+    mocks.lock.mockResolvedValue([]);
+    mocks.holdFindUnique.mockResolvedValue(null);
+    mocks.holdUpdate.mockResolvedValue({ active: true, wasPublic: false });
     mocks.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
       ...storedProject(),
       ...data,
@@ -122,4 +135,23 @@ describe("project document save and read permissions", () => {
     });
     expect(hidden.status).toBe(404);
   });
+  it("prevents owners from republishing an active moderation hold", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.findUnique.mockResolvedValue(storedProject({ isPublic: false }));
+    mocks.holdFindUnique.mockResolvedValue({ active: true, wasPublic: true });
+    const response = await PATCH(patchRequest({ isPublic: true, rightsConfirmed: true }), { params: Promise.resolve(params) });
+    expect(response.status).toBe(409);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("remembers an owner's explicit private choice during a moderation hold", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    mocks.holdFindUnique.mockResolvedValue({ active: true, wasPublic: true });
+    const response = await PATCH(patchRequest({ isPublic: false }), { params: Promise.resolve(params) });
+    expect(response.status).toBe(200);
+    expect(mocks.holdUpdate).toHaveBeenCalledWith({
+      where: { projectId: "project" }, data: { wasPublic: false },
+    });
+  });
+
 });

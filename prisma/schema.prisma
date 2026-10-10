@@ -165,6 +165,55 @@ enum ReportStatus {
   DISMISSED
 }
 
+// Moderation state is independent from a project's owner-controlled visibility.
+model ModerationProjectHold {
+  projectId     String   @id
+  wasPublic     Boolean
+  active        Boolean  @default(true)
+  reportId      String
+  hiddenById    String
+  hiddenAt      DateTime @default(now())
+  restoredById  String?
+  restoredAt    DateTime?
+
+  @@index([reportId, active])
+}
+
+// A blocked object stays unavailable through any public/legacy proxy URL.
+model ModerationAssetBlock {
+  key           String
+  blocked       Boolean  @default(true)
+  reportId      String
+  reason        String   @default("")
+  blockedById   String
+  blockedAt     DateTime @default(now())
+  restoredById  String?
+  restoredAt    DateTime?
+
+  // Independent per-report holds; one report cannot revoke another report's block.
+  @@id([key, reportId])
+  @@index([key, blocked])
+  @@index([reportId, blocked])
+}
+
+// Append-only moderation audit, retained independently of source reports.
+model ModerationEvent {
+  id         String   @id @default(cuid())
+  action     String
+  reportId   String
+  projectId  String?
+  assetKey   String?
+  actorId    String
+  reportReason String @default("")
+  reportDetails String @default("")
+  resolutionNote String @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([assetKey, createdAt])
+}
+
 model Report {
   id             String       @id @default(cuid())
   projectId      String?

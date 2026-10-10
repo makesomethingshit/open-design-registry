@@ -48,6 +48,9 @@ test("keeps landing, public Explore, and My projects distinct on desktop and mob
       await expect(page).toHaveURL(/\/explore$/);
       await expect(page.getByRole("heading", { name: "Explore projects" })).toBeVisible();
       await expect(page.getByText("Find public design projects with source files, published revisions, and ways to contribute.")).toBeVisible();
+      // Other integration workers create public projects; isolate this viewport fixture through search.
+      await page.getByLabel("Search public projects").fill(suffix);
+      await page.getByRole("search", { name: "Explore projects" }).getByRole("button", { name: "Search", exact: true }).click();
       const preview = page.getByRole("link", { name: `View ${title}` });
       await expect(preview).toBeInViewport();
       await expect(preview.locator("img")).toBeVisible();
