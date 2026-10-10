@@ -42,3 +42,22 @@ When one PR contains changes requiring different levels, use the most demanding 
 P3 means that this classification does not require human judgment to establish acceptance. It does not authorize pushing, merging, deployment, or bypassing branch protection, required reviewers, or other repository policies.
 
 Use `bug` for broken behavior and `feature` for new capabilities or improvements. Replace `P?` in the issue form's suggested title with the selected level and keep the title and Priority field consistent. Do not combine levels such as `P2/P3`. A PR ends its title with the related issue number.
+
+## Preparing a contribution
+
+Fork the repository and create a branch for one coherent change. Follow the
+local setup in [Development and operations](docs/operations.md), use an isolated
+test database and storage, and run the checks relevant to your change. Describe
+the problem, resulting behavior, validation, and remaining human review in the
+PR template. Preserve existing license and attribution notices for bundled assets.
+
+Normal PRs run `test`, `typecheck`, `build`, and `pr-title`. Full E2E runs on
+`main` pushes and manual dispatch; high-risk changes need a maintainer's manual
+E2E run against the exact PR HEAD before merging. See the operations guide for
+the command and how to record the tested SHA. Fork PRs may require workflow
+approval; do not add production credentials to make tests run.
+
+Only include synthetic or redistributable sample designs, screenshots, and
+fixtures. Do not attach `.env`, production database exports, authentication
+state, or traces containing private data. Follow [Security](SECURITY.md) for
+vulnerability reports instead of disclosing details in public issues.

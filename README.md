@@ -41,3 +41,9 @@ PowerShell에서는 첫 명령을 `Copy-Item .env.example .env`로 바꿉니다.
 | 장기 비전과 철학 이해 | [Vision](VISION.md) · [Philosophy](PHILOSOPHY.md) |
 
 전체 문서의 역할과 읽기 경로는 [문서 목차](docs/README.md)를 참고합니다.
+
+보안 취약점 제보와 배포 자격증명 취급은 [보안 안내](SECURITY.md)를 따릅니다. 공개 이슈에 비밀정보나 다른 사람의 비공개 디자인 자료를 첨부하지 마세요.
+
+## 라이선스
+
+ODR 코드와 문서는 [MIT License](LICENSE)로 제공합니다. 포함된 폰트·아이콘은 [서드파티 고지](THIRD_PARTY_NOTICES.md)에 적힌 별도 라이선스를 따릅니다. ODR에서 업로드·관리하는 디자인 원본과 사용자 콘텐츠의 이용 조건은 각 프로젝트·Revision의 라이선스와 권리 선언을 따르며, 저장소 코드의 MIT 라이선스로 바뀌지 않습니다.

@@ -9,6 +9,9 @@ permissions:
   pull-requests: write
 
 jobs:
+  # This runs with write permissions even for public fork PRs. Keep the code
+  # on the base workflow: never checkout/run PR code or interpolate PR text
+  # into the shell. Title/body are data passed through environment variables.
   sync-labels:
     runs-on: ubuntu-latest
     steps:
