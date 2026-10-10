@@ -81,12 +81,12 @@ export default function ReportList({ reports }: { reports: Report[] }) {
         <h2>{report.sourceMissing ? `Retained decision ${report.id}` : report.project?.title ?? `${report.revision?.project.title} · Revision ${report.revision?.number}`}</h2>
         <p><strong>{report.reason}</strong></p>
         <p>{report.details}</p>
-        {report.status === "OPEN" && <>
+        {!report.sourceMissing && (report.status === "OPEN" || (report.status === "RESOLVED" && (report.projectHidden || report.coverBlocked))) && <>
           <p className="meta">The reported project can be hidden independently. The cover URL is referenced by {report.coverSharedCount} project(s); blocking its underlying object applies globally, including forks. This count does not include differently formatted URLs or other asset references.</p>
           <div className="actions">
-            <Button loading={Boolean(pendingById[report.id])} loadingLabel="Resolving report" onClick={() => { void decide(report, "HIDE_PROJECT"); }} type="button">Hide this project and resolve</Button>
-            <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "BLOCK_COVER"); }} type="button" variant="secondary">Block shared cover and resolve</Button>
-            <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "NONE"); }} type="button" variant="secondary">Mark as reviewed</Button>
+            {!report.projectHidden && <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "HIDE_PROJECT"); }} type="button">Hide this project and resolve</Button>}
+            {!report.coverBlocked && <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "BLOCK_COVER"); }} type="button" variant="secondary">Block shared cover and resolve</Button>}
+            {report.status === "OPEN" && <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "NONE"); }} type="button" variant="secondary">Mark as reviewed</Button>}
           </div>
         </>}
         {(report.projectHidden || report.coverBlocked) && <div className="actions">
