@@ -31,7 +31,7 @@ test("preserves a brief across type switches and saves readable optional section
   await page.getByRole("button", { name: "Open issue", exact: true }).press("Enter");
   await expect(page.locator("#issue-body-error")).toContainText("10,000 characters");
   await expect(page.getByLabel("Additional details", { exact: true })).toBeFocused();
-  await page.getByLabel("Purpose", { exact: true }).fill("Improve keyboard navigation");
+  await page.getByLabel("Purpose", { exact: true }).fill("Improve keyboard navigation ");
   await expect(page.locator("#issue-body-error")).toHaveCount(0);
   await page.getByLabel("Additional details", { exact: true }).fill("Preserve desktop behavior.");
   const saved = page.waitForResponse((response) => response.url().endsWith(`/api/projects/${slug}/issues`) && response.request().method() === "POST");
