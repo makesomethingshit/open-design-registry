@@ -153,7 +153,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
         expect(activity!.y).toBeLessThan(guide!.y);
         expect(guide!.x).toBeGreaterThanOrEqual(0);
         expect(guide!.x + guide!.width).toBeLessThanOrEqual(width);
-        expect(await visitor.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        expect(await visitor.evaluate(() => window.document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await visitor.screenshot({ path: testInfo.outputPath(`mobile-overview-published-${width}.png`), fullPage: true });
       }
       await page.goto(projectPath);
