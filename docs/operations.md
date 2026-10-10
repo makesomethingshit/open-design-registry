@@ -187,3 +187,11 @@ Release 발행 API는 선택적 UUID `requestId`를 받습니다. 같은 프로�
 기여 준비와 Proposal 생성은 `/login?next=...`에 선택한 base·source Revision, 관련 요청과 선택 변경을 보존합니다. first-contributor 브라우저 시나리오에서 요청 링크의 가입 복귀와 준비된 Proposal의 재로그인 복귀를 검증합니다. Discussions 등 이 시나리오 밖의 로그인 경로는 별도 확인이 필요합니다.
 
 관련 설정: [CI](../.github/workflows/ci.yml), [환경 예제](../.env.example), [Playwright](../playwright.config.ts), [Vitest](../vitest.config.ts), [테스트 스토리지 준비](../scripts/prepare-test-storage.mjs).
+
+### 신고 삭제 후 moderation 복원
+
+프로젝트 숨김과 공유 커버 차단은 별도 결정입니다. 동일 프로젝트에 다른 신고의 활성 숨김이 있으면 두 번째 숨김 요청은 409이며 해당 신고를 처리 완료로 바꾸지 않습니다. 관리자는 기존 숨김을 검토·복원한 뒤 두 번째 신고를 다시 판단합니다.
+
+활성 결정은 신고·신고자·프로젝트 삭제만으로 해제되지 않습니다. 관리자 신고 화면의 **Retained decisions with deleted reports**에서 보존된 사유와 자산 key를 확인하고 복원합니다. 복원 API는 저장된 report ID의 hold·차단을 기준으로 동작하며 원본 신고나 현재 커버 URL을 요구하지 않습니다. 자산 복원은 해당 신고의 차단만 해제하고 다른 신고의 활성 차단은 유지합니다. 원래 비공개이거나 소유자가 비공개를 선택한 프로젝트는 공개되지 않습니다.
+
+`ModerationEvent`는 신고 사유·상세·처리 메모를 복사해 보존합니다. 추가 마이그레이션은 남아 있는 신고 사유·상세로 기존 이벤트를 채우지만, 과거 처리 메모는 현재 결정의 메모로 추정하지 않으며, 이미 삭제된 원본 신고의 잃어버린 사유는 복구하지 못합니다. 이 경우 관리자 화면에 legacy 결정을 표시하고 남아 있는 차단 사유를 사용합니다.

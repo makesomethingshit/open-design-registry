@@ -73,6 +73,13 @@ describe("asset proxy route", () => {
     expect(mocks.getObject).toHaveBeenCalledWith("covers/owner/project");
   });
 
+  it("uses canonical public references for an equivalent encoded legacy URL after moderation restore", async () => {
+    mocks.projectFindMany.mockImplementation(async ({ where }) => where.coverUrl.in.includes("/api/assets?key=covers%2Fowner%2Fproject") ? [{ isPublic: true, ownerId: "owner" }] : []);
+    const legacy = "https://open-design-registry.s3.us-east-1.amazonaws.com/covers%2Fowner%2Fproject";
+    const response = await GET(request(`url=${encodeURIComponent(legacy)}`));
+    expect(response.status).toBe(200);
+    expect(mocks.getObject).toHaveBeenCalledWith("covers/owner/project");
+  });
   it("rejects mixed key and legacy URL parameters", async () => {
     mocks.projectFindMany.mockResolvedValue([{ isPublic: true, ownerId: "owner" }]);
     const response = await GET(request("key=revisions%2Fprivate%2Fsource.zip&url=https%3A%2F%2Fopen-design-registry.s3.us-east-1.amazonaws.com%2Fcovers%2Fpublic%2Fproject"));

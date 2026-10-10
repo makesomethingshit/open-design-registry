@@ -45,7 +45,7 @@ describe("admin report scope moderation", () => {
     blocks = new Map();
     mocks.getAdminSession.mockResolvedValue({ user: { id: "admin" } });
     mocks.reportFindUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
-      ({ id: where.id, projectId: "source", revisionId: null, status: "OPEN" })
+      ({ id: where.id, projectId: "source", revisionId: null, status: "OPEN", reason: "Synthetic violation", details: "Original reason" })
     );
     mocks.revisionFindUnique.mockResolvedValue({ projectId: "source" });
     mocks.projectFindUnique.mockImplementation(async () => project);
@@ -89,10 +89,10 @@ describe("admin report scope moderation", () => {
       $queryRaw: mocks.lock,
       report: { findUnique: mocks.reportFindUnique, update: mocks.reportUpdate },
       revision: { findUnique: mocks.revisionFindUnique },
-      project: { findUnique: mocks.projectFindUnique, update: mocks.projectUpdate },
-      moderationProjectHold: { findUnique: mocks.holdFindUnique, upsert: mocks.holdUpsert, update: mocks.holdUpdate },
-      moderationAssetBlock: { findUnique: mocks.assetFindUnique, upsert: mocks.assetUpsert, update: mocks.assetUpdate },
-      moderationEvent: { create: mocks.auditCreate },
+      project: { findUnique: mocks.projectFindUnique, update: mocks.projectUpdate, updateMany: mocks.projectUpdate },
+      moderationProjectHold: { findFirst: async ({ where }: { where: { reportId: string } }) => hold?.active && hold.reportId === where.reportId ? { ...hold, projectId: "source" } : null, findUnique: mocks.holdFindUnique, upsert: mocks.holdUpsert, update: mocks.holdUpdate },
+      moderationAssetBlock: { findMany: async ({ where }: { where: { reportId: string } }) => [...blocks.values()].filter(block => block.reportId === where.reportId && block.blocked), findUnique: mocks.assetFindUnique, upsert: mocks.assetUpsert, update: mocks.assetUpdate },
+      moderationEvent: { create: mocks.auditCreate, findFirst: vi.fn().mockResolvedValue(null) },
     }));
   });
 
@@ -102,7 +102,7 @@ describe("admin report scope moderation", () => {
     expect(mocks.projectUpdate).toHaveBeenCalledWith({ where: { id: "source" }, data: { isPublic: false } });
     expect(mocks.holdUpsert).toHaveBeenCalledTimes(1);
     expect(mocks.assetUpsert).not.toHaveBeenCalled();
-    expect(mocks.auditCreate).toHaveBeenCalledWith({ data: { action: "HIDE_PROJECT", reportId: "report-1", projectId: "source", actorId: "admin" } });
+    expect(mocks.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "HIDE_PROJECT", reportId: "report-1", projectId: "source", actorId: "admin", reportReason: "Synthetic violation", reportDetails: "Original reason" }) });
   });
 
   it("blocks a shared cover without modifying project visibility", async () => {
@@ -194,4 +194,16 @@ describe("admin report scope moderation", () => {
     expect(mocks.revisionFindUnique).toHaveBeenCalled();
     expect(mocks.projectUpdate).toHaveBeenCalledWith({ where: { id: "source" }, data: { isPublic: false } });
   });
+
+  it("rejects a second report hide without resolving it or replacing the first decision", async () => {
+    expect((await PATCH(request({ status: "RESOLVED", action: "HIDE_PROJECT" }), params)).status).toBe(200);
+    mocks.reportUpdate.mockClear();
+    const response = await PATCH(request({ status: "RESOLVED", action: "HIDE_PROJECT" }), { params: Promise.resolve({ id: "report-2" }) });
+    expect(response.status).toBe(409);
+    expect(hold?.reportId).toBe("report-1");
+    expect(project.isPublic).toBe(false);
+    expect(mocks.reportUpdate).not.toHaveBeenCalled();
+    expect(mocks.auditCreate).toHaveBeenCalledTimes(1);
+  });
+
 });

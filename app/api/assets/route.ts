@@ -28,8 +28,7 @@ export async function GET(request: Request) {
   });
   if (moderated) return notFound();
 
-  const storedUrls = new Set<string>(hasUrl ? [requestedUrl!] : []);
-  if (hasKey) [assetUrl(key), legacyObjectUrl(key), key].forEach((value) => storedUrls.add(value));
+  const storedUrls = new Set<string>([assetUrl(key), legacyObjectUrl(key), key, ...(hasUrl ? [requestedUrl!] : [])]);
 
   const session = await auth.api.getSession({ headers: request.headers });
   const imageProjectId = documentImageProjectId(key);

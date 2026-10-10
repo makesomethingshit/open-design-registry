@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/src/lib/prisma";
 import { getAdminSession } from "@/src/lib/moderation";
-import { assetKeyFromStoredUrl } from "@/src/lib/storage";
 import { PageGrid, PageHeader, ReadingColumn } from "@/src/components/ui/layout";
 import ReportList from "./report-list";
 
@@ -9,43 +8,45 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminReportsPage() {
   if (!await getAdminSession()) redirect("/");
-  const reports = await prisma.report.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
+  const [reports, holds, blocks] = await Promise.all([
+    prisma.report.findMany({ orderBy: { createdAt: "desc" }, include: {
       reporter: { select: { name: true, email: true } },
       project: { select: { id: true, slug: true, title: true, coverUrl: true } },
       revision: { select: { number: true, project: { select: { id: true, slug: true, title: true, coverUrl: true } } } },
-    },
-  });
-
-  const sourceProjects = reports.map((report) => report.project ?? report.revision?.project).filter((value) => value !== null && value !== undefined);
-  const projectIds = [...new Set(sourceProjects.map((project) => project.id))];
-  const urls = [...new Set(sourceProjects.map((project) => project.coverUrl))];
-  const keys = [...new Set(sourceProjects.map((project) => assetKeyFromStoredUrl(project.coverUrl)).filter((key): key is string => Boolean(key)))];
-  const [coverCounts, holds, blocks] = await Promise.all([
-    urls.length ? prisma.project.groupBy({ by: ["coverUrl"], where: { coverUrl: { in: urls } }, _count: { _all: true } }) : [],
-    projectIds.length ? prisma.moderationProjectHold.findMany({ where: { projectId: { in: projectIds }, active: true }, select: { projectId: true, reportId: true } }) : [],
-    keys.length ? prisma.moderationAssetBlock.findMany({ where: { key: { in: keys }, blocked: true }, select: { key: true, reportId: true } }) : [],
+    } }),
+    prisma.moderationProjectHold.findMany({ where: { active: true } }),
+    prisma.moderationAssetBlock.findMany({ where: { blocked: true } }),
   ]);
-  const counts = new Map(coverCounts.map((row) => [row.coverUrl, row._count._all]));
-  const activeHolds = new Map(holds.map((row) => [row.projectId, row.reportId]));
-  const activeBlocks = new Set(blocks.map((row) => `${row.reportId}:${row.key}`));
-
-  const items = reports.map((report) => {
-    const project = report.project ?? report.revision?.project;
-    const key = assetKeyFromStoredUrl(project?.coverUrl);
+  const urls = [...new Set(reports.map(report => (report.project ?? report.revision?.project)?.coverUrl).filter((url): url is string => Boolean(url)))];
+  const coverCounts = urls.length ? await prisma.project.groupBy({ by: ["coverUrl"], where: { coverUrl: { in: urls } }, _count: { _all: true } }) : [];
+  const counts = new Map(coverCounts.map(row => [row.coverUrl, row._count._all]));
+  const hiddenReports = new Set(holds.map(hold => hold.reportId));
+  const blockedReports = new Set(blocks.map(block => block.reportId));
+  const items = reports.map(report => ({
+    ...report, coverSharedCount: counts.get((report.project ?? report.revision?.project)?.coverUrl ?? "") ?? 0,
+    projectHidden: hiddenReports.has(report.id), coverBlocked: blockedReports.has(report.id),
+  }));
+  const existingIds = new Set(reports.map(report => report.id));
+  const retainedIds = [...new Set([...hiddenReports, ...blockedReports])].filter(id => !existingIds.has(id));
+  const events = retainedIds.length ? await prisma.moderationEvent.findMany({ where: { reportId: { in: retainedIds } }, orderBy: { createdAt: "desc" } }) : [];
+  const retained = retainedIds.map(id => {
+    const event = events.find(event => event.reportId === id);
+    const savedBlocks = blocks.filter(block => block.reportId === id);
     return {
-      ...report,
-      coverSharedCount: project ? counts.get(project.coverUrl) ?? 0 : 0,
-      projectHidden: Boolean(project && activeHolds.get(project.id) === report.id),
-      coverBlocked: Boolean(key && activeBlocks.has(`${report.id}:${key}`)),
+      id, reason: event?.reportReason || "Retained moderation decision",
+      details: [event?.reportDetails, event?.resolutionNote || savedBlocks[0]?.reason, ...savedBlocks.map(block => block.key)].filter(Boolean).join("\n"),
+      status: "RESOLVED", sourceMissing: true, coverSharedCount: 0,
+      projectHidden: hiddenReports.has(id), coverBlocked: blockedReports.has(id),
+      reporter: { name: "Source report deleted", email: "" },
     };
   });
-
-  return <PageGrid aria-labelledby="reports-heading">
-    <ReadingColumn>
-      <PageHeader eyebrow="MODERATION" id="reports-heading" title="Review reports" description="Project visibility and shared asset removal are separate moderation actions." />
-      <ReportList reports={items} />
-    </ReadingColumn>
-  </PageGrid>;
+  return <PageGrid aria-labelledby="reports-heading"><ReadingColumn>
+    <PageHeader eyebrow="MODERATION" id="reports-heading" title="Review reports" description="Project visibility and shared asset removal are separate moderation actions." />
+    <ReportList reports={items} />
+    {retained.length > 0 && <section aria-labelledby="retained-heading">
+      <h2 id="retained-heading">Retained decisions with deleted reports</h2>
+      <p>The original report is unavailable. These retained decisions and reasons can still be reviewed and restored.</p>
+      <ReportList reports={retained} />
+    </section>}
+  </ReadingColumn></PageGrid>;
 }

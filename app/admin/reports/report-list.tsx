@@ -12,6 +12,7 @@ type Report = {
   reason: string;
   details: string;
   status: string;
+  sourceMissing?: boolean;
   coverSharedCount: number;
   projectHidden: boolean;
   coverBlocked: boolean;
@@ -61,7 +62,7 @@ export default function ReportList({ reports }: { reports: Report[] }) {
         NONE: "Report review complete.",
         HIDE_PROJECT: "Only the reported project was hidden; other forks remain public.",
         BLOCK_COVER: "The shared cover was blocked across projects without changing project visibility.",
-        RESTORE_PROJECT: "The reported project's prior visibility was restored.",
+        RESTORE_PROJECT: "This project hide was lifted. An owner-private or deleted project is not made public.",
         UNBLOCK_COVER: "This report's block was lifted. Other active reports may still keep the image hidden.",
       };
       setSuccesses((current) => ({ ...current, [report.id]: messages[action] }));
@@ -76,8 +77,8 @@ export default function ReportList({ reports }: { reports: Report[] }) {
   return <Stack gap={3}>
     {items.map((report) => <Panel className="card" key={report.id}>
       <Stack gap={3}>
-        <p className="meta"><Badge tone={report.status === "OPEN" ? "warning" : "success"}>{report.status}</Badge> · {report.reporter.name} ({report.reporter.email})</p>
-        <h2>{report.project?.title ?? `${report.revision?.project.title} · Revision ${report.revision?.number}`}</h2>
+        <p className="meta"><Badge tone={report.status === "OPEN" ? "warning" : "success"}>{report.status}</Badge> · {report.reporter.name}{report.reporter.email && ` (${report.reporter.email})`}</p>
+        <h2>{report.sourceMissing ? `Retained decision ${report.id}` : report.project?.title ?? `${report.revision?.project.title} · Revision ${report.revision?.number}`}</h2>
         <p><strong>{report.reason}</strong></p>
         <p>{report.details}</p>
         {report.status === "OPEN" && <>
@@ -90,7 +91,7 @@ export default function ReportList({ reports }: { reports: Report[] }) {
         </>}
         {(report.projectHidden || report.coverBlocked) && <div className="actions">
           {report.projectHidden && <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "RESTORE_PROJECT"); }} type="button" variant="secondary">Restore project visibility</Button>}
-          {report.coverBlocked && <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "UNBLOCK_COVER"); }} type="button" variant="secondary">Unblock shared cover</Button>}
+          {report.coverBlocked && <Button disabled={Boolean(pendingById[report.id])} onClick={() => { void decide(report, "UNBLOCK_COVER"); }} type="button" variant="secondary">Lift this report's asset blocks</Button>}
         </div>}
         {errors[report.id] && <Banner tone="error" title="Could not update report">{errors[report.id]}</Banner>}
         {successes[report.id] && <Banner tone="success" title="Moderation updated">{successes[report.id]}</Banner>}

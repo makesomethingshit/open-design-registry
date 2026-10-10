@@ -175,6 +175,8 @@ model ModerationProjectHold {
   hiddenAt      DateTime @default(now())
   restoredById  String?
   restoredAt    DateTime?
+
+  @@index([reportId, active])
 }
 
 // A blocked object stays unavailable through any public/legacy proxy URL.
@@ -191,6 +193,7 @@ model ModerationAssetBlock {
   // Independent per-report holds; one report cannot revoke another report's block.
   @@id([key, reportId])
   @@index([key, blocked])
+  @@index([reportId, blocked])
 }
 
 // Append-only moderation audit, retained independently of source reports.
@@ -201,6 +204,9 @@ model ModerationEvent {
   projectId  String?
   assetKey   String?
   actorId    String
+  reportReason String @default("")
+  reportDetails String @default("")
+  resolutionNote String @default("")
   createdAt  DateTime @default(now())
 
   @@index([reportId, createdAt])
