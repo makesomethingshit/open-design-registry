@@ -29,7 +29,7 @@ export default async function AdminReportsPage() {
   ]);
   const counts = new Map(coverCounts.map((row) => [row.coverUrl, row._count._all]));
   const activeHolds = new Map(holds.map((row) => [row.projectId, row.reportId]));
-  const activeBlocks = new Map(blocks.map((row) => [row.key, row.reportId]));
+  const activeBlocks = new Set(blocks.map((row) => `${row.reportId}:${row.key}`));
 
   const items = reports.map((report) => {
     const project = report.project ?? report.revision?.project;
@@ -38,7 +38,7 @@ export default async function AdminReportsPage() {
       ...report,
       coverSharedCount: project ? counts.get(project.coverUrl) ?? 0 : 0,
       projectHidden: Boolean(project && activeHolds.get(project.id) === report.id),
-      coverBlocked: Boolean(key && activeBlocks.get(key) === report.id),
+      coverBlocked: Boolean(key && activeBlocks.has(`${report.id}:${key}`)),
     };
   });
 

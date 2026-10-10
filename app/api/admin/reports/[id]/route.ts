@@ -77,10 +77,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         } else {
           const key = assetKeyFromStoredUrl(project.coverUrl);
           if (!key) throw new ModerationError("Only managed cover assets can be blocked", 422);
-          const existing = await tx.moderationAssetBlock.findUnique({ where: { key } });
+          // Each report independently justifies suppressing this shared object.
+          const where = { key_reportId: { key, reportId: id } };
+          const existing = await tx.moderationAssetBlock.findUnique({ where });
           if (action === "BLOCK_COVER" && !existing?.blocked) {
             await tx.moderationAssetBlock.upsert({
-              where: { key },
+              where,
               create: {
                 key, blocked: true, reportId: id, blockedById: session.user.id,
                 reason: typeof body.resolutionNote === "string" ? body.resolutionNote.trim().slice(0, 2000) : "",
@@ -93,8 +95,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             });
             await tx.moderationEvent.create({ data: { action, reportId: id, projectId, assetKey: key, actorId: session.user.id } });
           } else if (action === "UNBLOCK_COVER") {
-            if (!existing?.blocked || existing.reportId !== id) throw new ModerationError("No asset block associated with this report", 409);
-            await tx.moderationAssetBlock.update({ where: { key }, data: { blocked: false, restoredById: session.user.id, restoredAt: new Date() } });
+            if (!existing?.blocked) throw new ModerationError("No asset block associated with this report", 409);
+            await tx.moderationAssetBlock.update({ where, data: { blocked: false, restoredById: session.user.id, restoredAt: new Date() } });
             await tx.moderationEvent.create({ data: { action, reportId: id, projectId, assetKey: key, actorId: session.user.id } });
           }
         }

@@ -33,15 +33,20 @@ const params = { params: Promise.resolve({ id: "report-1" }) };
 describe("admin report scope moderation", () => {
   let project: { id: string; isPublic: boolean; coverUrl: string };
   let hold: { active: boolean; wasPublic: boolean; reportId: string } | null;
-  let block: { blocked: boolean; reportId: string } | null;
+  type Block = { key: string; blocked: boolean; reportId: string };
+  let blocks: Map<string, Block>;
+  const blockId = (key: string, reportId: string) => `${key}:${reportId}`;
+  const coverKey = "covers/source/project";
 
   beforeEach(() => {
     vi.clearAllMocks();
     project = { id: "source", isPublic: true, coverUrl: "/api/assets?key=covers%2Fsource%2Fproject" };
     hold = null;
-    block = null;
+    blocks = new Map();
     mocks.getAdminSession.mockResolvedValue({ user: { id: "admin" } });
-    mocks.reportFindUnique.mockResolvedValue({ id: "report-1", projectId: "source", revisionId: null, status: "OPEN" });
+    mocks.reportFindUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+      ({ id: where.id, projectId: "source", revisionId: null, status: "OPEN" })
+    );
     mocks.revisionFindUnique.mockResolvedValue({ projectId: "source" });
     mocks.projectFindUnique.mockImplementation(async () => project);
     mocks.projectUpdate.mockImplementation(async ({ data }) => { project = { ...project, ...data }; return project; });
@@ -51,9 +56,32 @@ describe("admin report scope moderation", () => {
       return hold;
     });
     mocks.holdUpdate.mockImplementation(async ({ data }) => { hold = { ...hold!, ...data }; return hold; });
-    mocks.assetFindUnique.mockImplementation(async () => block);
-    mocks.assetUpsert.mockImplementation(async ({ create, update }) => { block = { ...block, ...(block ? update : create), blocked: true }; return block; });
-    mocks.assetUpdate.mockImplementation(async ({ data }) => { block = { ...block!, ...data }; return block; });
+    mocks.assetFindUnique.mockImplementation(async ({ where }: { where: { key_reportId: { key: string; reportId: string } } }) => {
+      const { key, reportId } = where.key_reportId;
+      return blocks.get(blockId(key, reportId)) ?? null;
+    });
+    mocks.assetUpsert.mockImplementation(async ({ where, create, update }: {
+      where: { key_reportId: { key: string; reportId: string } };
+      create: Block;
+      update: Partial<Block>;
+    }) => {
+      const { key, reportId } = where.key_reportId;
+      const k = blockId(key, reportId);
+      const current = blocks.get(k);
+      const row = { ...(current ?? create), ...(current ? update : {}), key, reportId, blocked: true };
+      blocks.set(k, row);
+      return row;
+    });
+    mocks.assetUpdate.mockImplementation(async ({ where, data }: {
+      where: { key_reportId: { key: string; reportId: string } };
+      data: Partial<Block>;
+    }) => {
+      const { key, reportId } = where.key_reportId;
+      const k = blockId(key, reportId);
+      const row = { ...blocks.get(k)!, ...data };
+      blocks.set(k, row);
+      return row;
+    });
     mocks.lock.mockResolvedValue([]);
     mocks.auditCreate.mockResolvedValue({ id: "event" });
     mocks.reportUpdate.mockResolvedValue({ id: "report-1", status: "RESOLVED" });
@@ -83,22 +111,22 @@ describe("admin report scope moderation", () => {
     expect(project.isPublic).toBe(true);
     expect(mocks.projectUpdate).not.toHaveBeenCalled();
     expect(mocks.assetUpsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { key: "covers/source/project" },
+      where: { key_reportId: { key: "covers/source/project", reportId: "report-1" } },
     }));
     expect(mocks.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "BLOCK_COVER", assetKey: "covers/source/project" }) });
   });
 
   it("can lift a block from the report that created it", async () => {
-    block = { blocked: true, reportId: "report-1" };
+    blocks.set(blockId(coverKey, "report-1"), { key: coverKey, blocked: true, reportId: "report-1" });
     const response = await PATCH(request({ action: "UNBLOCK_COVER" }), params);
     expect(response.status).toBe(200);
-    expect(block?.blocked).toBe(false);
+    expect(blocks.get(blockId(coverKey, "report-1"))?.blocked).toBe(false);
     expect(mocks.reportUpdate).not.toHaveBeenCalled();
     expect(mocks.auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "UNBLOCK_COVER" }) });
   });
 
   it("rejects attempts to unblock a different report's block", async () => {
-    block = { blocked: true, reportId: "other-report" };
+    blocks.set(blockId(coverKey, "other-report"), { key: coverKey, blocked: true, reportId: "other-report" });
     const response = await PATCH(request({ action: "UNBLOCK_COVER" }), params);
     expect(response.status).toBe(409);
     expect(mocks.assetUpdate).not.toHaveBeenCalled();
@@ -130,10 +158,34 @@ describe("admin report scope moderation", () => {
   });
 
   it("does not duplicate audit entries when the same block is requested again", async () => {
-    block = { blocked: true, reportId: "report-1" };
+    blocks.set(blockId(coverKey, "report-1"), { key: coverKey, blocked: true, reportId: "report-1" });
     expect((await PATCH(request({ status: "RESOLVED", action: "BLOCK_COVER" }), params)).status).toBe(200);
     expect(mocks.auditCreate).not.toHaveBeenCalled();
     expect(mocks.assetUpsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps a shared asset suppressed until every report releases its own block", async () => {
+    const second = { params: Promise.resolve({ id: "report-2" }) };
+    expect((await PATCH(request({ status: "RESOLVED", action: "BLOCK_COVER" }), params)).status).toBe(200);
+    expect((await PATCH(request({ status: "RESOLVED", action: "BLOCK_COVER" }), second)).status).toBe(200);
+    expect(blocks.size).toBe(2);
+    expect([...blocks.values()].filter((row) => row.blocked)).toHaveLength(2);
+    expect(mocks.auditCreate).toHaveBeenCalledTimes(2);
+
+    expect((await PATCH(request({ action: "UNBLOCK_COVER" }), params)).status).toBe(200);
+    expect(blocks.get(blockId(coverKey, "report-1"))?.blocked).toBe(false);
+    expect(blocks.get(blockId(coverKey, "report-2"))?.blocked).toBe(true);
+
+    expect((await PATCH(request({ action: "UNBLOCK_COVER" }), second)).status).toBe(200);
+    expect([...blocks.values()].some((row) => row.blocked)).toBe(false);
+    expect(mocks.auditCreate).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not duplicate block claims or audit entries on retries", async () => {
+    expect((await PATCH(request({ status: "RESOLVED", action: "BLOCK_COVER" }), params)).status).toBe(200);
+    expect((await PATCH(request({ status: "RESOLVED", action: "BLOCK_COVER" }), params)).status).toBe(200);
+    expect(blocks.size).toBe(1);
+    expect(mocks.auditCreate).toHaveBeenCalledTimes(1);
   });
 
   it("resolves a revision report against its owning project only", async () => {

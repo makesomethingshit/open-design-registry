@@ -62,7 +62,7 @@ export default function ReportList({ reports }: { reports: Report[] }) {
         HIDE_PROJECT: "Only the reported project was hidden; other forks remain public.",
         BLOCK_COVER: "The shared cover was blocked across projects without changing project visibility.",
         RESTORE_PROJECT: "The reported project's prior visibility was restored.",
-        UNBLOCK_COVER: "The asset block was lifted; normal project access checks still apply.",
+        UNBLOCK_COVER: "This report's block was lifted. Other active reports may still keep the image hidden.",
       };
       setSuccesses((current) => ({ ...current, [report.id]: messages[action] }));
     } catch {

@@ -179,7 +179,7 @@ model ModerationProjectHold {
 
 // A blocked object stays unavailable through any public/legacy proxy URL.
 model ModerationAssetBlock {
-  key           String   @id
+  key           String
   blocked       Boolean  @default(true)
   reportId      String
   reason        String   @default("")
@@ -187,6 +187,10 @@ model ModerationAssetBlock {
   blockedAt     DateTime @default(now())
   restoredById  String?
   restoredAt    DateTime?
+
+  // Independent per-report holds; one report cannot revoke another report's block.
+  @@id([key, reportId])
+  @@index([key, blocked])
 }
 
 // Append-only moderation audit, retained independently of source reports.

@@ -19,8 +19,10 @@ CREATE TABLE "ModerationAssetBlock" (
     "blockedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "restoredById" TEXT,
     "restoredAt" TIMESTAMP(3),
-    CONSTRAINT "ModerationAssetBlock_pkey" PRIMARY KEY ("key")
+    CONSTRAINT "ModerationAssetBlock_pkey" PRIMARY KEY ("key", "reportId")
 );
+
+CREATE INDEX "ModerationAssetBlock_key_blocked_idx" ON "ModerationAssetBlock"("key", "blocked");
 
 CREATE TABLE "ModerationEvent" (
     "id" TEXT NOT NULL,
