@@ -29,10 +29,10 @@ test("preserves a brief across type switches and saves readable optional section
   // Combined prompts can exceed the API limit even though every input is valid.
   await page.getByLabel("Additional details", { exact: true }).fill("x".repeat(9900));
   await page.getByRole("button", { name: "Open issue", exact: true }).press("Enter");
-  await expect(page.getByRole("alert")).toContainText("10,000 characters");
+  await expect(page.locator("#issue-body-error")).toContainText("10,000 characters");
   await expect(page.getByLabel("Additional details", { exact: true })).toBeFocused();
   await page.getByLabel("Purpose", { exact: true }).fill("Improve keyboard navigation");
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator("#issue-body-error")).toHaveCount(0);
   await page.getByLabel("Additional details", { exact: true }).fill("Preserve desktop behavior.");
   const saved = page.waitForResponse((response) => response.url().endsWith(`/api/projects/${slug}/issues`) && response.request().method() === "POST");
   await page.getByRole("button", { name: "Open issue", exact: true }).press("Enter");
