@@ -58,7 +58,11 @@ export default async function ProjectScreen({ params, searchParams, view = "over
   const discussionSelect = { id: true, title: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.DiscussionSelect;
   const forkSelect = { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } satisfies Prisma.ProjectSelect;
   const cursorQuery: { cursor?: { id: string }; skip?: number } = cursor ? { cursor: { id: cursor }, skip: 1 } : {};
-  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forks, openIssueCount, revisionCount, openDesignRequests] = await Promise.all([
+  const forkCursor = view === "forks" && cursor
+    ? await prisma.project.findFirst({ where: { slug: cursor, forkedFromProjectId: base.id, isPublic: true }, select: { slug: true } })
+    : null;
+  const forkCursorQuery: { cursor?: { slug: string }; skip?: number } = forkCursor ? { cursor: { slug: forkCursor.slug }, skip: 1 } : {};
+  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests] = await Promise.all([
     view === "revisions"
       ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, ...cursorQuery, take: pageSize + 1, select: revisionHistorySelect })
       : view === "new-issue"
@@ -77,7 +81,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       ? prisma.discussion.findMany({ where: { projectId: base.id }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...cursorQuery, take: pageSize + 1, select: discussionSelect })
       : Promise.resolve([]),
     view === "forks"
-      ? prisma.project.findMany({ where: { forkedFromProjectId: base.id, isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], take: 20, select: forkSelect })
+      ? prisma.project.findMany({ where: { forkedFromProjectId: base.id, isPublic: true }, orderBy: [{ createdAt: "desc" }, { slug: "desc" }], ...forkCursorQuery, take: pageSize + 1, select: forkSelect })
       : Promise.resolve([]),
     view === "overview"
       ? prisma.issue.count({ where: { projectId: base.id, status: "OPEN", kind: { not: "DESIGN_REQUEST" } } })
@@ -93,10 +97,12 @@ export default async function ProjectScreen({ params, searchParams, view = "over
   const releases = releaseRows.slice(0, pageSize);
   const issues = issueRows.slice(0, pageSize);
   const discussions = discussionRows.slice(0, pageSize);
+  const forks = forkRows.slice(0, pageSize);
   const revisionNextCursor = view === "revisions" && revisionRows.length > pageSize ? revisions.at(-1)?.id ?? null : null;
   const releaseNextCursor = view === "releases" && releaseRows.length > pageSize ? releases.at(-1)?.id ?? null : null;
   const issueNextCursor = view === "issues" && issueRows.length > pageSize ? issues.at(-1)?.id ?? null : null;
   const discussionNextCursor = view === "discussions" && discussionRows.length > pageSize ? discussions.at(-1)?.id ?? null : null;
+  const forkNextCursor = view === "forks" && forkRows.length > pageSize ? forks.at(-1)?.slug ?? null : null;
   const project = { ...base, revisions, releases, issues, discussions, forks };
 
   const proposalFilter = query.proposalStatus === "closed" ? "closed" : "open";
@@ -216,6 +222,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     {view === "forks" && <section aria-labelledby="forks-heading" className={styles.section} id="forks">
       <header className={styles.sectionHeader}><div><p className={styles.eyebrow}>Lineage</p><h2 id="forks-heading">Forks</h2></div><span>Project descendants</span></header>
       {project.forks.length ? <ul className={styles.forkList}>{project.forks.map((fork) => <li key={fork.id}><Link href={`/projects/${fork.slug}`}>{fork.title}</Link>{fork.description && <p>{fork.description}</p>}<span>{fork.owner.name} <span aria-hidden="true">·</span> {fork.license} <span aria-hidden="true">·</span> Created <time dateTime={fork.createdAt.toISOString()}>{formatDate(fork.createdAt)}</time></span></li>)}</ul> : <p className={styles.muted}>No forks yet.</p>}
+      <ProjectListPagination cursor={forkCursor?.slug} label="Fork" nextCursor={forkNextCursor} pageSize={pageSize} slug={project.slug} view="forks" />
     </section>}
         {view === "overview" && project.isPublic && <details className={styles.ownerTools}><summary>Report project</summary><PageGrid><FormColumn><ReportForm projectSlug={project.slug} /></FormColumn></PageGrid></details>}
   </>;
@@ -225,7 +232,7 @@ function formatDate(value: Date) {
   return value.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function ProjectListPagination({ slug, view, label, pageSize, cursor, nextCursor, issueStatus }: { slug: string; view: "revisions" | "releases" | "issues" | "discussions"; label: string; pageSize: number; cursor?: string; nextCursor: string | null; issueStatus?: "open" | "closed" }) {
+function ProjectListPagination({ slug, view, label, pageSize, cursor, nextCursor, issueStatus }: { slug: string; view: "revisions" | "releases" | "issues" | "discussions" | "forks"; label: string; pageSize: number; cursor?: string; nextCursor: string | null; issueStatus?: "open" | "closed" }) {
   if (!cursor && !nextCursor) return null;
   const href = (next: string | null) => {
     const params = new URLSearchParams({ pageSize: String(pageSize) });
