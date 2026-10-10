@@ -37,6 +37,7 @@ model User {
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCreated Notification[] @relation("NotificationActor")
   rightsDeclarations RevisionRightsDeclaration[]
+  designRequestParticipations DesignRequestParticipation[]
 }
 
 model Session {
@@ -454,6 +455,7 @@ model Issue {
   comments   IssueComment[]
   proposals  Proposal[]
   notifications Notification[]
+  designRequestParticipations DesignRequestParticipation[]
 
   @@index([projectId, status, createdAt])
   @@index([authorId])
@@ -473,6 +475,19 @@ model IssueComment {
 
   @@index([issueId, createdAt])
   @@index([authorId])
+}
+
+model DesignRequestParticipation {
+  issueId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, userId])
+  @@index([issueId, createdAt, userId])
+  @@index([userId, createdAt])
 }
 
 model Proposal {

@@ -2,11 +2,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findFirst: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findFirst: vi.fn(), transaction: vi.fn(), readParticipation: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NEXT_NOT_FOUND"); }, useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children, ...props }: { href: string; children?: unknown; [key: string]: unknown }) => createElement("a", { href, ...props }, children as never) }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { issue: { findFirst: mocks.findFirst } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
+vi.mock("@/src/lib/design-request-participation", () => ({ readDesignRequestParticipationSnapshot: mocks.readParticipation }));
 
 const { default: IssuePage } = await import("./page");
 
@@ -31,7 +32,11 @@ async function markup(session: { user: { id: string } } | null, value = issue())
 }
 
 describe("project issue detail page", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ issue: { findFirst: mocks.findFirst } }));
+    mocks.readParticipation.mockResolvedValue({ count: 0, names: [], participating: false });
+  });
 
   it("shows request purpose, body, status, project, revision, and a related contribution link", async () => {
     const html = await markup(null);
@@ -43,6 +48,21 @@ describe("project issue detail page", () => {
     expect(html).toContain('href="/projects/demo/revisions/7">Revision 7</a>');
     expect(html).toContain('href="/projects/demo/contribute?relatedIssue=request-1"');
     expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "request-1", project: { slug: "demo" } } }));
+    expect(html).toContain("Working interest");
+    expect(html).toContain("Sign in to participate");
+    expect(html).toContain("next=%2Fprojects%2Fdemo%2Fissues%2Frequest-1");
+  });
+
+  it("shows stable participant names, count, own state, and the public-name notice", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "participant" } });
+    mocks.readParticipation.mockResolvedValue({ count: 6, names: ["Ari", "Bo", "Cy", "Dee", "Eli"], participating: true });
+    const html = await markup({ user: { id: "participant" } });
+
+    expect(html).toContain("6 people are working on this: Ari, Bo, Cy, Dee, Eli and 1 more.");
+    expect(html).toContain("Stop working on this");
+    expect(html).toContain("Your display name will be visible to visitors");
+    expect(html).not.toContain("@example");
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead" });
   });
 
   it("keeps closed issues readable without offering contribution", async () => {

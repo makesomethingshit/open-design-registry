@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   issueTxFind: vi.fn(),
   issueUpdate: vi.fn(),
   issueCommentCreate: vi.fn(),
+  participationDeleteMany: vi.fn(),
   proposalFind: vi.fn(),
   proposalTxFind: vi.fn(),
   proposalUpdate: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("@/src/lib/prisma", () => ({
       callback({
         $queryRaw: mocks.lockRaw,
         issue: { findUnique: mocks.issueTxFind, update: mocks.issueUpdate },
+        designRequestParticipation: { deleteMany: mocks.participationDeleteMany },
         issueComment: { create: mocks.issueCommentCreate },
         proposal: { findUnique: mocks.proposalTxFind, update: mocks.proposalUpdate },
         proposalComment: { create: mocks.proposalCommentCreate },

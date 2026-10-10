@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { StatusBadge } from "@/src/components/ui/badge";
 import { TextLink } from "@/src/components/ui/button";
 import { Inline, PageGrid, PageHeader, Panel, SectionHeader, Stack, WideColumn } from "@/src/components/ui/layout";
 import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { isVisible } from "@/src/lib/proposal-handlers";
+import { readDesignRequestParticipationSnapshot } from "@/src/lib/design-request-participation";
+import ParticipationControl from "./participation-control";
 import IssueBoard from "../../issue-board";
 import styles from "../../project.module.css";
 
@@ -16,22 +19,26 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
   const session = await getSession();
   const query = await searchParams;
   const listSearch = query?.issueStatus === "closed" ? "?issueStatus=closed" : "";
-  const issue = await prisma.issue.findFirst({
-    where: { id, project: { slug } },
-    select: {
-      id: true,
-      title: true,
-      body: true,
-      kind: true,
-      status: true,
-      createdAt: true,
-      author: { select: { name: true } },
-      project: { select: { title: true, ownerId: true, isPublic: true } },
-      revision: { select: { number: true, isPublished: true } },
-      comments: { orderBy: { createdAt: "asc" }, select: { id: true, body: true, author: { select: { name: true } } } },
-      proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } },
-    },
-  });
+  const { issue, participation } = await prisma.$transaction(async (tx) => {
+    const issue = await tx.issue.findFirst({
+      where: { id, project: { slug } },
+      select: {
+        id: true,
+        title: true,
+        body: true,
+        kind: true,
+        status: true,
+        createdAt: true,
+        author: { select: { name: true } },
+        project: { select: { title: true, ownerId: true, isPublic: true } },
+        revision: { select: { number: true, isPublished: true } },
+        comments: { orderBy: { createdAt: "asc" }, select: { id: true, body: true, author: { select: { name: true } } } },
+        proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } },
+      },
+    });
+    const eligible = issue?.kind === "DESIGN_REQUEST" && issue.project.isPublic && issue.status === "OPEN";
+    return { issue, participation: eligible ? await readDesignRequestParticipationSnapshot(tx, issue.id, session?.user.id) : null };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
   if (!issue || (!issue.project.isPublic && issue.project.ownerId !== session?.user.id)) notFound();
 
   const isRequest = issue.kind === "DESIGN_REQUEST";
@@ -45,6 +52,7 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
         <PageHeader eyebrow={heading} id="issue-heading" title={issue.title} />
         <Inline gap={2}><StatusBadge tone={isOpen ? "success" : "neutral"}>{isOpen ? "Open" : "Closed"}</StatusBadge></Inline>
         <p className={styles.discussionMeta}>Opened by {issue.author.name} <span aria-hidden="true">·</span> <time dateTime={issue.createdAt.toISOString()}>{formatDate(issue.createdAt)}</time></p>
+        {isRequest && issue.project.isPublic && isOpen && participation && <ParticipationControl issueId={issue.id} count={participation.count} names={participation.names} participating={participation.participating} signedIn={Boolean(session)} loginHref={`/login?next=${encodeURIComponent(`/projects/${slug}/issues/${issue.id}`)}`} />}
         <Panel aria-labelledby="issue-description-heading" className={styles.discussionBodyPanel}>
           <Stack gap={3}>
             <SectionHeader id="issue-description-heading" title="Details" />

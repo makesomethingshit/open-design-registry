@@ -93,6 +93,10 @@ npm test -- prisma/revision.integration.test.ts src/lib/proposal-concurrency.int
 
 ### 브라우저 통합 검사
 
+Design Request의 참여 의향은 공개·열린 요청에서 여러 사용자가 독립적으로 등록·철회하는 관계입니다. `POST /api/issues/[id]/participation`은 신규 201, 재요청 200, 닫힌 요청 409를 반환합니다. `DELETE`는 본인 기록만 철회하며 이미 없거나 닫힌 요청에서도 멱등 204입니다. 비가시·일반 Issue는 404, 미인증은 401입니다. 요청 종료는 같은 Issue 행 잠금과 트랜잭션에서 참여를 삭제하며 재오픈해도 복원하지 않습니다.
+
+`TEST_DATABASE_URL`을 설정한 `npm test`는 `src/lib/design-request-participation-race.integration.test.ts`의 실제 PostgreSQL 가입·종료 경합도 실행합니다. `E2E_INTEGRATION=1`의 `e2e/design-request-participation.integration.spec.ts`는 익명 표시, 이름 공개 안내, 모바일·키보드 등록/철회, 두 참가자, 종료/재오픈을 확인합니다. CI에서 화면 증거는 `participation-screenshots` artifact로 제공됩니다.
+
 `.env`에 테스트 DB·스토리지 설정을 맞춥니다. [Playwright 설정](../playwright.config.ts)의 기본 주소는 `http://127.0.0.1:3000`이므로 브라우저 통합 검사에서는 `BETTER_AUTH_URL`도 이 값으로 맞춥니다. `.env.example`의 로컬 개발 기본값인 `http://localhost:3000`을 그대로 두지 않습니다. `PLAYWRIGHT_BASE_URL`로 기존 서버를 지정하면 인증 URL과 서버의 DB·스토리지 설정도 해당 서버에 맞춥니다.
 
 ```sh
