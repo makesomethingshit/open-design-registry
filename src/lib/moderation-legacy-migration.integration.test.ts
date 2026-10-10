@@ -24,7 +24,8 @@ db("legacy moderation migration", () => {
     const legacyMigrationSql = await readFile(resolve(process.cwd(), "prisma/migrations/20261012000000_legacy_moderation_review/migration.sql"), "utf8");
     const scopeStartedAt = new Date("2026-10-10T00:00:00.000Z");
     const oldReviewedAt = new Date("2026-10-09T23:00:00.000Z");
-    const postReviewPreMigration = new Date("2026-10-09T23:15:00.000Z");
+    // After ALL legacy reports referencing the shared/blank covers (latest: 23:30), before migration at midnight.
+    const postReviewPreMigration = new Date("2026-10-09T23:45:00.000Z");
     const existingHoldReviewedAt = new Date("2026-10-09T23:30:00.000Z");
     const freshReviewedAt = new Date("2026-10-10T01:00:00.000Z");
 
