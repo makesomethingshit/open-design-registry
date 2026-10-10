@@ -65,6 +65,8 @@ export const objectUrl = legacyObjectUrl;
 // Only our own proxy or configured bucket URLs are accepted; arbitrary URLs are not.
 export function assetKeyFromStoredUrl(value: string | null | undefined): string | null {
   if (!value) return null;
+  // Older project records may store the generated object key itself.
+  if (value.startsWith("covers/") && validAssetKey(value)) return value;
   if (value.startsWith("/api/assets?")) {
     try {
       const url = new URL(value, "http://localhost");
