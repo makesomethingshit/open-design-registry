@@ -3,6 +3,26 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe("proposal review regression fixtures", () => {
   test.setTimeout(90_000);
 
+  test("announces the comparison basis and missing added-unit preview through keyboard switching", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const workspace = await openWorkspace(page);
+    await workspace.getByLabel("Show stale revision state").check();
+    await workspace.getByRole("button", { name: /^Add A deliberately long added unit name/ }).press("Enter");
+    const context = workspace.locator('[aria-live="polite"]').filter({ hasText: /^Comparing/ });
+    await expect(context).toContainText("Base Revision 11 (Original) with Proposal Revision 12 (Proposal)");
+    await expect(workspace.getByText("Not present in the original revision", { exact: true })).toBeVisible();
+    await workspace.getByRole("button", { name: "Review latest revision", exact: true }).press("Enter");
+    await expect(context).toContainText("Latest Revision 13 (Latest) with Proposal Revision 12 (Proposal)");
+    await expect(context).toContainText("Selected change:");
+    await expect(workspace.getByText("Not present in the latest revision", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await workspace.screenshot({ path: testInfo.outputPath("mobile-proposal-comparison-latest.png") });
+    await workspace.getByRole("button", { name: "Back to base comparison", exact: true }).press("Enter");
+    await expect(context).toContainText("Base Revision 11 (Original)");
+    await expect(workspace.getByText("Not present in the original revision", { exact: true })).toBeVisible();
+    await workspace.screenshot({ path: testInfo.outputPath("mobile-proposal-comparison-base.png") });
+  });
+
   test("centers shared form and reading columns without mobile overflow", async ({ page }) => {
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
