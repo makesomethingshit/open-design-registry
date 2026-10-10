@@ -127,7 +127,7 @@ gh workflow run ci.yml --repo makesomethingshit/open-design-registry -f ref=<PR_
 
 수동 실행의 test·typecheck·build·e2e는 모두 지정한 ref를 checkout합니다. 실행 로그의 checkout SHA가 검토한 PR HEAD와 같은지 확인하고, 모든 검사가 통과했는지 따로 확인합니다. 수동 실행은 PR 체크에 자동 연결되지 않으므로 PR 본문에 검증 SHA와 Actions run 링크를 기록합니다. 이후 HEAD가 바뀌면 다시 실행합니다. PR·push·수동 실행의 concurrency 그룹을 분리해 수동 검증이 PR 기본 검사를 취소하지 않게 합니다.
 
-E2E는 격리 PostgreSQL·MinIO와 테스트 버킷을 준비하고 `E2E_INTEGRATION=1`로 실행합니다. CI의 Playwright worker는 2개이며 실패 테스트는 최대 1회 재시도합니다. line 로그와 HTML/JSON 결과는 failed·flaky·passed를 구분합니다. 결과와 실패 trace는 성공·실패 실행 모두 `playwright-results-<run_id>-<attempt>` artifact에 3일간 보존하므로 재시도로 통과한 flaky 기록도 확인할 수 있습니다. 최종 실패는 job 실패로 남으며 무시하지 않습니다.
+E2E는 격리 PostgreSQL·MinIO와 테스트 버킷을 준비하고 `E2E_INTEGRATION=1`로 실행합니다. CI의 Playwright worker는 2개이며 실패 테스트는 최대 1회 재시도합니다. line 로그와 HTML/JSON 결과는 failed·flaky·passed를 구분합니다. 브라우저 보고서와 실패 trace에는 세션 토큰이 포함될 수 있어 CI artifact로 업로드하지 않습니다. Actions의 line 로그에서 실패·재시도 결과를 확인하고, 상세 trace가 필요하면 같은 SHA를 격리된 로컬 테스트 환경에서 재현합니다. 로컬 보고서·trace도 공개 첨부 전에 인증 정보와 개인정보를 제거해야 합니다. 최종 실패는 job 실패로 남으며 무시하지 않습니다.
 
 현재 브라우저 서버는 `next dev`를 유지합니다. timeout이 발생하면 테스트명·원인 로그·trace로 서버 시작 지연, 컴파일 또는 실제 요청 지연을 구분합니다. 개발 서버가 원인으로 확인되면 별도 검증 후 production build와 `next start` 실행을 검토합니다.
 
