@@ -32,7 +32,7 @@ db("legacy moderation migration", () => {
         await tx.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
         await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schema}"`);
         await tx.$executeRawUnsafe(`CREATE TABLE "_prisma_migrations" ("id" TEXT PRIMARY KEY, "checksum" TEXT NOT NULL, "finished_at" TIMESTAMP(3), "migration_name" TEXT NOT NULL, "logs" TEXT, "rolled_back_at" TIMESTAMP(3), "started_at" TIMESTAMP(3) NOT NULL, "applied_steps_count" INTEGER NOT NULL DEFAULT 0)`);
-        await tx.$executeRawUnsafe(`CREATE TABLE "Project" ("id" TEXT PRIMARY KEY, "coverUrl" TEXT NOT NULL, "isPublic" BOOLEAN NOT NULL)`);
+        await tx.$executeRawUnsafe(`CREATE TABLE "Project" ("id" TEXT PRIMARY KEY, "coverUrl" TEXT NOT NULL, "isPublic" BOOLEAN NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT '2026-10-09 00:00:00')`);
         await tx.$executeRawUnsafe(`CREATE TABLE "Revision" ("id" TEXT PRIMARY KEY, "projectId" TEXT NOT NULL)`);
         await tx.$executeRawUnsafe(`CREATE TABLE "Report" ("id" TEXT PRIMARY KEY, "projectId" TEXT, "revisionId" TEXT, "reason" TEXT NOT NULL, "details" TEXT NOT NULL, "status" TEXT NOT NULL, "reviewedBy" TEXT, "reviewedAt" TIMESTAMP(3))`);
         await tx.$executeRaw`INSERT INTO "_prisma_migrations" ("id", "checksum", "migration_name", "finished_at", "started_at") VALUES (${`scope-${suffix}`}, 'test', '20261010000000_moderation_asset_scope', ${scopeStartedAt}, ${scopeStartedAt})`;
@@ -48,6 +48,7 @@ db("legacy moderation migration", () => {
           (${`blank-target-${suffix}`}, '', false),
           (${`blank-peer-${suffix}`}, '', false),
           (${`blank-public-${suffix}`}, '', true)`;
+        await tx.$executeRaw`INSERT INTO "Project" ("id", "coverUrl", "isPublic", "createdAt") VALUES (${`new-peer-${suffix}`}, ${`covers/${suffix}/shared`}, false, ${freshReviewedAt})`;
         await tx.$executeRaw`INSERT INTO "Revision" ("id", "projectId") VALUES (${`revision-row-${suffix}`}, ${`revision-${suffix}`})`;
         await tx.$executeRaw`INSERT INTO "Report" ("id", "projectId", "revisionId", "reason", "details", "status", "reviewedBy", "reviewedAt") VALUES
           (${`old-report-${suffix}`}, ${`old-direct-${suffix}`}, NULL, 'Old direct reason', 'Old direct details', 'RESOLVED', 'old-moderator', ${oldReviewedAt}),
@@ -83,7 +84,7 @@ db("legacy moderation migration", () => {
           expect.objectContaining({ id: `legacy-hide:revision-${suffix}`, projectId: `revision-${suffix}`, actorId: "legacy-migration", reportReason: "Revision reason", reportDetails: "Revision details", resolutionNote: expect.stringContaining("original reviewer: unknown") }),
           expect.objectContaining({ id: `legacy-hide:blank-peer-${suffix}`, projectId: `blank-peer-${suffix}`, reportReason: "Blank cover reason", reportDetails: "Blank cover details", resolutionNote: expect.stringContaining("original cover: ") }),
         ]));
-        expect(holds.some((hold) => hold.projectId === `fresh-${suffix}` || hold.projectId === `evented-${suffix}` || hold.projectId === `unrelated-${suffix}` || hold.projectId === `public-peer-${suffix}` || hold.projectId === `blank-public-${suffix}`)).toBe(false);
+        expect(holds.some((hold) => hold.projectId === `new-peer-${suffix}` || hold.projectId === `fresh-${suffix}` || hold.projectId === `evented-${suffix}` || hold.projectId === `unrelated-${suffix}` || hold.projectId === `public-peer-${suffix}` || hold.projectId === `blank-public-${suffix}`)).toBe(false);
         expect(await tx.$queryRawUnsafe<Array<{ count: bigint }>>(`SELECT COUNT(*) AS count FROM "ModerationAssetBlock"`)).toEqual([{ count: BigInt(0) }]);
       }, { timeout: 120_000 });
     } finally {

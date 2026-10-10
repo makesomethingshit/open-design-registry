@@ -16,7 +16,8 @@ WITH scope_migration AS (
     r."reviewedBy" AS "reviewedBy",
     r."reviewedAt" AS "reviewedAt",
     target."id" AS "targetProjectId",
-    target."coverUrl" AS "targetCoverUrl"
+    target."coverUrl" AS "targetCoverUrl",
+    scope_migration."startedAt" AS "scopeStartedAt"
   FROM "Report" r
   LEFT JOIN "Revision" revision ON revision."id" = r."revisionId"
   JOIN "Project" target ON target."id" = COALESCE(r."projectId", revision."projectId")
@@ -48,6 +49,7 @@ WITH scope_migration AS (
     ON legacy_reports."targetProjectId" = project."id"
     OR legacy_reports."targetCoverUrl" = project."coverUrl"
   WHERE project."isPublic" = false
+    AND project."createdAt" < legacy_reports."scopeStartedAt"
     AND NOT EXISTS (
       SELECT 1
       FROM "ModerationProjectHold" existing_hold
