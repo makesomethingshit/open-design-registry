@@ -26,6 +26,8 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 
+const { Banner } = await import("@/src/components/ui/banner");
+const { DesignPreview } = await import("@/src/components/design/design-preview");
 const { Checkbox } = await import("@/src/components/ui/checkbox");
 const { ChangeItem } = await import("@/src/components/design/change-item");
 const { ReviewActionBar } = await import("@/src/components/design/review-action-bar");
@@ -200,6 +202,29 @@ describe("proposal review recovery", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(actionBar(render()).props.selectedCount).toBe(1);
+  });
+
+  it("labels the actual base/latest revision pair and its absent-preview context", () => {
+    let tree = render();
+    const baseline = find(tree, (element) => element.type === DesignPreview);
+    expect(baseline.props.previousNumber).toBe(10);
+    expect(baseline.props.missingPreviousLabel).toBe("Not present in the original revision");
+    expect(text(tree)).toContain("Comparing Base Revision 10 (Base) with Proposal Revision 11 (Source).");
+
+    const warning = find(tree, (element) => element.type === Banner && String(element.props.title).includes("This proposal is based on Revision"));
+    const switchButton = warning.props.action as Element;
+    (switchButton.props.onClick as () => void)();
+
+    tree = render();
+    const latest = find(tree, (element) => element.type === DesignPreview);
+    expect(latest.props.previousNumber).toBe(13);
+    expect(latest.props.missingPreviousLabel).toBe("Not present in the latest revision");
+    expect(text(tree)).toContain("Comparing Latest Revision 13 (Latest) with Proposal Revision 11 (Source).");
+    expect(text(tree)).toContain("checks the proposal against current project work");
+
+    (switchButton.props.onClick as () => void)();
+    tree = render();
+    expect(find(tree, (element) => element.type === DesignPreview).props.previousNumber).toBe(10);
   });
 
   it("preserves application selection when a review API call fails", async () => {
