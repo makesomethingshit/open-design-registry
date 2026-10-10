@@ -114,7 +114,7 @@ describe("project cover uploads", () => {
     for (const [bytes, type] of [[png, "image/png"], [jpeg, "image/jpeg"]] as const) {
       const response = await POST(uploadCover(bytes, type));
       expect(response.status).toBe(201);
-      expect(mocks.putCover).toHaveBeenCalledWith(expect.any(File), expect.stringMatching(/^covers\\/owner\\/studio-kit-[0-9a-f]{8}$/));
+      expect(mocks.putCover).toHaveBeenCalledWith(expect.any(File), expect.stringMatching(new RegExp("^covers/owner/studio-kit-[0-9a-f]{8}$")));
       expect(mocks.projectCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
         title: "Studio kit", isPublic: true, ownerId: "owner", publicationConfirmedBy: "owner",
       }) });
@@ -130,7 +130,7 @@ describe("project cover uploads", () => {
     try {
       expect((await POST(uploadCover(png))).status).toBe(500);
       expect(mocks.projectCreate).not.toHaveBeenCalled();
-      expect(mocks.deleteObject).toHaveBeenCalledWith(expect.stringMatching(/^covers\\/owner\\/studio-kit-[0-9a-f]{8}$/));
+      expect(mocks.deleteObject).toHaveBeenCalledWith(expect.stringMatching(new RegExp("^covers/owner/studio-kit-[0-9a-f]{8}$")));
     } finally {
       logging.mockRestore();
     }
