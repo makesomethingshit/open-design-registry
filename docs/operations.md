@@ -165,6 +165,12 @@ node --env-file=.env scripts/document-image-cleanup.mjs --grace-hours 336
 4. stale·충돌·CHECK_UNAVAILABLE·부분 적용 후 재검토·409 복구를 확인합니다. mock 기반 통과와 실제 DB 행 롤백·브라우저 포커스 검증을 구별합니다.
 5. 배포 후 `npm run build` 산출물을 `npm start`로 실행하는 환경의 로그와 오류를 확인합니다. 배포 성공 여부는 코드 병합 이력만으로 판단하지 않습니다.
 
+### Release 발행 재시도
+
+Release 발행 API는 선택적 UUID `requestId`를 받습니다. 같은 프로젝트·발행자·ID와 동일한 title/description/Revision 선택의 재전송은 기존 Release ID·number를 200으로 반환하고 알림을 다시 만들지 않습니다. 같은 ID에 다른 내용은 409, 새로운 ID는 같은 내용도 새 Release로 발행합니다. ID를 보내지 않거나 null로 보내는 기존 호출은 종전처럼 매번 발행합니다. 폼은 응답 유실 후 변경 없는 재시도에서 ID를 유지하며 내용을 편집하면 새 발행 의도로 ID를 갱신합니다. 이전 발행의 성공 여부가 불명확하면 내용 편집 전에 같은 폼으로 재시도하세요.
+
+`TEST_DATABASE_URL`이 있는 `npm test`는 `src/lib/release-idempotency.integration.test.ts`의 동시 발행·알림·재시도·409 경합을 실행합니다. `E2E_INTEGRATION=1`의 `e2e/release-idempotency.integration.spec.ts`는 DB commit 뒤 HTTP 응답만 중단하고 같은 ID 재시도로 Release 하나에 도착하는 실제 브라우저 흐름을 검증합니다.
+
 ## 문제를 만났을 때
 
 | 증상 | 우선 확인 |

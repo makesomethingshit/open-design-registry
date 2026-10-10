@@ -243,6 +243,7 @@ model Release {
   title         String
   description   String   @default("")
   publishedById String?
+  requestId     String?  @db.Uuid
   createdAt     DateTime @default(now())
 
   project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -251,6 +252,7 @@ model Release {
   watchNotifications Notification[] @relation("NotificationRelease")
 
   @@unique([projectId, number])
+  @@unique([projectId, publishedById, requestId])
   @@index([projectId, createdAt])
   @@index([publishedById])
 }

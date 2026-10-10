@@ -15,6 +15,7 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
   const router = useRouter();
   const revisionsField = useRef<HTMLFieldSetElement>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -27,12 +28,17 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
     });
   }
 
+  function resetRequest() {
+    setRequestId(crypto.randomUUID());
+  }
+
   function toggleRevision(id: string, checked: boolean) {
     if (checked && selectedIds.length >= 50) {
       setFieldErrors((current) => ({ ...current, revisionIds: "Select no more than 50 revisions." }));
       return;
     }
     setSelectedIds((current) => checked ? [...current, id] : current.filter((selected) => selected !== id));
+    resetRequest();
     clearFieldError("revisionIds");
   }
 
@@ -62,16 +68,18 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
     setError("");
     setFieldErrors({});
     setSubmitting(true);
+    const revisionIds = revisions.filter((revision) => selectedIds.includes(revision.id)).sort((left, right) => left.number - right.number).map((revision) => revision.id);
+    const releasePayload = { title, description: String(data.get("description") ?? "").trim(), revisionIds };
     let navigated = false;
     try {
       const response = await fetch(`/api/projects/${slug}/releases`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, description: String(data.get("description") ?? "").trim(), revisionIds: selectedIds }),
+        body: JSON.stringify({ ...releasePayload, requestId }),
       });
       const payload = await response.json().catch(() => null) as { number?: number; error?: string } | null;
       if (response.status === 409) {
-        setError("A release was published at the same time. Review your selection and try again.");
+        setError(payload?.error ?? "A release was published at the same time. Review your selection and try again.");
         return;
       }
       if (!response.ok || !payload || !Number.isInteger(payload.number) || payload.number! < 1) {
@@ -90,10 +98,10 @@ export default function ReleaseForm({ revisions, slug }: { revisions: RevisionOp
 
   return <form aria-busy={submitting} className="form" onSubmit={submit}>
     <Field error={fieldErrors.title} id="release-title" invalid={Boolean(fieldErrors.title)} label="Release title" required>
-      <Input autoComplete="off" maxLength={120} name="title" onChange={() => clearFieldError("title")} required />
+      <Input autoComplete="off" maxLength={120} name="title" onChange={() => { resetRequest(); clearFieldError("title"); }} required />
     </Field>
     <Field description="Optional · up to 2,000 characters" error={fieldErrors.description} id="release-description" invalid={Boolean(fieldErrors.description)} label="Description">
-      <Textarea maxLength={2000} name="description" onChange={() => clearFieldError("description")} />
+      <Textarea maxLength={2000} name="description" onChange={() => { resetRequest(); clearFieldError("description"); }} />
     </Field>
     <fieldset
       aria-describedby={fieldErrors.revisionIds ? "release-revisions-error" : "release-revisions-help"}

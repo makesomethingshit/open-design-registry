@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   state: [] as unknown[],
   stateIndex: 0,
+  formValues: { title: "Release one", description: "" },
   push: vi.fn(),
   fetch: vi.fn(),
 }));
@@ -59,15 +60,17 @@ function response(status: number, body: unknown) {
 }
 
 beforeEach(() => {
-  mocks.state = [["revision-1"], {}, "", false];
+  mocks.state = [["revision-1"], "initial-request-id", {}, "", false];
   mocks.stateIndex = 0;
   mocks.push.mockReset();
   mocks.fetch.mockReset();
+  mocks.formValues = { title: "Release one", description: "" };
   vi.stubGlobal("fetch", mocks.fetch);
   vi.stubGlobal("FormData", class {
     constructor(_form: unknown) {}
-    get(name: string) { return name === "title" ? "Release one" : ""; }
+    get(name: string) { return name === "title" ? mocks.formValues.title : mocks.formValues.description; }
   });
+  vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("edited-request-id") });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -103,5 +106,35 @@ describe("ReleaseForm submission recovery", () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
     expect(mocks.push).toHaveBeenCalledWith("/projects/demo/releases/1");
     expect(renderForm().props["aria-busy"]).toBe(true);
+  });
+
+  it("reuses one request ID when a response is lost and the form is retried unchanged", async () => {
+    mocks.fetch.mockImplementationOnce(async () => { throw new Error("response lost"); }).mockResolvedValueOnce(response(200, { id: "release-1", number: 1 }));
+
+    await submit(renderForm());
+    await submit(renderForm());
+
+    const firstBody = JSON.parse(mocks.fetch.mock.calls[0][1].body as string);
+    const secondBody = JSON.parse(mocks.fetch.mock.calls[1][1].body as string);
+    expect(firstBody.requestId).toBe("initial-request-id");
+    expect(secondBody.requestId).toBe(firstBody.requestId);
+    expect(secondBody.revisionIds).toEqual(["revision-1"]);
+  });
+
+  it("uses a new request ID when the user edits the release before retrying", async () => {
+    mocks.fetch.mockImplementationOnce(async () => { throw new Error("response lost"); }).mockResolvedValueOnce(response(201, { id: "release-2", number: 2 }));
+
+    await submit(renderForm());
+    const retryable = renderForm();
+    const title = find(retryable.props.children, (item) => item.props.name === "title");
+    (title?.props.onChange as ((event: unknown) => void) | undefined)?.({});
+    mocks.formValues.title = "Edited release";
+    await submit(renderForm());
+
+    const firstBody = JSON.parse(mocks.fetch.mock.calls[0][1].body as string);
+    const secondBody = JSON.parse(mocks.fetch.mock.calls[1][1].body as string);
+    expect(secondBody.title).toBe("Edited release");
+    expect(secondBody.requestId).toBe("edited-request-id");
+    expect(secondBody.requestId).not.toBe(firstBody.requestId);
   });
 });
