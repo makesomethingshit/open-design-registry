@@ -135,6 +135,18 @@ export default async function ProjectScreen({ params, searchParams, view = "over
             <div><dt>Owner</dt><dd>{project.owner.name}</dd></div>
             <div><dt>Contributions</dt><dd>{latestRevision ? <>Open from <Link href={`/projects/${project.slug}/revisions/${latestRevision.number}`}>Revision {latestRevision.number}</Link></> : "Publish a revision to open contributions."}</dd></div>
           </dl>
+          <nav aria-label="Project next steps" className={styles.overviewNextActions}>
+            {session?.user.id === project.ownerId
+              ? !project.isPublic
+                ? <Link className={styles.secondaryLink} href={`/projects/${slug}/settings`}>Manage private project</Link>
+                : latestRevision
+                  ? <Link className={styles.secondaryLink} href={`/projects/${slug}/issues/new`}>Open a design request</Link>
+                  : <Link className={styles.secondaryLink} href={`/projects/${slug}/revisions#owner-tools`}>Publish the first revision</Link>
+              : latestRevision
+                ? <Link className={styles.secondaryLink} href={`/projects/${slug}/contribute`}>Contribute from the latest revision</Link>
+                : <Link className={styles.secondaryLink} href={`/projects/${slug}/discussions`}>Explore project discussions</Link>}
+            {project.isPublic && openDesignRequests.length > 0 && session?.user.id !== project.ownerId && <Link href={`/projects/${slug}/issues`}>Browse open issues and requests</Link>}
+          </nav>
           <dl className={styles.metrics}>
             <div><dt>Contributors</dt><dd>{contributors}</dd></div>
             <div><dt>Revisions</dt><dd>{revisionCount}</dd></div>
@@ -143,7 +155,10 @@ export default async function ProjectScreen({ params, searchParams, view = "over
           </dl>
           {!project.isPublic && session?.user.id === project.ownerId && <p className={styles.privateNote}>Private workspace visible to you.</p>}
         </aside>
-        <ProjectDocument document={project.document ?? ""} hasRevision={Boolean(latestRevision)} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
+        {latestRevision && <section className={styles.latestRevision}>
+          <p className={styles.eyebrow}>Current work</p><h2>Latest revision</h2>
+          <ol className={styles.revisionList}><RevisionItem capability={<><CapabilityBadge adapterConfidence={latestRevision.adapterConfidence} adapterId={latestRevision.adapterId} adapterMaturity={latestRevision.adapterMaturity} adapterVersion={latestRevision.adapterVersion} mode={latestRevision.capabilityMode} unitCount={latestRevision.capabilityUnitCount} />{latestProposal ? <><p className={styles.revisionNote}>Applied {Math.max(1, latestRevision.appliedChanges.length)} changes from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> <span aria-hidden="true">·</span> Contributor {latestProposal.author.name}</p><p className={styles.revisionNote}>{latestProposal.changeSet?.changes.filter((change) => change.appliedRevisionId === latestRevision.id).slice(0, 2).map(changeSummary).join(" · ")}</p></> : undefined}</>} changeDescription={latestRevision.changeDescription} createdAt={latestRevision.createdAt} href={`/projects/${project.slug}/revisions/${latestRevision.number}`} id={latestRevision.id} key={latestRevision.id} number={latestRevision.number} publisher={latestRevision.publishedBy?.name} tags={latestRevision.tags} title={latestRevision.title} tool={latestRevision.tool} /></ol>
+        </section>}
         <div className={styles.activityGrid}>
           <section className={styles.activity}>
             <header><h2>Looking for contributions</h2><Link href={`/projects/${slug}/issues`}>View issues</Link></header>
@@ -157,10 +172,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
             })}</div> : <p className={styles.muted}>No active proposals yet.</p>}
           </section>
         </div>
-        {latestRevision && <section className={styles.latestRevision}>
-          <p className={styles.eyebrow}>Current work</p><h2>Latest revision</h2>
-          <ol className={styles.revisionList}><RevisionItem capability={<><CapabilityBadge adapterConfidence={latestRevision.adapterConfidence} adapterId={latestRevision.adapterId} adapterMaturity={latestRevision.adapterMaturity} adapterVersion={latestRevision.adapterVersion} mode={latestRevision.capabilityMode} unitCount={latestRevision.capabilityUnitCount} />{latestProposal ? <><p className={styles.revisionNote}>Applied {Math.max(1, latestRevision.appliedChanges.length)} changes from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> <span aria-hidden="true">·</span> Contributor {latestProposal.author.name}</p><p className={styles.revisionNote}>{latestProposal.changeSet?.changes.filter((change) => change.appliedRevisionId === latestRevision.id).slice(0, 2).map(changeSummary).join(" · ")}</p></> : undefined}</>} changeDescription={latestRevision.changeDescription} createdAt={latestRevision.createdAt} href={`/projects/${project.slug}/revisions/${latestRevision.number}`} id={latestRevision.id} key={latestRevision.id} number={latestRevision.number} publisher={latestRevision.publishedBy?.name} tags={latestRevision.tags} title={latestRevision.title} tool={latestRevision.tool} /></ol>
-        </section>}
+        <ProjectDocument document={project.document ?? ""} hasRevision={Boolean(latestRevision)} isOwner={session?.user.id === project.ownerId} slug={project.slug} />
       </div>
     </section>}
 
