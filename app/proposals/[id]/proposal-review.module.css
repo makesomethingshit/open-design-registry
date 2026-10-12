@@ -9,6 +9,7 @@
 .changeList { padding: 0; margin: 0; list-style: none; }
 .mobilePicker { display: none; }
 .comparison { min-width: 0; }
+.comparisonContext { margin: 0 0 var(--odr-space-3); padding: var(--odr-space-3) var(--odr-space-4); border: var(--odr-border-width) solid var(--odr-border-subtle); border-radius: var(--odr-radius-panel); color: var(--odr-text-secondary); background: var(--odr-surface-panel); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); overflow-wrap: anywhere; }
 .inspector { min-width: 0; }
 .mobileSelection { display: none; }
 .conversation { display: grid; gap: var(--odr-space-4); }
