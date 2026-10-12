@@ -58,9 +58,9 @@ function elements(value: unknown): Element[] {
   return [element, ...elements(element.props.children)];
 }
 
-function render() {
+function render(value = props()) {
   harness.cursor = 0;
-  return ProposalReview(props());
+  return ProposalReview(value);
 }
 
 function find(tree: unknown, predicate: (element: Element) => boolean) {
@@ -225,6 +225,18 @@ describe("proposal review recovery", () => {
     (switchButton.props.onClick as () => void)();
     tree = render();
     expect(find(tree, (element) => element.type === DesignPreview).props.previousNumber).toBe(10);
+  });
+
+  it("does not claim a missing unit when its latest comparison could not be checked", () => {
+    const value = props();
+    value.changes[0] = { ...value.changes[0], conflictStatus: "CHECK_UNAVAILABLE", latestAvailable: false, latestPreviews: [] };
+    const tree = render(value);
+    const warning = find(tree, (element) => element.type === Banner && String(element.props.title).includes("This proposal is based on Revision"));
+    ((warning.props.action as Element).props.onClick as () => void)();
+    const latest = find(render(value), (element) => element.type === DesignPreview);
+    expect(latest.props.previousNumber).toBe(13);
+    expect(latest.props.missingPreviousLabel).toBe("Latest comparison unavailable");
+    expect(actionBar(render(value)).props.selectedCount).toBe(0);
   });
 
   it("preserves application selection when a review API call fails", async () => {

@@ -17,6 +17,30 @@ vi.mock("./proposal-review", () => ({ default: mocks.review }));
 const { default: ProposalPage } = await import("./page");
 
 describe("proposal review data", () => {
+  it("falls back to revision previews when the latest bundle is unavailable", async () => {
+    mocks.review.mockClear();
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    const preview = { id: "fallback", position: 0, key: "latest-preview", url: "latest-preview", mimeType: "image/png", altText: "Latest preview" };
+    mocks.findProposal.mockResolvedValue({
+      id: "proposal", project: { id: "project", slug: "project", title: "Project", ownerId: "owner" }, baseRevisionId: "base", authorId: "author", relatedIssue: null, appliedRevisions: [],
+      baseRevision: { id: "base", number: 1, title: "Base", sourceKey: null, previews: [] },
+      sourceRevision: { id: "source", number: 2, title: "Source", sourceKey: null, project: { slug: "source", title: "Source", isPublic: true }, previews: [] },
+      changeSet: { changes: [{ id: "modify", type: "MODIFY_UNIT", action: "MODIFY_UNIT", target: "Card", targetFileId: "card", name: "Card", newName: null, kind: "component", mimeType: "image/png", size: 1, reviewStatus: "PENDING", reviewComment: null, reviewedBy: null, appliedRevision: null, reviewHistory: [] }] },
+      comments: [], proposalNumber: 1, title: "Unavailable latest bundle", body: "Compare the selected unit", status: "OPEN", author: { name: "Author" }, sourceRevisionId: "source",
+    });
+    mocks.findLatest.mockResolvedValue({ id: "latest", number: 3, title: "Latest", sourceKey: "latest-bundle", previews: [preview] });
+    mocks.readBundle.mockResolvedValue(null);
+
+    renderToStaticMarkup(await ProposalPage({ params: Promise.resolve({ id: "proposal" }) }));
+    const reviewProps = (mocks.review.mock.calls as unknown as Array<[{ changes: Array<{ latestAvailable: boolean; conflictStatus: string | null; latestPreviews: Array<{ id: string }> }> }]>).at(-1)![0];
+    expect(reviewProps.changes[0]).toMatchObject({ latestAvailable: false, conflictStatus: "CHECK_UNAVAILABLE", latestPreviews: [{ id: "fallback" }] });
+
+    mocks.findLatest.mockResolvedValue({ id: "latest", number: 3, title: "Latest", sourceKey: "latest-bundle", previews: [] });
+    renderToStaticMarkup(await ProposalPage({ params: Promise.resolve({ id: "proposal" }) }));
+    const emptyReviewProps = (mocks.review.mock.calls as unknown as Array<[{ changes: Array<{ latestAvailable: boolean; conflictStatus: string | null; latestPreviews: Array<{ id: string }> }> }]>).at(-1)![0];
+    expect(emptyReviewProps.changes[0]).toMatchObject({ latestAvailable: false, conflictStatus: "CHECK_UNAVAILABLE", latestPreviews: [] });
+  });
+
   it("does not use another unit's latest preview for missing comparison targets", async () => {
     mocks.review.mockClear();
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
