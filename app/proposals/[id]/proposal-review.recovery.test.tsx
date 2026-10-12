@@ -237,6 +237,11 @@ describe("proposal review recovery", () => {
     expect(latest.props.previousNumber).toBe(13);
     expect(latest.props.missingPreviousLabel).toBe("Latest comparison unavailable");
     expect(actionBar(render(value)).props.selectedCount).toBe(0);
+    const inspectorProps = inspector(render(value)).props as Parameters<typeof ReviewInspector>[0];
+    const unavailable = ReviewInspector(inspectorProps);
+    expect(elements(unavailable).some((element) => element.type === Banner && element.props.title === "Not in the latest revision")).toBe(false);
+    const absent = ReviewInspector({ ...inspectorProps, change: { ...value.changes[0], conflictStatus: "NO_CONFLICT" } });
+    expect(elements(absent).some((element) => element.type === Banner && element.props.title === "Not in the latest revision")).toBe(true);
   });
 
   it("preserves application selection when a review API call fails", async () => {

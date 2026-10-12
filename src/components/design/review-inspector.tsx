@@ -86,7 +86,7 @@ export function ReviewInspector({ applying, canReview, change, draft, error, fai
     <p className={styles.description}>{action.description}</p>
     {conflict && <StatusBadge icon={conflict.icon} tone={conflict.tone}>{conflict.label}</StatusBadge>}
     {change.conflictReason && <p className={styles.note}>{change.conflictReason}</p>}
-    {!change.latestAvailable && <Banner tone="warning" title="Not in the latest revision">This unit cannot be selected until the latest revision is reviewed.</Banner>}
+    {!change.latestAvailable && change.conflictStatus !== "CHECK_UNAVAILABLE" && <Banner tone="warning" title="Not in the latest revision">This unit cannot be selected until the latest revision is reviewed.</Banner>}
     {change.reviewComment && <section className={styles.reviewComment}><h3>Latest review</h3><p>{change.reviewComment}</p></section>}
     <section aria-label="Next step for this change" className={styles.reviewComment}>
       <h3>{change.appliedRevision ? "Applied to the original" : proposalClosed ? "Proposal closed" : change.reviewStatus === "CHANGES_REQUESTED" ? "Changes requested: revise your work" : change.reviewStatus === "APPROVED" ? "Approved, awaiting application" : canReview ? "Review this proposed change" : "Waiting for owner review"}</h3>
