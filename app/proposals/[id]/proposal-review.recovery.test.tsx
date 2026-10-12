@@ -26,6 +26,8 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 
+const { Banner } = await import("@/src/components/ui/banner");
+const { DesignPreview } = await import("@/src/components/design/design-preview");
 const { Checkbox } = await import("@/src/components/ui/checkbox");
 const { ChangeItem } = await import("@/src/components/design/change-item");
 const { ReviewActionBar } = await import("@/src/components/design/review-action-bar");
@@ -56,9 +58,9 @@ function elements(value: unknown): Element[] {
   return [element, ...elements(element.props.children)];
 }
 
-function render() {
+function render(value = props()) {
   harness.cursor = 0;
-  return ProposalReview(props());
+  return ProposalReview(value);
 }
 
 function find(tree: unknown, predicate: (element: Element) => boolean) {
@@ -200,6 +202,46 @@ describe("proposal review recovery", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(actionBar(render()).props.selectedCount).toBe(1);
+  });
+
+  it("labels the actual base/latest revision pair and its absent-preview context", () => {
+    let tree = render();
+    const baseline = find(tree, (element) => element.type === DesignPreview);
+    expect(baseline.props.previousNumber).toBe(10);
+    expect(baseline.props.missingPreviousLabel).toBe("Not present in the original revision");
+    expect(text(tree)).toContain("Comparing Base Revision 10 (Base) with Proposal Revision 11 (Source).");
+
+    const warning = find(tree, (element) => element.type === Banner && String(element.props.title).includes("This proposal is based on Revision"));
+    const switchButton = warning.props.action as Element;
+    (switchButton.props.onClick as () => void)();
+
+    tree = render();
+    const latest = find(tree, (element) => element.type === DesignPreview);
+    expect(latest.props.previousNumber).toBe(13);
+    expect(latest.props.missingPreviousLabel).toBe("Not present in the latest revision");
+    expect(text(tree)).toContain("Comparing Latest Revision 13 (Latest) with Proposal Revision 11 (Source).");
+    expect(text(tree)).toContain("checks the proposal against current project work");
+
+    (switchButton.props.onClick as () => void)();
+    tree = render();
+    expect(find(tree, (element) => element.type === DesignPreview).props.previousNumber).toBe(10);
+  });
+
+  it("does not claim a missing unit when its latest comparison could not be checked", () => {
+    const value = props();
+    value.changes[0] = { ...value.changes[0], conflictStatus: "CHECK_UNAVAILABLE", latestAvailable: false, latestPreviews: [] };
+    const tree = render(value);
+    const warning = find(tree, (element) => element.type === Banner && String(element.props.title).includes("This proposal is based on Revision"));
+    ((warning.props.action as Element).props.onClick as () => void)();
+    const latest = find(render(value), (element) => element.type === DesignPreview);
+    expect(latest.props.previousNumber).toBe(13);
+    expect(latest.props.missingPreviousLabel).toBe("Latest comparison unavailable");
+    expect(actionBar(render(value)).props.selectedCount).toBe(0);
+    const inspectorProps = inspector(render(value)).props as Parameters<typeof ReviewInspector>[0];
+    const unavailable = ReviewInspector(inspectorProps);
+    expect(elements(unavailable).some((element) => element.type === Banner && element.props.title === "Not in the latest revision")).toBe(false);
+    const absent = ReviewInspector({ ...inspectorProps, change: { ...value.changes[0], conflictStatus: "NO_CONFLICT" } });
+    expect(elements(absent).some((element) => element.type === Banner && element.props.title === "Not in the latest revision")).toBe(true);
   });
 
   it("preserves application selection when a review API call fails", async () => {

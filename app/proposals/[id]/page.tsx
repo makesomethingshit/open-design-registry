@@ -48,7 +48,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       checkedLatestRevisionId: latest?.id ?? proposal.baseRevisionId,
       sourcePreviews: action === "REMOVE_UNIT" ? [] : sourceFile ? previewsFor(proposal.sourceRevision, sourceFile.previewKeys) : sourceRevision.previews,
       basePreviews: action === "ADD_UNIT" ? [] : baseFile ? previewsFor(proposal.baseRevision, baseFile.previewKeys) : baseRevision.previews,
-      latestPreviews: latestFile && latest ? previewsFor(latest, latestFile.previewKeys) : latestRevision?.previews ?? [],
+      latestPreviews: latestBundle === null || action === "REPLACE_DOCUMENT" ? latestRevision?.previews ?? [] : latestFile && latest ? previewsFor(latest, latestFile.previewKeys) : [],
     };
   }) ?? [];
   const stale = Boolean(latest && latest.id !== proposal.baseRevisionId);
