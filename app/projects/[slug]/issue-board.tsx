@@ -11,6 +11,8 @@ import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form"
 import { FormColumn, PageGrid, Panel, ReadingColumn, Stack } from "@/src/components/ui/layout";
 import { setRowBusy, setRowMessage } from "@/src/lib/ui/task-state";
 import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
+import { composeContributionBrief } from "@/src/lib/contribution-brief";
+import ContributionBriefFields from "./contribution-brief-fields";
 
 type Revision = { id: string; number: number; title?: string };
 type Proposal = { id: string; proposalNumber: number; title: string; status: string; appliedRevisions: Revision[] };
@@ -19,6 +21,7 @@ type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN
 export default function IssueBoard({ slug, issues, revisions, canManage, signedIn, mode = "board" }: { slug: string; issues: Issue[]; revisions: Revision[]; canManage: boolean; signedIn: boolean; mode?: "board" | "conversation" | "create" }) {
   const router = useRouter();
   const [createError, setCreateError] = useState("");
+  const [issueKind, setIssueKind] = useState<"ISSUE" | "DESIGN_REQUEST">("ISSUE");
   const [commentErrors, setCommentErrors] = useState<Record<string, string>>({});
   const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
   const [createSuccess, setCreateSuccess] = useState("");
@@ -39,13 +42,28 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
       focusFirstInvalid(formElement);
       return;
     }
+    const form = new FormData(formElement);
+    const body = canManage && issueKind === "DESIGN_REQUEST"
+      ? composeContributionBrief({
+        purpose: String(form.get("briefPurpose") ?? ""),
+        scope: String(form.get("briefScope") ?? ""),
+        references: String(form.get("briefReferences") ?? ""),
+        deliverables: String(form.get("briefDeliverables") ?? ""),
+        criteria: String(form.get("briefCriteria") ?? ""),
+        notes: String(form.get("body") ?? ""),
+      })
+      : String(form.get("body") ?? "");
+    if (body.length > 10000) {
+      setCreateFieldErrors({ body: "Keep the combined description within 10,000 characters." });
+      formElement.querySelector<HTMLTextAreaElement>("#issue-body")?.focus();
+      return;
+    }
     setCreateFieldErrors({});
     setCreateError("");
     setCreateSuccess("");
     setCreating(true);
-    const form = new FormData(formElement);
     try {
-      const response = await fetch(`/api/projects/${slug}/issues`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.get("title"), body: form.get("body"), kind: canManage ? form.get("kind") || "ISSUE" : "ISSUE", revisionId: form.get("revisionId") || undefined }) });
+      const response = await fetch(`/api/projects/${slug}/issues`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.get("title"), body, kind: canManage ? issueKind : "ISSUE", revisionId: form.get("revisionId") || undefined }) });
       if (!response.ok) {
         setCreateError((await response.json().catch(() => null))?.error ?? "Could not create issue");
         return;
@@ -57,6 +75,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         return;
       }
       formElement.reset();
+      setIssueKind("ISSUE");
       setCreateSuccess("Issue opened.");
       router.refresh();
     } catch {
@@ -152,8 +171,9 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         <Stack gap={3}>
           <h3>Open an issue</h3>
           <Field error={createFieldErrors.title} id="issue-title" invalid={Boolean(createFieldErrors.title)} label="Issue title" required><Input name="title" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={200} /></Field>
-          <Field error={createFieldErrors.body} id="issue-body" invalid={Boolean(createFieldErrors.body)} label="Issue description"><Textarea name="body" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} maxLength={10000} /></Field>
-          {canManage && <Field id="issue-kind" label="Type"><Select name="kind" defaultValue="ISSUE"><option value="ISSUE">Issue</option><option value="DESIGN_REQUEST">Design request</option></Select></Field>}
+          {canManage && <Field id="issue-kind" label="Type"><Select name="kind" value={issueKind} onChange={(event) => { setIssueKind(event.currentTarget.value === "DESIGN_REQUEST" ? "DESIGN_REQUEST" : "ISSUE"); setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; }); }}><option value="ISSUE">Issue</option><option value="DESIGN_REQUEST">Design request</option></Select></Field>}
+          {canManage && <ContributionBriefFields hidden={issueKind !== "DESIGN_REQUEST"} idPrefix="brief" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} />}
+          <Field error={createFieldErrors.body} id="issue-body" invalid={Boolean(createFieldErrors.body)} label={canManage && issueKind === "DESIGN_REQUEST" ? "Additional details" : "Issue description"}><Textarea name="body" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} maxLength={10000} /></Field>
           {revisions.length > 0 && <Field id="issue-revision" label="Related revision"><Select name="revisionId" defaultValue=""><option value="">No related revision</option>{revisions.map((revision) => <option value={revision.id} key={revision.id}>Revision {revision.number}</option>)}</Select></Field>}
           {createError && <Banner tone="error" title="Issue creation failed">{createError}</Banner>}
           {createSuccess && <Banner tone="success" title="Issue opened">{createSuccess}</Banner>}
