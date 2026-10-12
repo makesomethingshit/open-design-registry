@@ -31,6 +31,12 @@ test("preserves a brief across type switches and saves readable optional section
   await page.getByRole("button", { name: "Open issue", exact: true }).press("Enter");
   await expect(page.locator("#issue-body-error")).toContainText("10,000 characters");
   await expect(page.getByLabel("Additional details", { exact: true })).toBeFocused();
+  await kind.selectOption("ISSUE");
+  await expect(page.locator("#issue-body-error")).toHaveCount(0);
+  await expect(page.getByLabel("Issue description", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await kind.selectOption("DESIGN_REQUEST");
+  await page.getByRole("button", { name: "Open issue", exact: true }).press("Enter");
+  await expect(page.locator("#issue-body-error")).toContainText("10,000 characters");
   await page.getByLabel("Purpose", { exact: true }).fill("Improve keyboard navigation ");
   await expect(page.locator("#issue-body-error")).toHaveCount(0);
   await page.getByLabel("Additional details", { exact: true }).fill("Preserve desktop behavior.");
@@ -53,4 +59,35 @@ test("preserves a brief across type switches and saves readable optional section
   } finally {
     await context.close();
   }
+
+  const discussionResponse = await page.request.post(`/api/projects/${slug}/discussions`, { data: { title: "Discuss keyboard navigation", body: "Keep the existing focus order." } });
+  expect(discussionResponse.status()).toBe(201);
+  const discussion = await discussionResponse.json();
+  await page.goto(`/projects/${slug}/discussions/${discussion.id}`);
+  const work = page.getByRole("region", { name: "Create work from this discussion", exact: true });
+  await work.getByRole("button", { name: "Create design request", exact: true }).press("Enter");
+  const form = work.getByRole("form", { name: "Create design request", exact: true });
+  await form.getByLabel("Purpose", { exact: true }).fill("Improve navigation from discussion");
+  await form.getByLabel("Review criteria", { exact: true }).fill("Keyboard users can follow the focus order");
+  await expect(form.getByLabel("Additional details", { exact: true })).toHaveValue("Keep the existing focus order.");
+  await form.getByLabel("Additional details", { exact: true }).fill("x".repeat(9900));
+  await form.getByRole("button", { name: "Create design request", exact: true }).press("Enter");
+  await expect(form.locator("#derived-work-body-error")).toContainText("10,000 characters");
+  await work.getByRole("button", { name: "Create issue", exact: true }).press("Enter");
+  await expect(work.locator("#derived-work-body-error")).toHaveCount(0);
+  await expect(work.getByLabel("Purpose", { exact: true })).toBeHidden();
+  await work.getByRole("button", { name: "Create design request", exact: true }).press("Enter");
+  await expect(form.getByLabel("Purpose", { exact: true })).toHaveValue("Improve navigation from discussion");
+  await form.getByLabel("Additional details", { exact: true }).fill("Keep the existing focus order.");
+  const derivedSave = page.waitForResponse((response) => response.url().endsWith(`/api/projects/${slug}/issues`) && response.request().method() === "POST");
+  await form.getByRole("button", { name: "Create design request", exact: true }).press("Enter");
+  const derivedResponse = await derivedSave;
+  expect(derivedResponse.status()).toBe(201);
+  const derived = await derivedResponse.json();
+  expect(derived.kind).toBe("DESIGN_REQUEST");
+  expect(derived.sourceDiscussionId).toBe(discussion.id);
+  expect(derived.body).toBe("Purpose:\nImprove navigation from discussion\n\nReview criteria:\nKeyboard users can follow the focus order\n\nAdditional details:\nKeep the existing focus order.");
+  await page.goto(`/projects/${slug}/issues/${derived.id}`);
+  await expect(page.getByText(derived.body, { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("mobile-brief-from-discussion.png"), fullPage: true });
 });

@@ -10,6 +10,8 @@ import { Panel, Stack } from "@/src/components/ui/layout";
 import { discussionCommentSchema, discussionSchema } from "@/src/lib/discussion-validation";
 import { issueSchema } from "@/src/lib/project-validation";
 import styles from "./project.module.css";
+import { composeContributionBrief } from "@/src/lib/contribution-brief";
+import ContributionBriefFields from "./contribution-brief-fields";
 
 export function DiscussionCreateForm({ slug }: { slug: string }) {
   const router = useRouter();
@@ -155,7 +157,16 @@ export function DiscussionWorkForm({ canCreateDesignRequest, discussionBody, dis
     event.preventDefault();
     if (!kind || submitting) return;
     const form = event.currentTarget;
-    const parsed = issueSchema.safeParse(Object.fromEntries(new FormData(form)));
+    const data = new FormData(form);
+    const body = canCreateDesignRequest && kind === "DESIGN_REQUEST"
+      ? composeContributionBrief({ purpose: String(data.get("briefPurpose") ?? ""), scope: String(data.get("briefScope") ?? ""), references: String(data.get("briefReferences") ?? ""), deliverables: String(data.get("briefDeliverables") ?? ""), criteria: String(data.get("briefCriteria") ?? ""), notes: String(data.get("body") ?? "") })
+      : String(data.get("body") ?? "");
+    if (body.length > 10000) {
+      setFieldErrors({ body: "Keep the combined description within 10,000 characters." });
+      (form.elements.namedItem("body") as HTMLElement | null)?.focus();
+      return;
+    }
+    const parsed = issueSchema.safeParse({ ...Object.fromEntries(data), body });
     if (!parsed.success) {
       setFieldErrors(Object.fromEntries(parsed.error.issues.map(({ path, message }) => [String(path[0]), message])));
       const first = parsed.error.issues[0]?.path[0];
@@ -199,7 +210,8 @@ export function DiscussionWorkForm({ canCreateDesignRequest, discussionBody, dis
           <Field error={fieldErrors.title} id="derived-work-title" invalid={Boolean(fieldErrors.title)} label="Title" required>
             <Input autoComplete="off" defaultValue={discussionTitle} maxLength={200} name="title" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required />
           </Field>
-          <Field error={fieldErrors.body} id="derived-work-body" invalid={Boolean(fieldErrors.body)} label="Body">
+          {canCreateDesignRequest && <ContributionBriefFields hidden={kind !== "DESIGN_REQUEST"} idPrefix="derived-brief" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} />}
+          <Field error={fieldErrors.body} id="derived-work-body" invalid={Boolean(fieldErrors.body)} label={kind === "DESIGN_REQUEST" ? "Additional details" : "Body"}>
             <Textarea defaultValue={discussionBody} maxLength={10000} name="body" onChange={() => setFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} rows={5} />
           </Field>
           {error && <Banner title="Could not create work" tone="error">{error}</Banner>}

@@ -12,6 +12,7 @@ import { FormColumn, PageGrid, Panel, ReadingColumn, Stack } from "@/src/compone
 import { setRowBusy, setRowMessage } from "@/src/lib/ui/task-state";
 import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import { composeContributionBrief } from "@/src/lib/contribution-brief";
+import ContributionBriefFields from "./contribution-brief-fields";
 
 type Revision = { id: string; number: number; title?: string };
 type Proposal = { id: string; proposalNumber: number; title: string; status: string; appliedRevisions: Revision[] };
@@ -170,18 +171,8 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         <Stack gap={3}>
           <h3>Open an issue</h3>
           <Field error={createFieldErrors.title} id="issue-title" invalid={Boolean(createFieldErrors.title)} label="Issue title" required><Input name="title" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.title; return next; })} required maxLength={200} /></Field>
-          {canManage && <Field id="issue-kind" label="Type"><Select name="kind" value={issueKind} onChange={(event) => setIssueKind(event.currentTarget.value === "DESIGN_REQUEST" ? "DESIGN_REQUEST" : "ISSUE")}><option value="ISSUE">Issue</option><option value="DESIGN_REQUEST">Design request</option></Select></Field>}
-          {canManage && <section aria-labelledby="brief-heading" hidden={issueKind !== "DESIGN_REQUEST"} onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })}>
-            <Stack gap={3}>
-              <h4 id="brief-heading">Contribution brief (optional)</h4>
-              <p className="meta">Describe the work without filling every field. Only completed sections are saved in the request description.</p>
-              <Field id="brief-purpose" label="Purpose" description="Why is this contribution needed?"><Textarea name="briefPurpose" maxLength={2000} /></Field>
-              <Field id="brief-scope" label="Scope and constraints" description="What should change, and what should stay as it is?"><Textarea name="briefScope" maxLength={2000} /></Field>
-              <Field id="brief-references" label="References" description="Relevant revisions, references or source materials."><Textarea name="briefReferences" maxLength={2000} /></Field>
-              <Field id="brief-deliverables" label="Expected deliverables" description="What should contributors submit?"><Textarea name="briefDeliverables" maxLength={2000} /></Field>
-              <Field id="brief-criteria" label="Review criteria" description="How will you evaluate the proposed work?"><Textarea name="briefCriteria" maxLength={2000} /></Field>
-            </Stack>
-          </section>}
+          {canManage && <Field id="issue-kind" label="Type"><Select name="kind" value={issueKind} onChange={(event) => { setIssueKind(event.currentTarget.value === "DESIGN_REQUEST" ? "DESIGN_REQUEST" : "ISSUE"); setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; }); }}><option value="ISSUE">Issue</option><option value="DESIGN_REQUEST">Design request</option></Select></Field>}
+          {canManage && <ContributionBriefFields hidden={issueKind !== "DESIGN_REQUEST"} idPrefix="brief" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} />}
           <Field error={createFieldErrors.body} id="issue-body" invalid={Boolean(createFieldErrors.body)} label={canManage && issueKind === "DESIGN_REQUEST" ? "Additional details" : "Issue description"}><Textarea name="body" onChange={() => setCreateFieldErrors((current) => { const next = { ...current }; delete next.body; return next; })} maxLength={10000} /></Field>
           {revisions.length > 0 && <Field id="issue-revision" label="Related revision"><Select name="revisionId" defaultValue=""><option value="">No related revision</option>{revisions.map((revision) => <option value={revision.id} key={revision.id}>Revision {revision.number}</option>)}</Select></Field>}
           {createError && <Banner tone="error" title="Issue creation failed">{createError}</Banner>}
