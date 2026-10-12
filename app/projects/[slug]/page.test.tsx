@@ -346,6 +346,53 @@ describe("Project Discussions section", () => {
   });
 });
 
+describe("Project Overview next actions", () => {
+  it("opens revision publishing only for the owner's explicit publishing route", async () => {
+    const opened = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions", { publish: "1" });
+    expect(opened).toMatch(/<details[^>]*id="owner-tools"[^>]*open=""/);
+    const ordinary = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions");
+    expect(ordinary).not.toMatch(/<details[^>]*id="owner-tools"[^>]*open=""/);
+    const visitor = await renderProjectPage({ user: { id: "visitor" } }, project(), 0, 0, "revisions", { publish: "1" });
+    expect(visitor).not.toContain('id="owner-tools"');
+  });
+
+  it("puts current work and participation paths before the long project document", async () => {
+    const value = project();
+    value.revisions = [revision(10)];
+    value.issues.push({ ...value.issues[0], id: "request-1", title: "Improve navigation", kind: "DESIGN_REQUEST" });
+    const markup = await renderProjectPage(null, value);
+
+    expect(markup).toContain('aria-label="Project next steps"');
+    expect(markup).toContain('href="/projects/demo/contribute"');
+    expect(markup).toContain('href="/projects/demo/issues"');
+    expect(markup.indexOf("Latest revision")).toBeLessThan(markup.indexOf("Looking for contributions"));
+    expect(markup.indexOf("Looking for contributions")).toBeLessThan(markup.indexOf("Project document"));
+  });
+
+  it("keeps empty-project actions different for visitors and owners", async () => {
+    const visitor = await renderProjectPage(null, project());
+    expect(visitor).toContain('href="/projects/demo/discussions">Explore project discussions</a>');
+    expect(visitor).not.toContain("Publish the first revision");
+
+    const owner = await renderProjectPage({ user: { id: "owner" } }, project());
+    expect(owner).toContain('href="/projects/demo/revisions?publish=1#owner-tools">Publish the first revision</a>');
+    expect(owner).not.toContain("Contribute from the latest revision");
+  });
+
+  it("shows owner-specific management paths without exposing private actions publicly", async () => {
+    const publicProject = project();
+    publicProject.revisions = [revision(10)];
+    const owner = await renderProjectPage({ user: { id: "owner" } }, publicProject);
+    expect(owner).toContain('href="/projects/demo/issues/new">Open an issue or design request</a>');
+
+    const privateProject = project();
+    privateProject.isPublic = false;
+    const privateOwner = await renderProjectPage({ user: { id: "owner" } }, privateProject);
+    expect(privateOwner).toContain('href="/projects/demo/settings">Manage private project</a>');
+    expect(privateOwner).not.toContain("Browse open issues and requests");
+  });
+});
+
 describe("Project view query contracts", () => {
   it("overview reads the base project plus latest revision, counts, and top design requests only", async () => {
     await renderProjectPage({ user: { id: "viewer" } });

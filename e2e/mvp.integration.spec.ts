@@ -105,7 +105,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
     } finally { await visitorContext.close(); }
   });
 
-  test("reads the project document after artwork and About, before contribution activity", async ({ page, browser }) => {
+  test("reads current work and contribution activity before the project document", async ({ page, browser }, testInfo) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await signUp(page, `Guide owner ${suffix}`, `guide-${suffix}@example.test`, "integration-password-123");
     const response = await page.request.post("/api/projects", { multipart: {
@@ -141,7 +141,7 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
 
       const saved = await page.request.patch(`/api${projectPath}`, { data: { document: "# Design principles\n\nKeep the work open and explain how to contribute." } });
       expect(saved.status()).toBe(200);
-      for (const width of [1440, 390]) {
+      for (const width of [1440, 390, 320]) {
         await visitor.setViewportSize({ width, height: 900 });
         await visitor.goto(projectPath);
         await expect(document.getByRole("heading", { name: "Design principles" })).toBeVisible();
@@ -150,10 +150,17 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
         const guide = await document.boundingBox();
         const activity = await visitor.getByRole("heading", { name: "Looking for contributions" }).boundingBox();
         expect(guide!.y).toBeGreaterThanOrEqual(Math.max(artwork!.y + artwork!.height, about!.y + about!.height));
-        expect(guide!.y + guide!.height).toBeLessThanOrEqual(activity!.y);
+        expect(activity!.y).toBeLessThan(guide!.y);
         expect(guide!.x).toBeGreaterThanOrEqual(0);
         expect(guide!.x + guide!.width).toBeLessThanOrEqual(width);
+        expect(await visitor.evaluate(() => window.document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await visitor.screenshot({ path: testInfo.outputPath(`mobile-overview-published-${width}.png`), fullPage: true });
       }
+      await page.goto(projectPath);
+      await page.getByRole("navigation", { name: "Project next steps" }).getByRole("link", { name: "Open an issue or design request", exact: true }).press("Enter");
+      await expect(page.getByLabel("Type", { exact: true })).toHaveValue("ISSUE");
+      await page.getByLabel("Type", { exact: true }).selectOption("DESIGN_REQUEST");
+      await expect(page.getByLabel("Type", { exact: true })).toHaveValue("DESIGN_REQUEST");
     } finally {
       await visitorContext.close();
     }
