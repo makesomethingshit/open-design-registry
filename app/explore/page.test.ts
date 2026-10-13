@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ projectFindMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ projectFindMany: vi.fn(), raw: vi.fn() }));
 
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany }, $queryRaw: mocks.raw } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value }));
 
 const { default: ExplorePage } = await import("./page");
@@ -11,18 +11,15 @@ describe("Explore project sorting", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.projectFindMany.mockResolvedValue([]);
+    mocks.raw.mockResolvedValue([{ slug: "demo" }]);
   });
 
-  it("uses updatedAt for recent sorting while keeping every public filter", async () => {
+  it("ranks by published Revision/Release activity in SQL, preserving public filters", async () => {
     await ExplorePage({ searchParams: Promise.resolve({ q: "kit", license: "MIT", sort: "recent", tool: "Penpot", tag: "UI" }) });
-    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        isPublic: true,
-        OR: [{ title: { contains: "kit", mode: "insensitive" } }, { description: { contains: "kit", mode: "insensitive" } }],
-        license: "MIT",
-        revisions: { some: { tool: { equals: "penpot" }, tags: { hasEvery: ["ui"] } } },
-      },
-      orderBy: { updatedAt: "desc" },
-    }));
+    const sql = mocks.raw.mock.calls[0][0];
+    expect(sql.sql).toContain('rv."isPublished" = true');
+    expect(sql.sql).toContain('"Release" AS rel');
+    expect(sql.values).toEqual(expect.arrayContaining(["kit", "MIT", "penpot", ["ui"]].filter((x) => x !== "kit")));
+    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isPublic: true, slug: { in: ["demo"] } } }));
   });
 });

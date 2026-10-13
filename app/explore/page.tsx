@@ -4,6 +4,7 @@ import { ProjectCard } from "@/src/components/design/project-card";
 import { Button, TextLink } from "@/src/components/ui/button";
 import buttonStyles from "@/src/components/ui/button.module.css";
 import { prisma } from "@/src/lib/prisma";
+import { recentProjectSlugs } from "@/src/lib/recent-projects";
 import { publicAssetUrl } from "@/src/lib/storage";
 import styles from "./page.module.css";
 import { ProjectSearchInput } from "../global-search";
@@ -16,7 +17,17 @@ const secondaryLink = `${buttonStyles.button} ${buttonStyles.secondary} ${button
 type SearchParams = Record<string, string | string[] | undefined>;
 type ProjectFilters = { query: string; license: string; tool: string; tag: string; sort: string };
 
-function findProjects({ query, license, tool, tag, sort }: ProjectFilters) {
+async function findProjects({ query, license, tool, tag, sort }: ProjectFilters) {
+  if (sort === "recent") {
+    const slugs = await recentProjectSlugs({ viewerId: null, query, license, tool, tags: tag ? [tag] : [], limit: 24 });
+    if (!slugs.length) return [];
+    const rows = await prisma.project.findMany({
+      where: { isPublic: true, slug: { in: slugs } },
+      include: { owner: { select: { name: true } }, revisions: { where: { isPublished: true }, orderBy: { createdAt: "desc" }, take: 1, select: { tags: true } } },
+    });
+    const bySlug = new Map(rows.map((row) => [row.slug, row]));
+    return slugs.flatMap((slug) => { const row = bySlug.get(slug); return row ? [row] : []; });
+  }
   return prisma.project.findMany({
     where: {
       isPublic: true,
@@ -24,7 +35,7 @@ function findProjects({ query, license, tool, tag, sort }: ProjectFilters) {
       ...(license ? { license } : {}),
       ...(tool || tag ? { revisions: { some: { ...(tool ? { tool: { equals: tool } } : {}), ...(tag ? { tags: { hasEvery: [tag] } } : {}) } } } : {}),
     },
-    orderBy: sort === "recent" ? { updatedAt: "desc" } : { createdAt: "desc" },
+    orderBy: { createdAt: "desc" },
     take: 24,
     include: { owner: { select: { name: true } }, revisions: { where: { isPublished: true }, orderBy: { createdAt: "desc" }, take: 1, select: { tags: true } } },
   });
