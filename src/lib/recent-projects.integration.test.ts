@@ -11,14 +11,14 @@ databaseDescribe("recent project activity in PostgreSQL", () => {
     const owner = await prisma.user.create({ data: { name: "Activity owner", email: `recent-${suffix}@example.test` } });
     const d = (value: string) => new Date(value);
     const ancient = d("2026-01-01T00:00:00Z");
-    const projects = await Promise.all(["alpha", "beta", "gamma", "private"].map((name) => prisma.project.create({ data: { slug: `recent-${name}-${suffix}`, title: `Activity ${name}`, description: "Design tools", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: owner.id, isPublic: name !== "private", createdAt: ancient, updatedAt: ancient } })));
+    const projects = await Promise.all(["alpha", "beta", "gamma", "private"].map((name) => prisma.project.create({ data: { slug: `recent-${name}-${suffix}`, title: `Activity ${name} ${suffix}`, description: "Design tools", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: owner.id, isPublic: name !== "private", createdAt: ancient, updatedAt: ancient } })));
     const [alpha, beta, gamma, hidden] = projects;
     await prisma.revision.create({ data: { projectId: alpha.id, number: 1, title: "Published revision", changeDescription: "Published", sourceUrl: `https://example.test/${suffix}/alpha.zip`, tool: "penpot", tags: ["ui"], createdAt: d("2026-04-01T00:00:00Z") } });
     await prisma.revision.create({ data: { projectId: beta.id, number: 1, title: "Unpublished", changeDescription: "Draft", sourceUrl: `https://example.test/${suffix}/beta.zip`, isPublished: false, createdAt: d("2026-09-01T00:00:00Z") } });
     await prisma.release.create({ data: { projectId: beta.id, number: 1, title: "Public release", createdAt: d("2026-05-01T00:00:00Z") } });
     await prisma.project.update({ where: { id: gamma.id }, data: { updatedAt: d("2026-03-01T00:00:00Z") } });
     await prisma.release.create({ data: { projectId: hidden.id, number: 1, title: "Secret release", createdAt: d("2026-10-01T00:00:00Z") } });
-    const opts = { viewerId: null, query: "Activity", license: "MIT", tool: "", tags: [] as string[], limit: 10 };
+    const opts = { viewerId: null, query: suffix, license: "MIT", tool: "", tags: [] as string[], limit: 10 };
     const all = await recentProjectSlugs(opts);
     expect(all.filter((slug) => slug.endsWith(suffix))).toEqual([beta.slug, alpha.slug, gamma.slug]);
     const first = await recentProjectSlugs({ ...opts, limit: 2 });
