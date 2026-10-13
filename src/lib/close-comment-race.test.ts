@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   issueFind: vi.fn(),
   issueTxFind: vi.fn(),
+  projectTxFind: vi.fn(),
   issueUpdate: vi.fn(),
   issueCommentCreate: vi.fn(),
   participationDeleteMany: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/src/lib/prisma", () => ({
       callback({
         $queryRaw: mocks.lockRaw,
         issue: { findUnique: mocks.issueTxFind, update: mocks.issueUpdate },
+        project: { findUnique: mocks.projectTxFind },
         designRequestParticipation: { deleteMany: mocks.participationDeleteMany },
         issueComment: { create: mocks.issueCommentCreate },
         proposal: { findUnique: mocks.proposalTxFind, update: mocks.proposalUpdate },
@@ -83,7 +85,8 @@ describe("close/comment race", () => {
     proposalStatus = "OPEN";
     events = [];
     mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
-    mocks.issueFind.mockImplementation(async () => ({ status: issueStatus, project: { ownerId: "owner", isPublic: true } }));
+    mocks.issueFind.mockImplementation(async () => ({ status: issueStatus, project: { id: "project", ownerId: "owner", isPublic: true } }));
+    mocks.projectTxFind.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.issueTxFind.mockImplementation(async () => {
       events.push("issue-reread");
       return { status: issueStatus, project: { isPublic: true } };
@@ -121,12 +124,12 @@ describe("close/comment race", () => {
     expect((await patchIssue(jsonRequest({ status: "CLOSED" }), { id: "issue" })).status).toBe(200);
     expect(issueStatus).toBe("CLOSED");
     // Simulate a comment whose pre-check read OPEN before close committed.
-    mocks.issueFind.mockImplementation(async () => ({ status: "OPEN", project: { ownerId: "owner", isPublic: true } }));
+    mocks.issueFind.mockImplementation(async () => ({ status: "OPEN", project: { id: "project", ownerId: "owner", isPublic: true } }));
     events = [];
     const response = await postIssueComment(jsonRequest({ body: "late" }), { id: "issue" });
     expect(response.status).toBe(409);
     expect(mocks.issueCommentCreate).not.toHaveBeenCalled();
-    expect(events).toEqual(["lock", "issue-reread"]);
+    expect(events).toEqual(["lock", "lock", "issue-reread"]);
   });
 
   it("keeps a comment written before close, then rejects later comments", async () => {
