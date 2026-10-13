@@ -70,13 +70,20 @@ describe("issue creation route", () => {
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.findDiscussion.mockResolvedValue({ id: "discussion" });
     mocks.createIssue.mockResolvedValue({ id: "issue", title: "Broken component", body: "Details", kind: "ISSUE", author: { id: "reporter", name: "Reporter" }, revision: null });
-    mocks.transaction.mockImplementation(async (callback) => callback({ issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } as never));
+    mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: async () => [{ id: "project" }], project: { findUnique: mocks.findProject }, issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } as never));
   });
 
   it("requires authentication before creating an issue", async () => {
     mocks.getSession.mockResolvedValue(null);
     const response = await POST(request({ title: "Broken component", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(401);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("blocks a stale public Issue creation after the project becomes private", async () => {
+    mocks.findProject.mockResolvedValueOnce({ id: "project", ownerId: "owner", isPublic: true }).mockResolvedValueOnce({ id: "project", ownerId: "owner", isPublic: false });
+    const response = await POST(request({ title: "Late issue", body: "No" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(404);
     expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 
