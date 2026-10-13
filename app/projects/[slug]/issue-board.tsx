@@ -16,7 +16,7 @@ import ContributionBriefFields from "./contribution-brief-fields";
 
 type Revision = { id: string; number: number; title?: string };
 type Proposal = { id: string; proposalNumber: number; title: string; status: string; appliedRevisions: Revision[] };
-type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; revision: { number: number } | null; sourceDiscussion?: { id: string; title: string } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
+type Issue = { id: string; title: string; body: string; kind?: "ISSUE" | "DESIGN_REQUEST"; status: "OPEN" | "CLOSED"; isOpenQuestion?: boolean; revision: { number: number } | null; sourceDiscussion?: { id: string; title: string } | null; author: { name: string }; comments: Array<{ id: string; body: string; author: { name: string } }>; proposals?: Proposal[] };
 
 export default function IssueBoard({ slug, issues, revisions, canManage, signedIn, mode = "board" }: { slug: string; issues: Issue[]; revisions: Revision[]; canManage: boolean; signedIn: boolean; mode?: "board" | "conversation" | "create" }) {
   const router = useRouter();
@@ -116,6 +116,28 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     }
   }
 
+  async function toggleQuestion(issue: Issue) {
+    const id = issue.id;
+    if (togglingIds[id]) return;
+    setToggleErrors((current) => setRowMessage(current, id, ""));
+    setToggleSuccesses((current) => setRowMessage(current, id, ""));
+    setTogglingIds((current) => setRowBusy(current, id, true));
+    try {
+      const response = await fetch(`/api/issues/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isOpenQuestion: !issue.isOpenQuestion }) });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        setToggleErrors((current) => setRowMessage(current, id, payload?.error ?? "Could not change question status"));
+        return;
+      }
+      setToggleSuccesses((current) => setRowMessage(current, id, issue.isOpenQuestion ? "Removed from open questions." : "Added to open questions."));
+      router.refresh();
+    } catch {
+      setToggleErrors((current) => setRowMessage(current, id, "Could not change question status. Try again."));
+    } finally {
+      setTogglingIds((current) => setRowBusy(current, id, false));
+    }
+  }
+
   async function toggle(id: string, status: Issue["status"]) {
     if (togglingIds[id]) return;
     setToggleErrors((current) => setRowMessage(current, id, ""));
@@ -144,7 +166,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
     {issues.length ? <div className="issues">{issues.map((issue) => <article className="issue" id={`issue-${issue.id}`} key={issue.id}>
       <Stack gap={3}>
         {mode !== "conversation" && <>
-        <div className="issue-heading"><h3><Link href={`/projects/${slug}/issues/${issue.id}`}>{issue.title}</Link></h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge></span></div>
+        <div className="issue-heading"><h3><Link href={`/projects/${slug}/issues/${issue.id}`}>{issue.title}</Link></h3><span><Badge>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}</Badge> <StatusBadge tone={issue.status === "OPEN" ? "success" : "neutral"}>{issue.status}</StatusBadge>{issue.isOpenQuestion && <Badge>Open question</Badge>}</span></div>
         <p>{issue.body}</p>
         <p className="meta">Opened by {issue.author.name}{issue.revision ? ` · Revision ${issue.revision.number}` : ""}</p>
         {issue.sourceDiscussion && <p className="meta"><Link href={`/projects/${slug}/discussions/${issue.sourceDiscussion.id}`}>From discussion: {issue.sourceDiscussion.title}</Link></p>}
@@ -160,6 +182,7 @@ export default function IssueBoard({ slug, issues, revisions, canManage, signedI
         </form>}
         {commentErrors[issue.id] && <Banner tone="error" title="Comment failed">{commentErrors[issue.id]}</Banner>}
         {commentSuccesses[issue.id] && <Banner tone="success" title="Comment added">{commentSuccesses[issue.id]}</Banner>}
+        {canManage && issue.kind !== "DESIGN_REQUEST" && (issue.status === "OPEN" || issue.isOpenQuestion) && <Button disabled={Boolean(togglingIds[issue.id])} loading={Boolean(togglingIds[issue.id])} loadingLabel="Updating question" onClick={() => { void toggleQuestion(issue); }} size="sm" type="button" variant="secondary">{issue.isOpenQuestion ? "Remove from open questions" : "Mark as open question"}</Button>}
         {canManage && <Button disabled={Boolean(togglingIds[issue.id])} loading={Boolean(togglingIds[issue.id])} loadingLabel="Updating issue" onClick={() => { void toggle(issue.id, issue.status); }} size="sm" type="button" variant="secondary">{issue.status === "OPEN" ? "Close issue" : "Reopen issue"}</Button>}
         {toggleErrors[issue.id] && <Banner tone="error" title="Issue update failed">{toggleErrors[issue.id]}</Banner>}
         {toggleSuccesses[issue.id] && <Banner tone="success" title="Issue updated">{toggleSuccesses[issue.id]}</Banner>}

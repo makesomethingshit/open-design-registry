@@ -494,6 +494,7 @@ model Issue {
   body       String       @default("")
   kind       IssueKind    @default(ISSUE)
   status     IssueStatus  @default(OPEN)
+  isOpenQuestion Boolean @default(false)
   sourceDiscussionId String?
   closedAt   DateTime?
   closedBy   String?
@@ -509,6 +510,7 @@ model Issue {
   designRequestParticipations DesignRequestParticipation[]
 
   @@index([projectId, status, createdAt])
+  @@index([projectId, isOpenQuestion, status, createdAt])
   @@index([authorId])
   @@index([revisionId])
   @@index([sourceDiscussionId])
