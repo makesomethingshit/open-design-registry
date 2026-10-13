@@ -104,6 +104,20 @@ describe("IssueBoard provenance links", () => {
     expect(markup.match(/href="\/projects\/demo\/discussions\/discussion-1"/g)).toHaveLength(2);
   });
 
+  it("gates question controls to the project owner and ordinary Issues", () => {
+    const rows = [
+      { id: "ordinary", title: "Decide typography", body: "", kind: "ISSUE" as const, status: "OPEN" as const, isOpenQuestion: false, revision: null, author: { name: "Owner" }, comments: [] },
+      { id: "closed", title: "Already discussed", body: "", kind: "ISSUE" as const, status: "CLOSED" as const, isOpenQuestion: true, revision: null, author: { name: "Owner" }, comments: [] },
+      { id: "request", title: "Draw a mockup", body: "", kind: "DESIGN_REQUEST" as const, status: "OPEN" as const, isOpenQuestion: false, revision: null, author: { name: "Owner" }, comments: [] },
+    ];
+    const owner = renderToStaticMarkup(<IssueBoard canManage issues={rows} revisions={[]} signedIn slug="demo" />);
+    expect(owner.match(/Mark as open question/g)).toHaveLength(1);
+    expect(owner).toContain("Remove from open questions");
+    const visitor = renderToStaticMarkup(<IssueBoard canManage={false} issues={rows} revisions={[]} signedIn={false} slug="demo" />);
+    expect(visitor).not.toContain("Mark as open question");
+    expect(visitor).not.toContain("Remove from open questions");
+  });
+
   it("keeps the existing card metadata when no source Discussion exists", () => {
     const markup = renderToStaticMarkup(<IssueBoard
       canManage={false}

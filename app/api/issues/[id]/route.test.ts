@@ -46,6 +46,30 @@ describe("issue route", () => {
     expect(mocks.updateIssue).not.toHaveBeenCalled();
   });
 
+  it("designates only an owner's open ordinary Issue without mutating its status", async () => {
+    mocks.findIssue.mockResolvedValue({ id: "issue-1", kind: "ISSUE", status: "OPEN", project: { ownerId: "owner", isPublic: true } });
+    mocks.updateIssue.mockResolvedValue({ id: "issue-1", status: "OPEN", isOpenQuestion: true });
+    expect((await PATCH(request("PATCH", { isOpenQuestion: true }), context)).status).toBe(200);
+    expect(mocks.updateIssue).toHaveBeenCalledWith(expect.objectContaining({ data: { isOpenQuestion: true } }));
+  });
+
+  it("rejects marking a closed Issue, a Design Request, and malformed markers", async () => {
+    mocks.findIssue.mockResolvedValue({ id: "issue-1", kind: "ISSUE", status: "CLOSED", project: { ownerId: "owner", isPublic: true } });
+    expect((await PATCH(request("PATCH", { isOpenQuestion: true }), context)).status).toBe(409);
+    mocks.findIssue.mockResolvedValue({ id: "issue-1", kind: "DESIGN_REQUEST", status: "OPEN", project: { ownerId: "owner", isPublic: true } });
+    expect((await PATCH(request("PATCH", { isOpenQuestion: true }), context)).status).toBe(409);
+    expect((await PATCH(request("PATCH", { isOpenQuestion: "yes" }), context)).status).toBe(400);
+    expect(mocks.updateIssue).not.toHaveBeenCalled();
+  });
+
+  it("allows clearing a closed question while denying non-owners", async () => {
+    mocks.findIssue.mockResolvedValue({ id: "issue-1", kind: "ISSUE", status: "CLOSED", project: { ownerId: "owner", isPublic: true } });
+    mocks.updateIssue.mockResolvedValue({ id: "issue-1", isOpenQuestion: false });
+    expect((await PATCH(request("PATCH", { isOpenQuestion: false }), context)).status).toBe(200);
+    mocks.getSession.mockResolvedValue({ user: { id: "visitor" } });
+    expect((await PATCH(request("PATCH", { isOpenQuestion: false }), context)).status).toBe(403);
+  });
+
   it("records who closed an issue", async () => {
     const response = await PATCH(request("PATCH", { status: "CLOSED" }), context);
     expect(response.status).toBe(200);

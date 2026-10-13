@@ -393,6 +393,25 @@ describe("Project Overview next actions", () => {
   });
 });
 
+describe("Open Questions on Project Overview", () => {
+  it("shows only owner-designated OPEN ordinary Issues, linking to their existing details", async () => {
+    const value = project();
+    value.issues = [
+      { ...value.issues[0], id: "question", title: "Choose typographic direction", kind: "ISSUE", status: "OPEN", isOpenQuestion: true },
+      { ...value.issues[0], id: "ordinary", title: "Regular bug", kind: "ISSUE", status: "OPEN", isOpenQuestion: false },
+      { ...value.issues[0], id: "closed", title: "Resolved choice", kind: "ISSUE", status: "CLOSED", isOpenQuestion: true },
+      { ...value.issues[0], id: "request", title: "Make illustrations", kind: "DESIGN_REQUEST", status: "OPEN", isOpenQuestion: true },
+    ];
+    const markup = await renderProjectPage(null, value);
+    expect(markup).toContain("Open questions");
+    expect(markup).toContain("Choose typographic direction");
+    expect(markup).toContain('href="/projects/demo/issues/question"');
+    expect(markup).not.toContain("Resolved choice");
+    expect(markup).not.toContain("Make illustrations");
+    expect(markup).not.toContain("Regular bug");
+  });
+});
+
 describe("Project view query contracts", () => {
   it("overview reads the base project plus latest revision, counts, and top design requests only", async () => {
     await renderProjectPage({ user: { id: "viewer" } });
