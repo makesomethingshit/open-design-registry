@@ -403,7 +403,7 @@ describe("Open Questions on Project Overview", () => {
       { ...value.issues[0], id: "request", title: "Make illustrations", kind: "DESIGN_REQUEST", status: "OPEN", isOpenQuestion: true },
     ];
     const markup = await renderProjectPage(null, value);
-    const questionSection = markup.match(/<section[^>]*aria-labelledby="open-questions-heading"[\\s\\S]*?<\\/section>/)?.[0] ?? "";
+    const questionSection = markup.match(/<section[^>]*aria-labelledby="open-questions-heading"[\s\S]*?<\/section>/)?.[0] ?? "";
     expect(questionSection).toContain("Open questions");
     expect(questionSection).toContain("Choose typographic direction");
     expect(questionSection).toContain('href="/projects/demo/issues/question"');
