@@ -20,6 +20,6 @@ describe("Explore project sorting", () => {
     expect(sql.sql).toContain('rv."isPublished" = true');
     expect(sql.sql).toContain('"Release" AS rel');
     expect(sql.values).toEqual(expect.arrayContaining(["kit", "MIT", "penpot", ["ui"]].filter((x) => x !== "kit")));
-    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isPublic: true, slug: { in: ["demo"] } } }));
+    await vi.waitFor(() => expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isPublic: true, slug: { in: ["demo"] } } })));
   });
 });
