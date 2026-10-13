@@ -105,7 +105,7 @@ function project(withRelease = false) {
       { id: "old-discussion", title: "Color direction", createdAt: new Date("2026-09-10T00:00:00Z"), author: { name: "Min" }, _count: { comments: 1 } },
     ],
     issues: [{
-      id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
+      id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", isOpenQuestion: false, createdAt: new Date("2026-09-10T00:00:00Z"),
       author: { name: "Reporter" }, revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, comments: [], _count: { comments: 0 },
       proposals: [
         visibleProposal,
