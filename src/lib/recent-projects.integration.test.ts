@@ -8,7 +8,7 @@ databaseDescribe("recent project activity in PostgreSQL", () => {
   afterAll(() => prisma.$disconnect());
   it("sorts metadata, published revisions and releases; ignores drafts, paginates and protects private rows", async () => {
     const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-    const owner = await prisma.user.create({ data: { name: "Activity owner", email: `recent-${suffix}@example.test` } });
+    const owner = await prisma.user.create({ data: { id: `recent-owner-${suffix}`, name: "Activity owner", email: `recent-${suffix}@example.test` } });
     const d = (value: string) => new Date(value);
     const ancient = d("2026-01-01T00:00:00Z");
     const projects = await Promise.all(["alpha", "beta", "gamma", "private"].map((name) => prisma.project.create({ data: { slug: `recent-${name}-${suffix}`, title: `Activity ${name} ${suffix}`, description: "Design tools", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: owner.id, isPublic: name !== "private", createdAt: ancient, updatedAt: ancient } })));
