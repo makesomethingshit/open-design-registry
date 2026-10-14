@@ -410,6 +410,20 @@ describe("Open Questions on Project Overview", () => {
     expect(questionSection).not.toContain("Resolved choice");
     expect(questionSection).not.toContain("Make illustrations");
     expect(questionSection).not.toContain("Regular bug");
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({
+      where: { projectId: "project", status: "OPEN", kind: "ISSUE", isOpenQuestion: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 3,
+      select: { id: true, title: true, sourceDiscussionId: true, revision: { select: { number: true, isPublished: true } } },
+    }));
+  });
+
+  it("renders the empty state when no designated question is open", async () => {
+    const value = project();
+    value.issues = [{ ...value.issues[0], isOpenQuestion: false, status: "OPEN" }];
+    const markup = await renderProjectPage(null, value);
+    const questionSection = markup.match(/<section[^>]*aria-labelledby="open-questions-heading"[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(questionSection).toContain("No open design questions have been selected.");
   });
 });
 

@@ -62,6 +62,13 @@ describe("issue route", () => {
     expect(mocks.updateIssue).not.toHaveBeenCalled();
   });
 
+  it("rejects a mixed status and question payload instead of dropping one operation", async () => {
+    mocks.findIssue.mockResolvedValue({ id: "issue-1", kind: "ISSUE", status: "OPEN", project: { ownerId: "owner", isPublic: true } });
+    const response = await PATCH(request("PATCH", { status: "CLOSED", isOpenQuestion: true }), context);
+    expect(response.status).toBe(400);
+    expect(mocks.updateIssue).not.toHaveBeenCalled();
+  });
+
   it("allows clearing a closed question while denying non-owners", async () => {
     mocks.findIssue.mockResolvedValue({ id: "issue-1", kind: "ISSUE", status: "CLOSED", project: { ownerId: "owner", isPublic: true } });
     mocks.updateIssue.mockResolvedValue({ id: "issue-1", isOpenQuestion: false });
