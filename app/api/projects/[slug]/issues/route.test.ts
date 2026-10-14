@@ -147,6 +147,12 @@ describe("issue creation route", () => {
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
+  it("does not allow issue creation to set an open-question marker", async () => {
+    const response = await POST(request({ title: "Injected marker", body: "Details", isOpenQuestion: true }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.not.objectContaining({ isOpenQuestion: true }) }));
+  });
+
   it("rejects a design request from a non-owner", async () => {
     const response = await POST(request({ title: "Improve mobile navigation", body: "Details", kind: "DESIGN_REQUEST", sourceDiscussionId: "discussion" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(403);

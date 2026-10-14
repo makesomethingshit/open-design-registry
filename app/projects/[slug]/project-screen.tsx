@@ -54,7 +54,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
   const revisionSelect = { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, sourceChecksum: true, sourceKey: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } }, previews: { orderBy: { position: "asc" }, select: { id: true, position: true, url: true, mimeType: true, altText: true } }, appliedProposal: { select: { id: true, proposalNumber: true, author: { select: { name: true } } } }, appliedChanges: { select: { id: true } } } satisfies Prisma.RevisionSelect;
   const revisionHistorySelect = { id: true, number: true, title: true, changeDescription: true, tool: true, toolVersion: true, tags: true, capabilityMode: true, capabilityUnitCount: true, adapterId: true, adapterVersion: true, adapterConfidence: true, adapterMaturity: true, createdAt: true, publishedBy: { select: { name: true } } } satisfies Prisma.RevisionSelect;
   const releaseSelect = { id: true, number: true, title: true, description: true, createdAt: true, publishedBy: { select: { name: true } }, _count: { select: { revisions: true } } } satisfies Prisma.ReleaseSelect;
-  const issueSelect = { id: true, title: true, kind: true, status: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.IssueSelect;
+  const issueSelect = { id: true, title: true, kind: true, status: true, isOpenQuestion: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.IssueSelect;
   const discussionSelect = { id: true, title: true, createdAt: true, author: { select: { name: true } }, _count: { select: { comments: true } } } satisfies Prisma.DiscussionSelect;
   const forkSelect = { id: true, slug: true, title: true, description: true, license: true, createdAt: true, owner: { select: { name: true } } } satisfies Prisma.ProjectSelect;
   const cursorQuery: { cursor?: { id: string }; skip?: number } = cursor ? { cursor: { id: cursor }, skip: 1 } : {};
@@ -62,7 +62,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     ? await prisma.project.findFirst({ where: { slug: cursor, forkedFromProjectId: base.id, isPublic: true }, select: { slug: true } })
     : null;
   const forkCursorQuery: { cursor?: { slug: string }; skip?: number } = forkCursor ? { cursor: { slug: forkCursor.slug }, skip: 1 } : {};
-  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests] = await Promise.all([
+  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests, openQuestions] = await Promise.all([
     view === "revisions"
       ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, ...cursorQuery, take: pageSize + 1, select: revisionHistorySelect })
       : view === "new-issue"
@@ -91,6 +91,9 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       : Promise.resolve(0),
     view === "overview"
       ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "DESIGN_REQUEST" }, orderBy: { createdAt: "desc" }, take: 3, select: { id: true, title: true, author: { select: { name: true } } } })
+      : Promise.resolve([]),
+    view === "overview"
+      ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "ISSUE", isOpenQuestion: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 3, select: { id: true, title: true, sourceDiscussionId: true, revision: { select: { number: true, isPublished: true } } } })
       : Promise.resolve([]),
   ]);
   const revisions = view === "new-issue" ? revisionRows : revisionRows.slice(0, pageSize);
@@ -128,7 +131,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
           <img alt={latestPreview?.altText ?? `${project.title} cover`} src={publicAssetUrl(latestPreview?.url ?? project.coverUrl)} />
           <figcaption>{latestRevision ? `Revision ${latestRevision.number}` : "Project cover"}</figcaption>
         </figure>
-        <aside className={styles.infoRail}>
+        <aside aria-label="Project information" className={styles.infoRail}>
           <ProjectAbout activityStatus={project.activityStatus} description={project.description} isOwner={session?.user.id === project.ownerId} license={project.license} slug={project.slug} title={project.title} />
           <dl className={styles.infoList}>
             <div><dt>License</dt><dd>{project.license}</dd></div>
@@ -154,6 +157,10 @@ export default async function ProjectScreen({ params, searchParams, view = "over
             <div><dt>Open proposals</dt><dd>{activeProposalCount}</dd></div>
           </dl>
           {!project.isPublic && session?.user.id === project.ownerId && <p className={styles.privateNote}>Private workspace visible to you.</p>}
+          <section className={styles.activity} aria-labelledby="open-questions-heading">
+            <header><h2 id="open-questions-heading">Open questions</h2><Link href={`/projects/${slug}/issues`}>View issues</Link></header>
+            {openQuestions.length ? <div className={styles.activityList}>{openQuestions.map((question) => <article key={question.id}><div><Link href={`/projects/${slug}/issues/${question.id}`}>{question.title}</Link><p>Needs a design decision{question.sourceDiscussionId ? " · Linked discussion" : ""}{question.revision?.isPublished ? ` · Revision ${question.revision.number}` : ""}</p></div></article>)}</div> : <p className={styles.muted}>No open design questions have been selected.</p>}
+          </section>
         </aside>
         {latestRevision && <section className={styles.latestRevision}>
           <p className={styles.eyebrow}>Current work</p><h2>Latest revision</h2>
@@ -219,7 +226,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     {view === "issues" && <section aria-labelledby="issues-heading" className={styles.section} id="issues">
       <header className={styles.sectionHeader}><h2 id="issues-heading">Issues</h2>{project.isPublic && <Link className={styles.secondaryLink} href={`/projects/${slug}/issues/new`}>New issue</Link>}</header>
       <RouteNav currentHref={`/projects/${slug}/issues?issueStatus=${query.issueStatus === "closed" ? "closed" : "open"}`} items={[{ href: `/projects/${slug}/issues?issueStatus=open`, label: "Open" }, { href: `/projects/${slug}/issues?issueStatus=closed`, label: "Closed" }]} label="Issue status" />
-      {project.issues.length ? <ul className={styles.discussionList}>{project.issues.map((issue) => <li id={`issue-${issue.id}`} key={issue.id}><Link className={styles.discussionRowLink} href={`/projects/${slug}/issues/${issue.id}${query.issueStatus === "closed" ? "?issueStatus=closed" : ""}`}><strong>{issue.title}</strong><span>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"} · {issue.status === "OPEN" ? "Open" : "Closed"} · Opened by {issue.author.name} · {issue._count.comments} comments</span></Link></li>)}</ul> : <p className={styles.muted}>No {query.issueStatus === "closed" ? "closed" : "open"} issues.</p>}
+      {project.issues.length ? <ul className={styles.discussionList}>{project.issues.map((issue) => <li id={`issue-${issue.id}`} key={issue.id}><Link className={styles.discussionRowLink} href={`/projects/${slug}/issues/${issue.id}${query.issueStatus === "closed" ? "?issueStatus=closed" : ""}`}><strong>{issue.title}</strong><span>{issue.kind === "DESIGN_REQUEST" ? "Design request" : "Issue"}{issue.isOpenQuestion ? issue.status === "OPEN" ? " · Open question" : " · Resolved question" : ""} · {issue.status === "OPEN" ? "Open" : "Closed"} · Opened by {issue.author.name} · {issue._count.comments} comments</span></Link></li>)}</ul> : <p className={styles.muted}>No {query.issueStatus === "closed" ? "closed" : "open"} issues.</p>}
       <ProjectListPagination cursor={cursor} issueStatus={query.issueStatus === "closed" ? "closed" : "open"} label="Issue" nextCursor={issueNextCursor} pageSize={pageSize} slug={project.slug} view="issues" />
     </section>}
     {view === "new-issue" && <section className={styles.section}><h2>New issue</h2><Link className={styles.secondaryLink} href={`/projects/${slug}/issues`}>Back to issues</Link><IssueBoard canManage={session?.user.id === project.ownerId} issues={[]} mode="create" revisions={project.revisions} signedIn slug={slug} /></section>}

@@ -92,6 +92,14 @@ describe("project issue detail page", () => {
     expect(visitor).not.toContain("Comment on Improve the mobile empty state");
   });
 
+  it("preserves a question marker and its source Discussion on a closed Issue detail", async () => {
+    const value = { ...issue(true, "CLOSED"), kind: "ISSUE" as const, isOpenQuestion: true, sourceDiscussion: { id: "discussion-a", title: "Pick a layout" } };
+    const html = await markup({ user: { id: "owner" } }, value);
+    expect(html).toContain("Question resolved (issue closed)");
+    expect(html).toContain('href="/projects/demo/discussions/discussion-a"');
+    expect(html).toContain("Remove from open questions");
+  });
+
   it("does not link an unpublished related revision", async () => {
     const hiddenRevision = issue();
     hiddenRevision.revision.isPublished = false;

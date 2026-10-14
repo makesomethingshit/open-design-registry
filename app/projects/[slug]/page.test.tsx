@@ -105,7 +105,7 @@ function project(withRelease = false) {
       { id: "old-discussion", title: "Color direction", createdAt: new Date("2026-09-10T00:00:00Z"), author: { name: "Min" }, _count: { comments: 1 } },
     ],
     issues: [{
-      id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", createdAt: new Date("2026-09-10T00:00:00Z"),
+      id: "issue-14", title: "Fix navigation", body: "Improve it", kind: "ISSUE", status: "OPEN", isOpenQuestion: false, createdAt: new Date("2026-09-10T00:00:00Z"),
       author: { name: "Reporter" }, revision: null, sourceDiscussion: { id: "discussion-1", title: "Mobile navigation" }, comments: [], _count: { comments: 0 },
       proposals: [
         visibleProposal,
@@ -215,13 +215,13 @@ function mockProjectQueries(value: ReturnType<typeof project>) {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.slug.localeCompare(a.slug));
     return cursorPageBySlug(rows, args);
   });
-  mocks.findIssues.mockImplementation(async (args?: { where?: { status?: string; kind?: string }; select?: { _count?: unknown }; cursor?: { id: string }; skip?: number; take?: number }) => {
-    let rows = value.issues.filter((row) => (!args?.where?.status || row.status === args.where.status) && (!args?.where?.kind || row.kind === args.where.kind));
+  mocks.findIssues.mockImplementation(async (args?: { where?: { status?: string; kind?: string; isOpenQuestion?: boolean }; select?: { _count?: unknown }; cursor?: { id: string }; skip?: number; take?: number }) => {
+    let rows = value.issues.filter((row) => (!args?.where?.status || row.status === args.where.status) && (!args?.where?.kind || row.kind === args.where.kind) && (args?.where?.isOpenQuestion === undefined || Boolean((row as typeof row & { isOpenQuestion?: boolean }).isOpenQuestion) === args.where.isOpenQuestion));
     rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
     rows = cursorPage(rows, args);
     return args?.select?._count
-      ? rows.map(({ id, title, kind, status, createdAt, author, _count }) => ({ id, title, kind, status, createdAt, author, _count }))
-      : args?.select ? rows.slice(0, 3).map(({ id, title, author }) => ({ id, title, author })) : rows;
+      ? rows.map(({ id, title, kind, status, isOpenQuestion, createdAt, author, _count }) => ({ id, title, kind, status, isOpenQuestion, createdAt, author, _count }))
+      : args?.select ? rows.slice(0, 3).map(({ id, title, author }) => ({ id, title, author, sourceDiscussionId: null, revision: null })) : rows;
   });
   mocks.countIssues.mockResolvedValue(value.issues.filter((issue) => issue.status === "OPEN" && issue.kind !== "DESIGN_REQUEST").length);
 }
@@ -390,6 +390,51 @@ describe("Project Overview next actions", () => {
     const privateOwner = await renderProjectPage({ user: { id: "owner" } }, privateProject);
     expect(privateOwner).toContain('href="/projects/demo/settings">Manage private project</a>');
     expect(privateOwner).not.toContain("Browse open issues and requests");
+  });
+});
+
+describe("Open Questions on Project Overview", () => {
+  it("shows only owner-designated OPEN ordinary Issues, linking to their existing details", async () => {
+    const value = project();
+    value.issues = [
+      { ...value.issues[0], id: "question", title: "Choose typographic direction", kind: "ISSUE", status: "OPEN", isOpenQuestion: true },
+      { ...value.issues[0], id: "ordinary", title: "Layout note", kind: "ISSUE", status: "OPEN", isOpenQuestion: false },
+      { ...value.issues[0], id: "closed", title: "Resolved choice", kind: "ISSUE", status: "CLOSED", isOpenQuestion: true },
+      { ...value.issues[0], id: "request", title: "Make illustrations", kind: "DESIGN_REQUEST", status: "OPEN", isOpenQuestion: true },
+    ];
+    const markup = await renderProjectPage(null, value);
+    const questionSection = markup.match(/<section[^>]*aria-labelledby="open-questions-heading"[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(questionSection).toContain("Open questions");
+    expect(questionSection).toContain("Choose typographic direction");
+    expect(questionSection).toContain('href="/projects/demo/issues/question"');
+    expect(questionSection).not.toContain("Resolved choice");
+    expect(questionSection).not.toContain("Make illustrations");
+    expect(questionSection).not.toContain("Layout note");
+    const infoRail = markup.match(/<aside[^>]*aria-label="Project information"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    expect(infoRail).toContain(questionSection);
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({
+      where: { projectId: "project", status: "OPEN", kind: "ISSUE", isOpenQuestion: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 3,
+      select: { id: true, title: true, sourceDiscussionId: true, revision: { select: { number: true, isPublished: true } } },
+    }));
+  });
+
+  it("renders the empty state when no designated question is open", async () => {
+    const value = project();
+    value.issues = [{ ...value.issues[0], isOpenQuestion: false, status: "OPEN" }];
+    const markup = await renderProjectPage(null, value);
+    const questionSection = markup.match(/<section[^>]*aria-labelledby="open-questions-heading"[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(questionSection).toContain("No open design questions have been selected.");
+    expect(markup.match(/<aside[^>]*aria-label="Project information"[\s\S]*?<\/aside>/)?.[0]).toContain(questionSection);
+  });
+
+  it.each(["OPEN", "CLOSED"])("labels a designated question consistently with its %s state", async (status) => {
+    const value = project();
+    value.issues = [{ ...value.issues[0], isOpenQuestion: true, status }];
+    const markup = await renderProjectPage(null, value, 0, 0, "issues", { issueStatus: status === "OPEN" ? "open" : "closed" });
+    expect(markup).toContain(status === "OPEN" ? "Issue · Open question · Open" : "Issue · Resolved question · Closed");
+    expect(markup).not.toContain(status === "OPEN" ? "Resolved question" : "Open question");
   });
 });
 
