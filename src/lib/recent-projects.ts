@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 /** Read-only activity rank. Does not rewrite Project.updatedAt or publication records. */
-export async function recentProjectSlugs({ viewerId, query, license, tool, tags, cursor, limit }: { viewerId: string | null; query: string; license: string; tool: string; tags: string[]; cursor?: string | null; limit: number }) {
+export async function recentProjectActivity({ viewerId, query, license, tool, tags, cursor, limit }: { viewerId: string | null; query: string; license: string; tool: string; tags: string[]; cursor?: string | null; limit: number }, db: Pick<Prisma.TransactionClient, "$queryRaw"> = prisma) {
   const filters: Prisma.Sql[] = [
     viewerId ? Prisma.sql`(p."isPublic" = true OR p."ownerId" = ${viewerId})` : Prisma.sql`p."isPublic" = true`,
   ];
@@ -26,15 +26,14 @@ export async function recentProjectSlugs({ viewerId, query, license, tool, tags,
   const anchor = cursor
     ? Prisma.sql`JOIN eligible AS anchor ON anchor.slug = ${cursor} WHERE (e."activityAt", e.slug) < (anchor."activityAt", anchor.slug)`
     : Prisma.empty;
-  const rows = await prisma.$queryRaw<Array<{ slug: string }>>(Prisma.sql`
+  return db.$queryRaw<Array<{ slug: string; activityAt: Date }>>(Prisma.sql`
     WITH eligible AS (
       SELECT p.slug, ${activity} AS "activityAt"
       FROM "Project" AS p WHERE ${Prisma.join(filters, " AND ")}
     )
-    SELECT e.slug FROM eligible AS e
+    SELECT e.slug, e."activityAt" FROM eligible AS e
     ${anchor}
     ORDER BY e."activityAt" DESC, e.slug DESC
     LIMIT ${limit}
   `);
-  return rows.map((row) => row.slug);
 }

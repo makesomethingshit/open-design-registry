@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   authSession: vi.fn(),
   projectFindMany: vi.fn(),
   raw: vi.fn(),
+  transaction: vi.fn(),
   projectCreate: vi.fn(),
   putCover: vi.fn(),
   deleteObject: vi.fn(),
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.authSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany, create: mocks.projectCreate }, $queryRaw: mocks.raw } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany, create: mocks.projectCreate }, $queryRaw: mocks.raw, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({
   publicAssetUrl: (value: string) => `/api/assets?key=${encodeURIComponent(value)}`,
   deleteObject: mocks.deleteObject,
@@ -28,6 +29,7 @@ function request(query = "") {
 describe("project listing route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.transaction.mockImplementation((callback) => callback({ project: { findMany: mocks.projectFindMany }, $queryRaw: mocks.raw }));
     mocks.getSession.mockResolvedValue(null);
     mocks.raw.mockResolvedValue([{ slug: "studio" }]);
     mocks.projectFindMany.mockResolvedValue([{ slug: "studio", title: "Studio kit", description: "Reusable components", license: "MIT", isPublic: true, coverUrl: "covers/studio", createdAt: new Date("2026-01-01"), owner: { name: "Author" } }]);
@@ -72,6 +74,7 @@ describe("project listing route", () => {
     expect(sql.values).toEqual(expect.arrayContaining(["anchor", 3]));
     expect(mocks.raw).toHaveBeenCalledOnce();
     expect(mocks.projectFindMany).toHaveBeenCalledOnce();
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead" });
     expect(mocks.projectFindMany.mock.calls[0][0].where.AND).toContainEqual({ isPublic: true });
   });
 

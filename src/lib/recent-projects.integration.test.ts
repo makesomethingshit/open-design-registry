@@ -6,7 +6,8 @@ if (process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_URL = url.toString();
 }
 const { prisma } = await import("./prisma");
-const { recentProjectSlugs } = await import("./recent-projects");
+const { recentProjectActivity } = await import("./recent-projects");
+const recentProjectSlugs = async (options: Parameters<typeof recentProjectActivity>[0]) => (await recentProjectActivity(options)).map((row) => row.slug);
 const databaseDescribe = process.env.TEST_DATABASE_URL ? describe : describe.skip;
 
 databaseDescribe("recent project activity in PostgreSQL", () => {
@@ -36,6 +37,12 @@ databaseDescribe("recent project activity in PostgreSQL", () => {
       const expected = [beta.slug, alpha.slug, gamma.slug, tieZ.slug, tieA.slug, empty.slug];
       const all = await recentProjectSlugs(opts);
       expect(all).toEqual(expected);
+      expect(await recentProjectActivity(opts)).toEqual([
+        { slug: beta.slug, activityAt: d("2026-05-01T00:00:00Z") },
+        { slug: alpha.slug, activityAt: d("2026-04-01T00:00:00Z") },
+        { slug: gamma.slug, activityAt: d("2026-03-01T00:00:00Z") },
+        ...[tieZ, tieA, empty].map((project) => ({ slug: project.slug, activityAt: ancient })),
+      ]);
       const visited: string[] = [];
       for (let cursor: string | undefined; ; ) {
         const page = await recentProjectSlugs({ ...opts, cursor, limit: 2 });

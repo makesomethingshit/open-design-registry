@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
-const mocks = vi.hoisted(() => ({ projectFindMany: vi.fn(), raw: vi.fn() }));
+const mocks = vi.hoisted(() => ({ projectFindMany: vi.fn(), raw: vi.fn(), transaction: vi.fn() }));
 
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany }, $queryRaw: mocks.raw } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany }, $queryRaw: mocks.raw, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => value }));
 
 const { default: ExplorePage } = await import("./page");
@@ -10,8 +11,24 @@ const { default: ExplorePage } = await import("./page");
 describe("Explore project sorting", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.transaction.mockImplementation((callback) => callback({ project: { findMany: mocks.projectFindMany }, $queryRaw: mocks.raw }));
     mocks.projectFindMany.mockResolvedValue([]);
     mocks.raw.mockResolvedValue([{ slug: "demo" }]);
+  });
+
+  it("renders the ranked publication date in recent cards and metadata date in newest cards", async () => {
+    const updatedAt = new Date("2026-01-01T00:00:00Z");
+    const activityAt = new Date("2026-05-01T00:00:00Z");
+    mocks.raw.mockResolvedValue([{ slug: "demo", activityAt }]);
+    mocks.projectFindMany.mockResolvedValue([{ id: "demo", slug: "demo", title: "Demo", description: "", license: "MIT", coverUrl: "", owner: { name: "Designer" }, revisions: [], updatedAt }]);
+    for (const sort of ["recent", ""]) {
+      const page = await ExplorePage({ searchParams: Promise.resolve({ sort }) });
+      const suspense = page.props.children.props.children.find((child: { props?: { children?: { props?: { projects?: unknown } } } }) => child?.props?.children?.props?.projects);
+      const results = suspense.props.children;
+      const markup = renderToStaticMarkup(await results.type(results.props));
+      expect(markup).toContain(`dateTime="${(sort ? activityAt : updatedAt).toISOString()}"`);
+    }
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead" });
   });
 
   it("ranks by published Revision/Release activity in SQL, preserving public filters", async () => {
