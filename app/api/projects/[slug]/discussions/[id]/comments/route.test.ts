@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findDiscussion: vi.fn(), createComment: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findDiscussion: vi.fn(), findProject: vi.fn(), createComment: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { discussion: { findFirst: mocks.findDiscussion }, discussionComment: { create: mocks.createComment }, notification: { create: vi.fn() } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { discussion: { findFirst: mocks.findDiscussion }, $transaction: (run: (tx: unknown) => unknown) => run({ $queryRaw: async () => [{ id: "project" }], project: { findUnique: mocks.findProject }, discussionComment: { create: mocks.createComment } }) } }));
 
 const { POST } = await import("./route");
 
@@ -14,7 +14,8 @@ describe("discussion comments route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "commenter" } });
-    mocks.findDiscussion.mockResolvedValue({ id: "discussion" });
+    mocks.findDiscussion.mockResolvedValue({ id: "discussion", projectId: "project" });
+    mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.createComment.mockResolvedValue({ id: "comment", body: "Useful note", author: { name: "Commenter" } });
   });
 
@@ -28,7 +29,7 @@ describe("discussion comments route", () => {
   it("creates a comment on a public discussion", async () => {
     const response = await POST(request({ body: " Useful note " }), { params: Promise.resolve({ slug: "demo", id: "discussion" }) });
     expect(response.status).toBe(201);
-    expect(mocks.findDiscussion).toHaveBeenCalledWith({ where: { id: "discussion", project: { slug: "demo", isPublic: true } }, select: { id: true } });
+    expect(mocks.findDiscussion).toHaveBeenCalledWith({ where: { id: "discussion", project: { slug: "demo", isPublic: true } }, select: { id: true, projectId: true } });
     expect(mocks.createComment).toHaveBeenCalledWith(expect.objectContaining({ data: { discussionId: "discussion", authorId: "commenter", body: "Useful note" } }));
   });
 
@@ -37,6 +38,13 @@ describe("discussion comments route", () => {
       const response = await POST(request(body), { params: Promise.resolve({ slug: "demo", id: "discussion" }) });
       expect(response.status).toBe(400);
     }
+    expect(mocks.createComment).not.toHaveBeenCalled();
+  });
+
+  it("rejects a queued comment when project visibility changes before the lock", async () => {
+    mocks.findProject.mockResolvedValue({ id: "project", isPublic: false, ownerId: "owner" });
+    const response = await POST(request({ body: "Late comment" }), { params: Promise.resolve({ slug: "demo", id: "discussion" }) });
+    expect(response.status).toBe(404);
     expect(mocks.createComment).not.toHaveBeenCalled();
   });
 

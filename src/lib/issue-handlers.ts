@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "./auth";
 import { prisma } from "./prisma";
 import { issueCommentSchema, issueQuestionSchema, issueStatusSchema } from "./project-validation";
+import { lockPublicProject, PrivateProjectWrite } from "./project-visibility-lock";
 
 type IssueScope = { id: string; slug?: string };
 
@@ -19,7 +20,7 @@ const issueAccess = {
 
 const commentAccess = {
   status: true,
-  project: { select: { isPublic: true } },
+  project: { select: { id: true, isPublic: true } },
 } satisfies Prisma.IssueSelect;
 
 export async function lockIssue(tx: Prisma.TransactionClient, id: string) {
@@ -102,6 +103,8 @@ export async function postIssueComment(request: Request, scope: IssueScope): Pro
   // used by the close transition, so a close that committed first rejects.
   try {
     const comment = await prisma.$transaction(async (tx) => {
+      // Project before Issue: matches visibility changes without reversing lock order.
+      await lockPublicProject(tx, issue.project.id);
       await lockIssue(tx, scope.id);
       const current = await tx.issue.findUnique({ where: { id: scope.id }, select: commentAccess });
       if (!current || !current.project.isPublic) throw new IssueRequestError("Issue not found", 404);
@@ -114,6 +117,7 @@ export async function postIssueComment(request: Request, scope: IssueScope): Pro
     return NextResponse.json(comment, { status: 201 });
   } catch (cause) {
     if (cause instanceof IssueRequestError) return NextResponse.json({ error: cause.message }, { status: cause.status });
+    if (cause instanceof PrivateProjectWrite) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
     throw cause;
   }
 }

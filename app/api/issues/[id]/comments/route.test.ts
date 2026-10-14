@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findIssue: vi.fn(), createComment: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getSession: vi.fn(), findIssue: vi.fn(), findProject: vi.fn(), createComment: vi.fn() }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/src/lib/prisma", () => ({
   prisma: {
@@ -10,6 +10,7 @@ vi.mock("@/src/lib/prisma", () => ({
       callback({
         $queryRaw: async () => [{ id: "issue-1" }],
         issue: { findUnique: mocks.findIssue },
+        project: { findUnique: mocks.findProject },
         issueComment: { create: mocks.createComment },
       }),
   },
@@ -25,15 +26,23 @@ describe("issue comment route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: "commenter" } });
-    mocks.findIssue.mockResolvedValue({ project: { isPublic: true }, status: "OPEN" });
+    mocks.findIssue.mockResolvedValue({ project: { id: "project", isPublic: true }, status: "OPEN" });
+    mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.createComment.mockResolvedValue({ id: "comment-1", body: "Looks good" });
   });
 
   it("rejects comments on closed issues", async () => {
-    mocks.findIssue.mockResolvedValue({ project: { isPublic: true }, status: "CLOSED" });
+    mocks.findIssue.mockResolvedValue({ project: { id: "project", isPublic: true }, status: "CLOSED" });
     const response = await POST(request({ body: "Still relevant" }), { params: Promise.resolve({ id: "issue-1" }) });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "Issue is closed" });
+    expect(mocks.createComment).not.toHaveBeenCalled();
+  });
+
+  it("rejects an Issue comment when the locked project is no longer public", async () => {
+    mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: false });
+    const response = await POST(request({ body: "Late" }), { params: Promise.resolve({ id: "issue-1" }) });
+    expect(response.status).toBe(404);
     expect(mocks.createComment).not.toHaveBeenCalled();
   });
 
