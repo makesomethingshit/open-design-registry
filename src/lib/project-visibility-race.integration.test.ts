@@ -61,6 +61,7 @@ async function waitForBlockedTransactions(tx: Prisma.TransactionClient, holderPi
   const lockQuery = table === "Issue"
     ? 'SELECT id FROM "Issue" WHERE id = $1 FOR UPDATE'
     : 'SELECT id FROM "Project" WHERE id = $1 FOR UPDATE';
+  const shareLockQuery = 'SELECT id FROM "Project" WHERE id = $1 FOR SHARE';
   const deadline = Date.now() + 3_000;
   while (Date.now() < deadline) {
     await tx.$queryRaw<Array<{ cleared: string }>>`SELECT pg_stat_clear_snapshot()::text AS cleared`;
@@ -76,13 +77,26 @@ async function waitForBlockedTransactions(tx: Prisma.TransactionClient, holderPi
       FROM lock_chain
       JOIN pg_stat_activity AS activity USING (pid)
       WHERE activity.pid <> ${holderPid}
-        AND activity.query = ${lockQuery}
+        AND (activity.query = ${lockQuery} OR (${table === "Project"} AND activity.query = ${shareLockQuery}))
         AND activity.wait_event_type = 'Lock'
     `;
     if (result.count === count) return;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
   throw new Error(`Expected ${count} ${table} transaction(s) waiting on PostgreSQL row lock`);
+}
+
+async function holdProjectShareLock(projectId: string) {
+  const locked = deferred<{ tx: Prisma.TransactionClient; pid: number }>();
+  const release = deferred<void>();
+  const holder = prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR SHARE`;
+    const [{ pid }] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+    locked.resolve({ tx, pid });
+    await release.promise;
+  });
+  const held = await locked.promise;
+  return { ...held, release: () => release.resolve(undefined), done: holder };
 }
 
 
@@ -200,6 +214,93 @@ databaseDescribe("privacy transition vs project content creation", () => {
     expect((await content).status).toBe(201);
     expect((await privacy).status).toBe(200);
     expect(await prisma.issueComment.count({ where: { issueId: f.issue.id } })).toBe(1);
+  });
+
+  it("allows independent project writers to finish while another writer holds its lock", async () => {
+    const f = await fixture();
+    const firstWriterLocked = deferred<void>();
+    const secondWriterLockAcquired = deferred<void>();
+    const releaseFirstWriter = deferred<void>();
+    const originalTransaction = prisma.$transaction;
+    const runOriginalTransaction = originalTransaction.bind(prisma);
+    let firstLockSql = "";
+    let paused = false;
+    let transactionNumber = 0;
+    let second: Promise<Response> | undefined;
+    const transactionWrapper = (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) => runOriginalTransaction(async (tx) => {
+      const currentTransaction = ++transactionNumber;
+      const wrappedTx = new Proxy(tx, {
+        get(target, property, receiver) {
+          if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
+          return async (...args: unknown[]) => {
+            const text = Array.isArray(args[0]) ? (args[0] as string[]).join("") : "";
+            if (currentTransaction === 2 && text.includes('FROM "Project"') && text.includes("FOR ")) {
+              // Bound the baseline assertion in PostgreSQL instead of sleeping in the test.
+              await target.$executeRawUnsafe("SET LOCAL lock_timeout = '250ms'");
+            }
+            const result = await Reflect.apply(target.$queryRaw as (...queryArgs: unknown[]) => Promise<unknown>, target, args);
+            if (!paused && text.includes('FROM "Project"') && text.includes("FOR ")) {
+              paused = true;
+              firstLockSql = text;
+              firstWriterLocked.resolve(undefined);
+              await releaseFirstWriter.promise;
+            }
+            if (currentTransaction === 2 && text.includes('FROM "Project"') && text.includes("FOR ")) secondWriterLockAcquired.resolve(undefined);
+            return result;
+          };
+        },
+      });
+      return callback(wrappedTx);
+    }) as ReturnType<typeof originalTransaction>;
+    prisma.$transaction = transactionWrapper as typeof prisma.$transaction;
+    const first = postProjectDiscussion(request({ title: "First thread", body: "Details" }), { slug: f.project.slug });
+
+    try {
+      await firstWriterLocked.promise;
+      second = postProjectDiscussion(request({ title: "Second thread", body: "Details" }), { slug: f.project.slug });
+      let secondResponse: Response | undefined;
+      let secondError: unknown;
+      try {
+        secondResponse = await second;
+      } catch (cause) {
+        secondError = cause;
+      }
+      expect(secondError).toBeUndefined();
+      await secondWriterLockAcquired.promise;
+      expect(secondResponse?.status).toBe(201);
+      expect(firstLockSql).toContain("FOR SHARE");
+      releaseFirstWriter.resolve(undefined);
+      expect((await first).status).toBe(201);
+      expect((await second).status).toBe(201);
+    } finally {
+      releaseFirstWriter.resolve(undefined);
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+      prisma.$transaction = originalTransaction;
+    }
+
+    expect(await prisma.discussion.count({ where: { projectId: f.project.id } })).toBe(3);
+    expect(await prisma.notification.count({ where: { projectId: f.project.id } })).toBe(2);
+  });
+
+  it("waits for every active shared project lock before changing privacy", async () => {
+    const f = await fixture();
+    const first = await holdProjectShareLock(f.project.id);
+    const second = await holdProjectShareLock(f.project.id);
+    const privacy = makePrivate(f.project.slug);
+
+    try {
+      await waitForBlockedTransactions(first.tx, first.pid, "Project", 1);
+      first.release();
+      await first.done;
+      await waitForBlockedTransactions(second.tx, second.pid, "Project", 1);
+      second.release();
+      await second.done;
+      expect((await privacy).status).toBe(200);
+    } finally {
+      first.release();
+      second.release();
+      await Promise.allSettled([first.done, second.done, privacy]);
+    }
   });
 
   it("rolls back content when its notification insert fails and releases the project lock", async () => {
