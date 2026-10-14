@@ -28,10 +28,12 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
         body: true,
         kind: true,
         status: true,
+        isOpenQuestion: true,
         createdAt: true,
         author: { select: { name: true } },
         project: { select: { title: true, ownerId: true, isPublic: true } },
         revision: { select: { number: true, isPublished: true } },
+        sourceDiscussion: { select: { id: true, title: true } },
         comments: { orderBy: { createdAt: "asc" }, select: { id: true, body: true, author: { select: { name: true } } } },
         proposals: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], select: { id: true, proposalNumber: true, title: true, status: true, project: { select: { id: true, ownerId: true, isPublic: true } }, baseRevision: { select: { projectId: true, isPublished: true } }, sourceRevision: { select: { isPublished: true, project: { select: { ownerId: true, isPublic: true } } } }, appliedRevisions: { where: { isPublished: true }, orderBy: { number: "asc" }, select: { id: true, number: true, title: true } } } },
       },
@@ -50,7 +52,7 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
       <Stack gap={4}>
         <Link aria-label="Back to issues" className={styles.secondaryLink} href={`/projects/${slug}/issues${listSearch}`}>← Issues</Link>
         <PageHeader eyebrow={heading} id="issue-heading" title={issue.title} />
-        <Inline gap={2}><StatusBadge tone={isOpen ? "success" : "neutral"}>{isOpen ? "Open" : "Closed"}</StatusBadge></Inline>
+        <Inline gap={2}><StatusBadge tone={isOpen ? "success" : "neutral"}>{isOpen ? "Open" : "Closed"}</StatusBadge>{issue.isOpenQuestion && <StatusBadge tone="neutral">{isOpen ? "Open question" : "Question resolved (issue closed)"}</StatusBadge>}</Inline>
         <p className={styles.discussionMeta}>Opened by {issue.author.name} <span aria-hidden="true">·</span> <time dateTime={issue.createdAt.toISOString()}>{formatDate(issue.createdAt)}</time></p>
         {isRequest && issue.project.isPublic && isOpen && participation && <ParticipationControl issueId={issue.id} count={participation.count} names={participation.names} participating={participation.participating} signedIn={Boolean(session)} loginHref={`/login?next=${encodeURIComponent(`/projects/${slug}/issues/${issue.id}`)}`} />}
         <Panel aria-labelledby="issue-description-heading" className={styles.discussionBodyPanel}>
@@ -59,12 +61,13 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
             <p className={styles.discussionBody}>{issue.body || "No description was provided."}</p>
           </Stack>
         </Panel>
-        <IssueBoard canManage={issue.project.isPublic && session?.user.id === issue.project.ownerId} issues={[{ ...issue, comments: issue.comments ?? [], proposals: (issue.proposals ?? []).filter((proposal) => isVisible(proposal, session?.user.id)).map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })) }]} mode="conversation" revisions={[]} signedIn={issue.project.isPublic && Boolean(session)} slug={slug} />
+        <IssueBoard canManage={session?.user.id === issue.project.ownerId} issues={[{ ...issue, comments: issue.comments ?? [], proposals: (issue.proposals ?? []).filter((proposal) => isVisible(proposal, session?.user.id)).map(({ id, proposalNumber, title, status, appliedRevisions }) => ({ id, proposalNumber, title, status, appliedRevisions })) }]} mode="conversation" revisions={[]} signedIn={issue.project.isPublic && Boolean(session)} slug={slug} />
         <Panel aria-labelledby="issue-context-heading">
           <Stack gap={3}>
             <SectionHeader id="issue-context-heading" title="Request context" />
             <dl className={styles.infoList}>
               <div><dt>Project</dt><dd><Link href={`/projects/${slug}`}>{issue.project.title}</Link></dd></div>
+              {issue.sourceDiscussion && <div><dt>Origin discussion</dt><dd><Link href={`/projects/${slug}/discussions/${issue.sourceDiscussion.id}`}>{issue.sourceDiscussion.title}</Link></dd></div>}
               <div><dt>Related revision</dt><dd>{issue.revision ? issue.revision.isPublished ? <Link href={`/projects/${slug}/revisions/${issue.revision.number}`}>Revision {issue.revision.number}</Link> : `Revision ${issue.revision.number}` : "None"}</dd></div>
             </dl>
             {isOpen && <>
