@@ -59,6 +59,23 @@ test("separates project tabs, preserves detail navigation and history, and prote
   await page.goto(base);
   const openQuestions = page.locator('section[aria-labelledby="open-questions-heading"]');
   await expect(openQuestions.getByRole("link", { name: "A new focused issue", exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Project information" }).locator('section[aria-labelledby="open-questions-heading"]')).toHaveCount(1);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const rail = await page.getByRole("complementary", { name: "Project information" }).boundingBox();
+    const preview = await page.locator("#preview").boundingBox();
+    const questions = await openQuestions.boundingBox();
+    expect(rail).not.toBeNull();
+    expect(preview).not.toBeNull();
+    expect(questions).not.toBeNull();
+    expect(questions!.x).toBeGreaterThanOrEqual(rail!.x);
+    expect(questions!.x + questions!.width).toBeLessThanOrEqual(rail!.x + rail!.width + 1);
+    if (width === 1440) expect(rail!.x).toBeGreaterThanOrEqual(preview!.x + preview!.width);
+    else expect(rail!.y).toBeGreaterThanOrEqual(preview!.y + preview!.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`mobile-open-questions-sidebar-${width}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("mobile-open-questions-390.png"), fullPage: true });
   const publicVisitorContext = await browser.newContext({ baseURL: origin });

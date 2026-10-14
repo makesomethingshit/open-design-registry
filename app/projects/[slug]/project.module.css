@@ -13,6 +13,7 @@
 .artwork img { display: block; max-width: 100%; max-height: 42rem; object-fit: contain; }
 .artwork figcaption { justify-self: start; align-self: end; margin-top: var(--odr-space-3); color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .infoRail { display: grid; align-content: start; gap: var(--odr-space-5); min-width: 0; }
+.infoRail .activity header { flex-wrap: wrap; }
 .eyebrow { margin: 0 0 var(--odr-space-1); color: var(--odr-text-muted); font-size: var(--odr-font-label); line-height: var(--odr-line-label); }
 .infoRail h2, .activity h2, .latestRevision h2, .sectionHeader h2 { margin: 0; color: var(--odr-text-primary); font-size: var(--odr-font-section); line-height: var(--odr-line-section); }
 .prose, .muted, .privateNote { margin: var(--odr-space-2) 0 0; font-size: var(--odr-font-prose); line-height: var(--odr-line-prose); overflow-wrap: anywhere; }

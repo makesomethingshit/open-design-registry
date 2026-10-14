@@ -398,7 +398,7 @@ describe("Open Questions on Project Overview", () => {
     const value = project();
     value.issues = [
       { ...value.issues[0], id: "question", title: "Choose typographic direction", kind: "ISSUE", status: "OPEN", isOpenQuestion: true },
-      { ...value.issues[0], id: "ordinary", title: "Regular bug", kind: "ISSUE", status: "OPEN", isOpenQuestion: false },
+      { ...value.issues[0], id: "ordinary", title: "Layout note", kind: "ISSUE", status: "OPEN", isOpenQuestion: false },
       { ...value.issues[0], id: "closed", title: "Resolved choice", kind: "ISSUE", status: "CLOSED", isOpenQuestion: true },
       { ...value.issues[0], id: "request", title: "Make illustrations", kind: "DESIGN_REQUEST", status: "OPEN", isOpenQuestion: true },
     ];
@@ -409,7 +409,9 @@ describe("Open Questions on Project Overview", () => {
     expect(questionSection).toContain('href="/projects/demo/issues/question"');
     expect(questionSection).not.toContain("Resolved choice");
     expect(questionSection).not.toContain("Make illustrations");
-    expect(questionSection).not.toContain("Regular bug");
+    expect(questionSection).not.toContain("Layout note");
+    const infoRail = markup.match(/<aside[^>]*aria-label="Project information"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    expect(infoRail).toContain(questionSection);
     expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({
       where: { projectId: "project", status: "OPEN", kind: "ISSUE", isOpenQuestion: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -424,6 +426,7 @@ describe("Open Questions on Project Overview", () => {
     const markup = await renderProjectPage(null, value);
     const questionSection = markup.match(/<section[^>]*aria-labelledby="open-questions-heading"[\s\S]*?<\/section>/)?.[0] ?? "";
     expect(questionSection).toContain("No open design questions have been selected.");
+    expect(markup.match(/<aside[^>]*aria-label="Project information"[\s\S]*?<\/aside>/)?.[0]).toContain(questionSection);
   });
 });
 

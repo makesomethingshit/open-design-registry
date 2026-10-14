@@ -131,7 +131,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
           <img alt={latestPreview?.altText ?? `${project.title} cover`} src={publicAssetUrl(latestPreview?.url ?? project.coverUrl)} />
           <figcaption>{latestRevision ? `Revision ${latestRevision.number}` : "Project cover"}</figcaption>
         </figure>
-        <aside className={styles.infoRail}>
+        <aside aria-label="Project information" className={styles.infoRail}>
           <ProjectAbout activityStatus={project.activityStatus} description={project.description} isOwner={session?.user.id === project.ownerId} license={project.license} slug={project.slug} title={project.title} />
           <dl className={styles.infoList}>
             <div><dt>License</dt><dd>{project.license}</dd></div>
@@ -157,16 +157,16 @@ export default async function ProjectScreen({ params, searchParams, view = "over
             <div><dt>Open proposals</dt><dd>{activeProposalCount}</dd></div>
           </dl>
           {!project.isPublic && session?.user.id === project.ownerId && <p className={styles.privateNote}>Private workspace visible to you.</p>}
+          <section className={styles.activity} aria-labelledby="open-questions-heading">
+            <header><h2 id="open-questions-heading">Open questions</h2><Link href={`/projects/${slug}/issues`}>View issues</Link></header>
+            {openQuestions.length ? <div className={styles.activityList}>{openQuestions.map((question) => <article key={question.id}><div><Link href={`/projects/${slug}/issues/${question.id}`}>{question.title}</Link><p>Needs a design decision{question.sourceDiscussionId ? " · Linked discussion" : ""}{question.revision?.isPublished ? ` · Revision ${question.revision.number}` : ""}</p></div></article>)}</div> : <p className={styles.muted}>No open design questions have been selected.</p>}
+          </section>
         </aside>
         {latestRevision && <section className={styles.latestRevision}>
           <p className={styles.eyebrow}>Current work</p><h2>Latest revision</h2>
           <ol className={styles.revisionList}><RevisionItem capability={<><CapabilityBadge adapterConfidence={latestRevision.adapterConfidence} adapterId={latestRevision.adapterId} adapterMaturity={latestRevision.adapterMaturity} adapterVersion={latestRevision.adapterVersion} mode={latestRevision.capabilityMode} unitCount={latestRevision.capabilityUnitCount} />{latestProposal ? <><p className={styles.revisionNote}>Applied {Math.max(1, latestRevision.appliedChanges.length)} changes from <Link href={`/proposals/${latestProposal.id}`}>Proposal #{latestProposal.proposalNumber}</Link> <span aria-hidden="true">·</span> Contributor {latestProposal.author.name}</p><p className={styles.revisionNote}>{latestProposal.changeSet?.changes.filter((change) => change.appliedRevisionId === latestRevision.id).slice(0, 2).map(changeSummary).join(" · ")}</p></> : undefined}</>} changeDescription={latestRevision.changeDescription} createdAt={latestRevision.createdAt} href={`/projects/${project.slug}/revisions/${latestRevision.number}`} id={latestRevision.id} key={latestRevision.id} number={latestRevision.number} publisher={latestRevision.publishedBy?.name} tags={latestRevision.tags} title={latestRevision.title} tool={latestRevision.tool} /></ol>
         </section>}
         <div className={styles.activityGrid}>
-          <section className={styles.activity} aria-labelledby="open-questions-heading">
-            <header><h2 id="open-questions-heading">Open questions</h2><Link href={`/projects/${slug}/issues`}>View issues</Link></header>
-            {openQuestions.length ? <div className={styles.activityList}>{openQuestions.map((question) => <article key={question.id}><div><Link href={`/projects/${slug}/issues/${question.id}`}>{question.title}</Link><p>Needs a design decision{question.sourceDiscussionId ? " · Linked discussion" : ""}{question.revision?.isPublished ? ` · Revision ${question.revision.number}` : ""}</p></div></article>)}</div> : <p className={styles.muted}>No open design questions have been selected.</p>}
-          </section>
           <section className={styles.activity}>
             <header><h2>Looking for contributions</h2><Link href={`/projects/${slug}/issues`}>View issues</Link></header>
             {openDesignRequests.length ? <div className={styles.activityList}>{openDesignRequests.slice(0, 3).map((issue) => <article key={issue.id}><Link href={`/projects/${slug}/issues/${issue.id}`}>{issue.title}</Link><span>Opened by {issue.author.name}</span></article>)}</div> : <p className={styles.muted}>No open design requests.</p>}
