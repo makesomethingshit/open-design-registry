@@ -74,6 +74,7 @@ test("separates project tabs, preserves detail navigation and history, and prote
     await page.getByLabel("Comment on A new focused issue").fill("A saved comment");
     await page.getByRole("button", { name: "Comment", exact: true }).click();
     await expect(page.getByText("A saved comment", { exact: true })).toBeVisible();
+    await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: "Close issue", exact: true }).press("Enter");
     await expect(page.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
     await page.goto(base);
