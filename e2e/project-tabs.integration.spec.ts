@@ -120,6 +120,7 @@ test("separates project tabs, preserves detail navigation and history, and prote
   await nav.getByRole("link", { name: /^Issues/ }).click();
   await page.getByRole("navigation", { name: "Issue status" }).getByRole("link", { name: "Closed", exact: true }).click();
   await expect(page.getByRole("link", { name: /A new focused issue/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /A new focused issue/ })).toContainText("Resolved question");
   await page.reload();
   await expect(page.getByRole("navigation", { name: "Issue status" }).getByRole("link", { name: "Closed", exact: true })).toHaveAttribute("aria-current", "page");
   await page.goBack();

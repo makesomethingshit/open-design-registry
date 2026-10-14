@@ -428,6 +428,14 @@ describe("Open Questions on Project Overview", () => {
     expect(questionSection).toContain("No open design questions have been selected.");
     expect(markup.match(/<aside[^>]*aria-label="Project information"[\s\S]*?<\/aside>/)?.[0]).toContain(questionSection);
   });
+
+  it.each(["OPEN", "CLOSED"])("labels a designated question consistently with its %s state", async (status) => {
+    const value = project();
+    value.issues = [{ ...value.issues[0], isOpenQuestion: true, status }];
+    const markup = await renderProjectPage(null, value, 0, 0, "issues", { issueStatus: status === "OPEN" ? "open" : "closed" });
+    expect(markup).toContain(status === "OPEN" ? "Issue · Open question · Open" : "Issue · Resolved question · Closed");
+    expect(markup).not.toContain(status === "OPEN" ? "Resolved question" : "Open question");
+  });
 });
 
 describe("Project view query contracts", () => {
