@@ -5,6 +5,7 @@ import { getSession } from "@/src/lib/session";
 import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/project-validation";
 import { deleteObject, publicAssetUrl, putCover } from "@/src/lib/storage";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
+import { recentProjectActivity } from "@/src/lib/recent-projects";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -17,9 +18,7 @@ export async function GET(request: Request) {
   const isPaginated = paginationRequested(params);
   const limit = parsePageSize(params.get("limit") ?? params.get("take") ?? params.get("pageSize"));
   const cursor = pageCursor(params.get("cursor"));
-  const orderBy = sort === "recent"
-    ? [{ updatedAt: "desc" as const }, { slug: "desc" as const }]
-    : sort === "oldest"
+  const orderBy = sort === "oldest"
       ? [{ createdAt: "asc" as const }, { slug: "asc" as const }]
       : [{ createdAt: "desc" as const }, { slug: "desc" as const }];
   const visibility = session?.user ? { OR: [{ isPublic: true }, { ownerId: session.user.id }] } : { isPublic: true };
@@ -30,12 +29,22 @@ export async function GET(request: Request) {
     ...(revisionFilter ? [revisionFilter] : []),
   ];
   const where = filters.length ? { AND: [visibility, ...filters] } : visibility;
-  const projects = await prisma.project.findMany({
-    where,
-    ...(isPaginated ? { cursor: cursor ? { slug: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
-    orderBy,
-    select: { slug: true, title: true, description: true, license: true, isPublic: true, activityStatus: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } },
-  });
+  const select = { slug: true, title: true, description: true, license: true, isPublic: true, activityStatus: true, coverUrl: true, createdAt: true, owner: { select: { name: true } } } as const;
+  const projects = sort === "recent"
+    ? await prisma.$transaction(async (tx) => {
+        const ranked = await recentProjectActivity({ viewerId: session?.user?.id ?? null, query, license, tool, tags, cursor: isPaginated ? cursor : null, limit: limit + 1 }, tx);
+        const slugs = ranked.map((row) => row.slug);
+        if (!slugs.length) return [];
+        const rows = await tx.project.findMany({ where: { AND: [where, { slug: { in: slugs } }] }, select });
+        const bySlug = new Map(rows.map((row) => [row.slug, row]));
+        return slugs.flatMap((slug) => { const row = bySlug.get(slug); return row ? [row] : []; });
+      }, { isolationLevel: "RepeatableRead" })
+    : await prisma.project.findMany({
+        where,
+        ...(isPaginated ? { cursor: cursor ? { slug: cursor } : undefined, skip: cursor ? 1 : undefined, take: limit + 1 } : { take: limit + 1 }),
+        orderBy,
+        select,
+      });
   const hasMore = projects.length > limit;
   const page = projects.slice(0, limit).map((project) => ({ ...project, coverUrl: publicAssetUrl(project.coverUrl) }));
   if (!isPaginated) {

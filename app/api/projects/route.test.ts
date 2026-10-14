@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   authSession: vi.fn(),
   projectFindMany: vi.fn(),
+  raw: vi.fn(),
+  transaction: vi.fn(),
   projectCreate: vi.fn(),
   putCover: vi.fn(),
   deleteObject: vi.fn(),
@@ -11,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: mocks.authSession } } }));
-vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany, create: mocks.projectCreate } } }));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findMany: mocks.projectFindMany, create: mocks.projectCreate }, $queryRaw: mocks.raw, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/storage", () => ({
   publicAssetUrl: (value: string) => `/api/assets?key=${encodeURIComponent(value)}`,
   deleteObject: mocks.deleteObject,
@@ -27,7 +29,9 @@ function request(query = "") {
 describe("project listing route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.transaction.mockImplementation((callback) => callback({ project: { findMany: mocks.projectFindMany }, $queryRaw: mocks.raw }));
     mocks.getSession.mockResolvedValue(null);
+    mocks.raw.mockResolvedValue([{ slug: "studio" }]);
     mocks.projectFindMany.mockResolvedValue([{ slug: "studio", title: "Studio kit", description: "Reusable components", license: "MIT", isPublic: true, coverUrl: "covers/studio", createdAt: new Date("2026-01-01"), owner: { name: "Author" } }]);
   });
 
@@ -54,7 +58,52 @@ describe("project listing route", () => {
 
   it("orders by recent activity when requested", async () => {
     await GET(request("?sort=recent"));
-    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: [{ updatedAt: "desc" }, { slug: "desc" }] }));
+    expect(mocks.raw).toHaveBeenCalledOnce();
+    expect(mocks.projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ AND: expect.arrayContaining([{ slug: { in: ["studio"] } }]) }) }));
+  });
+
+  it("preserves SQL order, the recent cursor and the bounded paginated response", async () => {
+    mocks.raw.mockResolvedValue([{ slug: "beta" }, { slug: "alpha" }, { slug: "gamma" }]);
+    mocks.projectFindMany.mockResolvedValue(["gamma", "alpha", "beta"].map((slug) => ({ slug, coverUrl: `covers/${slug}` })));
+    const response = await GET(request("?sort=recent&limit=2&cursor=anchor"));
+    expect(await response.json()).toEqual({ items: [
+      { slug: "beta", coverUrl: "/api/assets?key=covers%2Fbeta" },
+      { slug: "alpha", coverUrl: "/api/assets?key=covers%2Falpha" },
+    ], nextCursor: "alpha" });
+    const sql = mocks.raw.mock.calls[0][0];
+    expect(sql.values).toEqual(expect.arrayContaining(["anchor", 3]));
+    expect(mocks.raw).toHaveBeenCalledOnce();
+    expect(mocks.projectFindMany).toHaveBeenCalledOnce();
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead" });
+    expect(mocks.projectFindMany.mock.calls[0][0].where.AND).toContainEqual({ isPublic: true });
+  });
+
+  it("retains recent array headers and clamps page size without changing oldest sorting", async () => {
+    mocks.raw.mockResolvedValue(Array.from({ length: 25 }, (_, index) => ({ slug: `project-${index}` })));
+    mocks.projectFindMany.mockResolvedValue(Array.from({ length: 25 }, (_, index) => ({ slug: `project-${index}`, coverUrl: "cover" })).reverse());
+    const response = await GET(request("?sort=recent"));
+    expect((await response.json()).map((row: { slug: string }) => row.slug)).toEqual(Array.from({ length: 24 }, (_, index) => `project-${index}`));
+    expect(response.headers.get("X-Has-More")).toBe("true");
+    expect(response.headers.get("X-Next-Cursor")).toBe("project-23");
+    await GET(request("?sort=recent&limit=1000"));
+    expect(mocks.raw.mock.calls[1][0].values.at(-1)).toBe(101);
+    await GET(request("?sort=oldest&limit=2"));
+    expect(mocks.projectFindMany).toHaveBeenLastCalledWith(expect.objectContaining({ orderBy: [{ createdAt: "asc" }, { slug: "asc" }], take: 3 }));
+  });
+
+  it("rereads ownership and public visibility when hydrating recent results", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    await GET(request("?sort=recent&q=kit&license=MIT&tool=Penpot&tags=UI,mobile"));
+    expect(mocks.raw.mock.calls[0][0].values).toEqual(expect.arrayContaining(["owner", "%kit%", "MIT", "penpot", ["ui", "mobile"]]));
+    expect(mocks.projectFindMany.mock.calls[0][0].where.AND[0].AND).toEqual([
+      { OR: [{ isPublic: true }, { ownerId: "owner" }] },
+      { OR: [{ title: { contains: "kit", mode: "insensitive" } }, { description: { contains: "kit", mode: "insensitive" } }] },
+      { license: "MIT" },
+      { revisions: { some: { tool: { equals: "penpot" }, tags: { hasEvery: ["ui", "mobile"] } } } },
+    ]);
+    mocks.projectFindMany.mockResolvedValue([]);
+    const response = await GET(request("?sort=recent&limit=2"));
+    expect(await response.json()).toEqual({ items: [], nextCursor: null });
   });
 });
 
