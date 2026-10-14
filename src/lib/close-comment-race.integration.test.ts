@@ -141,6 +141,29 @@ databaseDescribe("close/comment race in PostgreSQL", () => {
     expect(await prisma.issue.findUniqueOrThrow({ where: { id: f.issue.id }, select: { status: true } })).toMatchObject({ status: "CLOSED" });
   });
 
+  it("rejects question designation when a concurrent close wins the Issue row lock", async () => {
+    const f = await fixture();
+    const { close, mark } = await withRowLock("Issue", f.issue.id, async (tx, pid, track) => {
+      const close = track(patchIssue(request({ status: "CLOSED" }), { id: f.issue.id }));
+      await waitForBlockedTransactions(tx, pid, "Issue", 1);
+      const mark = track(patchIssue(request({ isOpenQuestion: true }), { id: f.issue.id }));
+      await waitForBlockedTransactions(tx, pid, "Issue", 2);
+      return { close, mark };
+    });
+    expect((await close).status).toBe(200);
+    expect((await mark).status).toBe(409);
+    expect(await prisma.issue.findUniqueOrThrow({ where: { id: f.issue.id }, select: { status: true, isOpenQuestion: true } })).toEqual({ status: "CLOSED", isOpenQuestion: false });
+  });
+
+  it("preserves a question marker across close and reopen", async () => {
+    const f = await fixture();
+    expect((await patchIssue(request({ isOpenQuestion: true }), { id: f.issue.id })).status).toBe(200);
+    expect((await patchIssue(request({ status: "CLOSED" }), { id: f.issue.id })).status).toBe(200);
+    expect(await prisma.issue.findUniqueOrThrow({ where: { id: f.issue.id }, select: { status: true, isOpenQuestion: true, closedAt: true, closedBy: true } })).toMatchObject({ status: "CLOSED", isOpenQuestion: true, closedBy: f.owner.id });
+    expect((await patchIssue(request({ status: "OPEN" }), { id: f.issue.id })).status).toBe(200);
+    expect(await prisma.issue.findUniqueOrThrow({ where: { id: f.issue.id }, select: { status: true, isOpenQuestion: true, closedAt: true, closedBy: true } })).toEqual({ status: "OPEN", isOpenQuestion: true, closedAt: null, closedBy: null });
+  });
+
   it("rejects a proposal comment when close commits while the comment is in flight", async () => {
     const f = await fixture();
     const { close, comment } = await withRowLock("Project", f.proposal.projectId, async (tx, pid, track) => {

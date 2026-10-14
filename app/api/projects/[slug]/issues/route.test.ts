@@ -70,13 +70,20 @@ describe("issue creation route", () => {
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.findDiscussion.mockResolvedValue({ id: "discussion" });
     mocks.createIssue.mockResolvedValue({ id: "issue", title: "Broken component", body: "Details", kind: "ISSUE", author: { id: "reporter", name: "Reporter" }, revision: null });
-    mocks.transaction.mockImplementation(async (callback) => callback({ issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } as never));
+    mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: async () => [{ id: "project" }], project: { findUnique: mocks.findProject }, issue: { create: mocks.createIssue }, notification: { create: mocks.createNotification } } as never));
   });
 
   it("requires authentication before creating an issue", async () => {
     mocks.getSession.mockResolvedValue(null);
     const response = await POST(request({ title: "Broken component", body: "Details" }), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(401);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("blocks a stale public Issue creation after the project becomes private", async () => {
+    mocks.findProject.mockResolvedValueOnce({ id: "project", ownerId: "owner", isPublic: true }).mockResolvedValueOnce({ id: "project", ownerId: "owner", isPublic: false });
+    const response = await POST(request({ title: "Late issue", body: "No" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(404);
     expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 
@@ -145,6 +152,12 @@ describe("issue creation route", () => {
     expect(await response.json()).toMatchObject({ kind: "DESIGN_REQUEST", sourceDiscussionId: "discussion" });
     expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: "DESIGN_REQUEST", sourceDiscussionId: "discussion" }) }));
     expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("does not allow issue creation to set an open-question marker", async () => {
+    const response = await POST(request({ title: "Injected marker", body: "Details", isOpenQuestion: true }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({ data: expect.not.objectContaining({ isOpenQuestion: true }) }));
   });
 
   it("rejects a design request from a non-owner", async () => {

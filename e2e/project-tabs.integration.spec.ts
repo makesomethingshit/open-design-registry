@@ -53,14 +53,74 @@ test("separates project tabs, preserves detail navigation and history, and prote
   const issueId = issuePath.split("/").at(-1)!;
   await expect(nav.getByRole("link", { name: /^Issues/ })).toHaveText("Issues 5");
   await expect(nav.getByRole("link", { name: /^Issues/ })).toHaveAttribute("aria-current", "page");
-  await page.getByLabel("Comment on A new focused issue").fill("A saved comment");
-  await page.getByRole("button", { name: "Comment", exact: true }).click();
-  await expect(page.getByText("A saved comment", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close issue", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Mark as open question", exact: true }).press("Enter");
+  await expect(page.getByRole("button", { name: "Remove from open questions", exact: true })).toBeVisible();
+  await page.goto(base);
+  const openQuestions = page.locator('section[aria-labelledby="open-questions-heading"]');
+  await expect(openQuestions.getByRole("link", { name: "A new focused issue", exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Project information" }).locator('section[aria-labelledby="open-questions-heading"]')).toHaveCount(1);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const rail = await page.getByRole("complementary", { name: "Project information" }).boundingBox();
+    const preview = await page.locator("#preview").boundingBox();
+    const questions = await openQuestions.boundingBox();
+    expect(rail).not.toBeNull();
+    expect(preview).not.toBeNull();
+    expect(questions).not.toBeNull();
+    expect(questions!.x).toBeGreaterThanOrEqual(rail!.x);
+    expect(questions!.x + questions!.width).toBeLessThanOrEqual(rail!.x + rail!.width + 1);
+    if (width === 1440) expect(rail!.x).toBeGreaterThanOrEqual(preview!.x + preview!.width);
+    else expect(rail!.y).toBeGreaterThanOrEqual(preview!.y + preview!.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`mobile-open-questions-sidebar-${width}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("mobile-open-questions-390.png"), fullPage: true });
+  const publicVisitorContext = await browser.newContext({ baseURL: origin });
+  try {
+    const publicVisitor = await publicVisitorContext.newPage();
+    await publicVisitor.setViewportSize({ width: 390, height: 844 });
+    await publicVisitor.goto(issuePath);
+    await expect(publicVisitor.getByRole("button", { name: /open question|Close issue|Reopen issue/i })).toHaveCount(0);
+    await publicVisitor.goto(base);
+    await expect(publicVisitor.locator('section[aria-labelledby="open-questions-heading"]').getByRole("link", { name: "A new focused issue", exact: true })).toBeVisible();
+
+    await page.goto(issuePath);
+    await page.getByLabel("Comment on A new focused issue").fill("A saved comment");
+    await page.getByRole("button", { name: "Comment", exact: true }).click();
+    await expect(page.getByText("A saved comment", { exact: true })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Close issue", exact: true }).press("Enter");
+    await expect(page.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
+    await page.goto(base);
+    await expect(openQuestions.getByRole("link", { name: "A new focused issue", exact: true })).toHaveCount(0);
+    await publicVisitor.goto(issuePath);
+    await expect(publicVisitor.getByText("Question resolved (issue closed)", { exact: true })).toBeVisible();
+    await expect(publicVisitor.getByRole("button", { name: /open question|Close issue|Reopen issue/i })).toHaveCount(0);
+    await publicVisitor.goto(base);
+    await expect(publicVisitor.locator('section[aria-labelledby="open-questions-heading"]').getByRole("link", { name: "A new focused issue", exact: true })).toHaveCount(0);
+
+    await page.goto(issuePath);
+    await page.getByRole("button", { name: "Reopen issue", exact: true }).press("Enter");
+    await expect(page.getByRole("button", { name: "Close issue", exact: true })).toBeVisible();
+    await page.goto(base);
+    await expect(openQuestions.getByRole("link", { name: "A new focused issue", exact: true })).toBeVisible();
+    await publicVisitor.goto(base);
+    await expect(publicVisitor.locator('section[aria-labelledby="open-questions-heading"]').getByRole("link", { name: "A new focused issue", exact: true })).toBeVisible();
+
+    // Leave the fixture closed for the existing closed-issues navigation checks below.
+    await page.goto(issuePath);
+    await page.getByRole("button", { name: "Close issue", exact: true }).press("Enter");
+    await expect(page.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
+  } finally {
+    await publicVisitorContext.close();
+  }
   await nav.getByRole("link", { name: /^Issues/ }).click();
   await page.getByRole("navigation", { name: "Issue status" }).getByRole("link", { name: "Closed", exact: true }).click();
   await expect(page.getByRole("link", { name: /A new focused issue/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /A new focused issue/ })).toContainText("Resolved question");
   await page.reload();
   await expect(page.getByRole("navigation", { name: "Issue status" }).getByRole("link", { name: "Closed", exact: true })).toHaveAttribute("aria-current", "page");
   await page.goBack();

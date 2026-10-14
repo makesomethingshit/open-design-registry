@@ -3,6 +3,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import { issueSchema } from "@/src/lib/project-validation";
+import { lockPublicProject, PrivateProjectWrite } from "@/src/lib/project-visibility-lock";
 
 const notFound = () => NextResponse.json({ error: "Project not found" }, { status: 404 });
 
@@ -52,12 +53,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const discussion = await prisma.discussion.findFirst({ where: { id: sourceDiscussionId, projectId: project.id }, select: { id: true } });
     if (!discussion) return NextResponse.json({ error: "Discussion not found in this project" }, { status: 400 });
   }
-  const issue = await prisma.$transaction(async (tx) => {
+  let issue;
+  try {
+    issue = await prisma.$transaction(async (tx) => {
+    const currentProject = await lockPublicProject(tx, project.id);
+    if (parsed.data.kind === "DESIGN_REQUEST" && currentProject.ownerId !== session.user.id) throw new PrivateProjectWrite();
     const created = await tx.issue.create({ data: { projectId: project.id, authorId: session.user.id, title: parsed.data.title, body: parsed.data.body, kind: parsed.data.kind, revisionId, sourceDiscussionId }, include: { author: { select: { id: true, name: true } }, revision: { select: { number: true } } } });
-    if (project.ownerId !== session.user.id) {
-      await tx.notification.create({ data: { recipientId: project.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: created.id } });
+    if (currentProject.ownerId !== session.user.id) {
+      await tx.notification.create({ data: { recipientId: currentProject.ownerId, actorId: session.user.id, type: "ISSUE_CREATED", projectId: project.id, issueId: created.id } });
     }
     return created;
-  });
+    });
+  } catch (cause) {
+    if (cause instanceof PrivateProjectWrite) return notFound();
+    throw cause;
+  }
   return NextResponse.json(issue, { status: 201 });
 }

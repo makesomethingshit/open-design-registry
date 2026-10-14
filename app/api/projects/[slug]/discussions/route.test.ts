@@ -32,7 +32,7 @@ describe("project discussions route", () => {
     mocks.findProject.mockResolvedValue({ id: "project", ownerId: "owner", isPublic: true });
     mocks.findDiscussions.mockResolvedValue([{ id: "discussion", title: "Navigation", createdAt: new Date(), author: { name: "Reporter" }, _count: { comments: 2 } }]);
     mocks.createDiscussion.mockResolvedValue({ id: "discussion", title: "Navigation", body: "Details", author: { name: "Reporter" } });
-    mocks.transaction.mockImplementation(async (callback) => callback({ discussion: { create: mocks.createDiscussion }, notification: { create: mocks.createNotification } } as never));
+    mocks.transaction.mockImplementation(async (callback) => callback({ $queryRaw: async () => [{ id: "project" }], project: { findUnique: mocks.findProject }, discussion: { create: mocks.createDiscussion }, notification: { create: mocks.createNotification } } as never));
   });
 
   it.each([
@@ -63,6 +63,13 @@ describe("project discussions route", () => {
     expect(response.status).toBe(201);
     expect(mocks.createDiscussion).toHaveBeenCalledWith(expect.objectContaining({ data: { projectId: "project", authorId: "reporter", title: "Navigation", body: "Details" } }));
     expect(mocks.createNotification).toHaveBeenCalledWith({ data: { recipientId: "owner", actorId: "reporter", type: "DISCUSSION_CREATED", projectId: "project", discussionId: "discussion" } });
+  });
+
+  it("rejects a discussion if the project became private before the locked write", async () => {
+    mocks.findProject.mockResolvedValueOnce({ id: "project", ownerId: "owner", isPublic: true }).mockResolvedValueOnce({ id: "project", ownerId: "owner", isPublic: false });
+    const response = await POST(request("POST", { title: "Late discussion" }), { params: Promise.resolve({ slug: "demo" }) });
+    expect(response.status).toBe(404);
+    expect(mocks.createDiscussion).not.toHaveBeenCalled();
   });
 
   it("allows the owner to create a discussion without notifying themself", async () => {

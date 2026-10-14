@@ -2,7 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { auth } from "./auth";
 import { prisma } from "./prisma";
-import { issueCommentSchema, issueStatusSchema } from "./project-validation";
+import { issueCommentSchema, issueQuestionSchema, issueStatusSchema } from "./project-validation";
+import { lockPublicProject, PrivateProjectWrite } from "./project-visibility-lock";
 
 type IssueScope = { id: string; slug?: string };
 
@@ -19,7 +20,7 @@ const issueAccess = {
 
 const commentAccess = {
   status: true,
-  project: { select: { isPublic: true } },
+  project: { select: { id: true, isPublic: true } },
 } satisfies Prisma.IssueSelect;
 
 export async function lockIssue(tx: Prisma.TransactionClient, id: string) {
@@ -51,7 +52,27 @@ export async function patchIssue(request: Request, scope: IssueScope): Promise<N
     : await prisma.issue.findUnique({ where: { id: scope.id }, select: issueAccess });
   if (!issue) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
   if (session.user.id !== issue.project.ownerId) return NextResponse.json({ error: "Only the project owner can change issue status" }, { status: issue.project.isPublic ? 403 : 404 });
-  const parsed = issueStatusSchema.safeParse(await request.json().catch(() => null));
+  const payload = await request.json().catch(() => null);
+  if (payload && typeof payload === "object" && "isOpenQuestion" in payload) {
+    const parsedQuestion = issueQuestionSchema.safeParse(payload);
+    if (!parsedQuestion.success) return NextResponse.json({ error: "isOpenQuestion must be a boolean" }, { status: 400 });
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        // Serialize with closing/reopening to avoid designating a closed Issue.
+        await lockIssue(tx, scope.id);
+        const current = await tx.issue.findUnique({ where: { id: scope.id }, select: { status: true, kind: true, project: { select: { ownerId: true, isPublic: true } } } });
+        if (!current) throw new IssueRequestError("Issue not found", 404);
+        if (current.project.ownerId !== session.user.id) throw new IssueRequestError("Only the project owner can manage open questions", current.project.isPublic ? 403 : 404);
+        if (parsedQuestion.data.isOpenQuestion && (current.kind !== "ISSUE" || current.status !== "OPEN")) throw new IssueRequestError("Only open Issues can be designated as questions", 409);
+        return tx.issue.update({ where: { id: scope.id }, data: { isOpenQuestion: parsedQuestion.data.isOpenQuestion } });
+      });
+      return NextResponse.json(updated);
+    } catch (cause) {
+      if (cause instanceof IssueRequestError) return NextResponse.json({ error: cause.message }, { status: cause.status });
+      throw cause;
+    }
+  }
+  const parsed = issueStatusSchema.safeParse(payload);
   if (!parsed.success) return NextResponse.json({ error: "Status must be OPEN or CLOSED" }, { status: 400 });
   const { status } = parsed.data;
   // Serialize with concurrent comment creation on the same Issue row so a
@@ -82,6 +103,8 @@ export async function postIssueComment(request: Request, scope: IssueScope): Pro
   // used by the close transition, so a close that committed first rejects.
   try {
     const comment = await prisma.$transaction(async (tx) => {
+      // Project before Issue: matches visibility changes without reversing lock order.
+      await lockPublicProject(tx, issue.project.id);
       await lockIssue(tx, scope.id);
       const current = await tx.issue.findUnique({ where: { id: scope.id }, select: commentAccess });
       if (!current || !current.project.isPublic) throw new IssueRequestError("Issue not found", 404);
@@ -94,6 +117,7 @@ export async function postIssueComment(request: Request, scope: IssueScope): Pro
     return NextResponse.json(comment, { status: 201 });
   } catch (cause) {
     if (cause instanceof IssueRequestError) return NextResponse.json({ error: cause.message }, { status: cause.status });
+    if (cause instanceof PrivateProjectWrite) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
     throw cause;
   }
 }
