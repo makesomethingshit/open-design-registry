@@ -220,7 +220,7 @@ function mockProjectQueries(value: ReturnType<typeof project>) {
     rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
     rows = cursorPage(rows, args);
     return args?.select?._count
-      ? rows.map(({ id, title, kind, status, createdAt, author, _count }) => ({ id, title, kind, status, createdAt, author, _count }))
+      ? rows.map(({ id, title, kind, status, isOpenQuestion, createdAt, author, _count }) => ({ id, title, kind, status, isOpenQuestion, createdAt, author, _count }))
       : args?.select ? rows.slice(0, 3).map(({ id, title, author }) => ({ id, title, author, sourceDiscussionId: null, revision: null })) : rows;
   });
   mocks.countIssues.mockResolvedValue(value.issues.filter((issue) => issue.status === "OPEN" && issue.kind !== "DESIGN_REQUEST").length);
