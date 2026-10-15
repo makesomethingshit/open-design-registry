@@ -722,7 +722,7 @@ enum CanvasAccessStatus {
 model ProjectCanvas {
   id              String @id @default(cuid())
   projectId       String
-  ownerId         String
+  ownerId         String?
   accessStatus    CanvasAccessStatus @default(PENDING)
   approvedById    String?
   approvedAt      DateTime?
@@ -731,7 +731,7 @@ model ProjectCanvas {
   updatedAt       DateTime @updatedAt
 
   project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  owner           User @relation("CanvasOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner           User? @relation("CanvasOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   approvedBy      User? @relation("CanvasApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   items           CanvasItem[]
 
