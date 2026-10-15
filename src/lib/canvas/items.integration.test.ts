@@ -27,6 +27,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     await changeCanvasAccess(slug, canvasId, ownerId, "approve");
   });
   afterEach(async () => {
+    await prisma.documentImageDeletion.deleteMany({ where: { key: { startsWith: `canvas-items/${canvasId}/` } } });
     await prisma.project.deleteMany({ where: { id: projectId } });
     await prisma.user.deleteMany({ where: { id: { in: [ownerId, authorId] } } });
   });
@@ -56,6 +57,54 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     mocks.remove.mockRejectedValueOnce(new Error("DELETE unavailable"));
     await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toBeInstanceOf(AggregateError);
     expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(0);
+  });
+  it("does not attach an upload marked for cleanup while storage was in flight", async () => {
+    mocks.put.mockImplementationOnce(async (_file, key) => { await prisma.documentImageDeletion.create({ data: { key } }); });
+    await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toMatchObject({ status: 409 });
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(0);
+  });
+
+  it("commits an attachment before a waiting revocation and preserves its public history", async () => {
+    const name = `canvas_item_gate_${crypto.randomUUID().replaceAll("-", "")}`;
+    await prisma.$executeRawUnsafe(`CREATE FUNCTION "${name}"() RETURNS trigger AS $$ BEGIN PERFORM pg_advisory_xact_lock(167, 1); RETURN NEW; END; $$ LANGUAGE plpgsql`);
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER "${name}" BEFORE INSERT ON "CanvasItem" FOR EACH ROW WHEN (NEW."canvasId" = '${canvasId}') EXECUTE FUNCTION "${name}"()`);
+    let release!: () => void, ready!: (pid: number) => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const locked = new Promise<number>((r) => { ready = r; });
+    const holder = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(167, 1)::text`;
+      const [{ pid }] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      ready(pid); await gate;
+    });
+    const waitForWaiter = async (pid: number) => {
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline) {
+        const rows = await prisma.$queryRaw<Array<{ pid: number }>>`SELECT pid FROM pg_stat_activity WHERE ${pid}::int = ANY(pg_blocking_pids(pid))`;
+        if (rows.length) return rows[0].pid;
+        await new Promise<void>((r) => setImmediate(r));
+      }
+      throw new Error("Expected production writer to wait on a PostgreSQL lock");
+    };
+    const holderPid = await locked;
+    const uploading = createCanvasItem(slug, canvasId, authorId, metadata, image());
+    void uploading.catch(() => {});
+    let revoking: ReturnType<typeof changeCanvasAccess> | undefined;
+    try {
+      const uploadPid = await waitForWaiter(holderPid);
+      revoking = changeCanvasAccess(slug, canvasId, ownerId, "revoke"); void revoking.catch(() => {});
+      await waitForWaiter(uploadPid);
+    } finally {
+      release(); await holder;
+      await Promise.allSettled([uploading, ...(revoking ? [revoking] : [])]);
+      await prisma.$executeRawUnsafe(`DROP TRIGGER "${name}" ON "CanvasItem"`);
+      await prisma.$executeRawUnsafe(`DROP FUNCTION "${name}"()`);
+    }
+    const item = await uploading;
+    expect((await revoking)?.accessStatus).toBe("REVOKED");
+    expect(await prisma.canvasItem.findUnique({ where: { id: item.id } })).not.toBeNull();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect((await getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`))).status).toBe(200);
   });
 
   it("cleans uploaded bytes if a real database insert fails", async () => {
