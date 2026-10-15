@@ -2,11 +2,19 @@ import { canvasItemImageMetadata, canvasItemTextInput, canvasImageMimeTypes, max
 import { canvasFacts, CanvasError, lockCanvas } from "./service";
 import { mayEditCanvas, mayReadCanvas } from "./access";
 import { prisma } from "../prisma";
-import { deleteObject, putObject } from "../storage";
+import { assetKeyFromStoredUrl, deleteObject, documentImageExists, getObject, putObject } from "../storage";
+import { documentImageKeyFromUrl } from "../document-image-urls.mjs";
+import { imageReferenceTransactionOptions } from "../project-document-save";
 
 export async function createCanvasItem(slug: string, canvasId: string, actorId: string, input: unknown, file?: File) {
   const parsed = (file ? canvasItemImageMetadata : canvasItemTextInput).safeParse(input);
   if (!parsed.success) throw new CanvasError(400, "Invalid Canvas item");
+  let sourceUrl = parsed.data.sourceUrl;
+  if (sourceUrl && process.env.BETTER_AUTH_URL) {
+    const source = new URL(sourceUrl);
+    if (source.origin === new URL(process.env.BETTER_AUTH_URL).origin) sourceUrl = source.pathname + source.search;
+  }
+  const sourceKey = documentImageKeyFromUrl(parsed.data.sourceUrl) ?? assetKeyFromStoredUrl(sourceUrl);
   if (file) {
     if (!canvasImageMimeTypes.has(file.type) || !file.size || file.size > maxCanvasImageBytes) throw new CanvasError(400, "PNG/JPEG image up to 10 MB required");
     const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -22,16 +30,25 @@ export async function createCanvasItem(slug: string, canvasId: string, actorId: 
   try {
     if (file && key) await putObject(file, key);
     return await prisma.$transaction(async (tx) => {
-      if (key) await tx.$queryRaw`SELECT pg_advisory_xact_lock(135, 1)::text`;
+      if (key || parsed.data.sourceUrl) await tx.$queryRaw`SELECT pg_advisory_xact_lock(135, 1)::text`;
       const { project, canvas } = await lockCanvas(tx, slug, canvasId);
       if (!mayEditCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(403, "Canvas is no longer writable");
       if (key && await tx.documentImageDeletion.findUnique({ where: { key } })) throw new CanvasError(409, "Upload expired; upload the image again");
+      if (sourceKey && (await tx.documentImageDeletion.findUnique({ where: { key: sourceKey } }) || !await documentImageExists(sourceKey))) throw new CanvasError(409, "Source image expired; upload it again");
       return tx.canvasItem.create({ data: { ...parsed.data, canvasId, authorId: actorId, assetKey: key } });
-    });
+    }, imageReferenceTransactionOptions);
   } catch (error) {
     if (key) {
-      // A rejected PUT may still have committed remotely; always attempt removal.
-      try { await deleteObject(key); } catch (cleanupError) {
+      try {
+        // Wait out an ambiguous commit before deciding whether these bytes are orphaned.
+        const unreferenced = await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(135, 1)::text`;
+          if (await tx.canvasItem.findFirst({ where: { assetKey: key }, select: { id: true } })) return false;
+          await tx.documentImageDeletion.upsert({ where: { key }, create: { key }, update: {} });
+          return true;
+        }, imageReferenceTransactionOptions);
+        if (unreferenced) await deleteObject(key);
+      } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], `Canvas upload cleanup failed for ${key}`);
       }
     }
@@ -57,7 +74,17 @@ export async function readCanvasItems(slug: string, canvasId: string, actorId: s
   });
 }
 
-export async function mayReadCanvasAsset(key: string, actorId: string | null) {
-  const references = await prisma.canvasItem.findMany({ where: { assetKey: key }, include: { canvas: { include: { project: { select: { isPublic: true, ownerId: true } } } } } });
-  return references.some(({ canvas }) => mayReadCanvas(actorId, canvasFacts(canvas.project, canvas)));
+export async function readCanvasAsset(key: string, actorId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const reference = await tx.canvasItem.findFirst({ where: { assetKey: key }, select: { canvasId: true, canvas: { select: { project: { select: { slug: true } } } } } });
+    if (!reference) return null;
+    const { project, canvas } = await lockCanvas(tx, reference.canvas.project.slug, reference.canvasId);
+    if (!mayReadCanvas(actorId, canvasFacts(project, canvas))) return null;
+    if (!await tx.canvasItem.findFirst({ where: { canvasId: canvas.id, assetKey: key }, select: { id: true } })) return null;
+    const object = await getObject(key);
+    if (!object.Body || !canvasImageMimeTypes.has(object.ContentType ?? "") || (object.ContentLength ?? 0) > maxCanvasImageBytes) return null;
+    const bytes = await object.Body.transformToByteArray();
+    if (bytes.byteLength > maxCanvasImageBytes) return null;
+    return { bytes: Buffer.from(bytes), contentType: object.ContentType! };
+  }, imageReferenceTransactionOptions);
 }

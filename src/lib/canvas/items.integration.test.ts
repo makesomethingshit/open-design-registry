@@ -17,7 +17,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
   beforeEach(async () => {
     vi.clearAllMocks(); mocks.actorId = null;
     mocks.put.mockResolvedValue("unused"); mocks.remove.mockResolvedValue(undefined);
-    mocks.get.mockResolvedValue({ Body: new Uint8Array([1]), ContentType: "image/png" });
+    mocks.get.mockResolvedValue({ Body: { transformToByteArray: async () => new Uint8Array([1]) }, ContentType: "image/png" });
     const suffix = crypto.randomUUID();
     [ownerId, authorId] = ["owner", "author"].map((role) => `canvas-item-${role}-${suffix}`);
     for (const id of [ownerId, authorId]) await prisma.user.create({ data: { id, name: id, email: `${id}@example.test` } });
@@ -63,6 +63,67 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toMatchObject({ status: 409 });
     expect(mocks.remove).toHaveBeenCalledOnce();
     expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(0);
+  });
+  it("keeps committed bytes when the transaction commit response is lost", async () => {
+    const transaction = prisma.$transaction.bind(prisma);
+    let calls = 0;
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation(async (callback, options) => {
+      const result = await transaction(callback, options);
+      if (++calls === 2) throw new Error("commit response lost");
+      return result;
+    });
+    try {
+      await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toThrow("commit response lost");
+      const item = await prisma.canvasItem.findFirstOrThrow({ where: { canvasId } });
+      expect(item.assetKey).toBe(mocks.put.mock.calls[0][1]);
+      expect(mocks.remove).not.toHaveBeenCalled();
+      expect(await prisma.documentImageDeletion.findUnique({ where: { key: item.assetKey! } })).toBeNull();
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(prisma, "$transaction", { value: transaction, configurable: true, writable: true });
+    }
+  });
+
+  it("defers deletion when the database cannot prove that an upload is unreferenced", async () => {
+    const transaction = prisma.$transaction.bind(prisma);
+    let calls = 0;
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementation(async (callback, options) => {
+      if (++calls === 2) throw new Error("database unavailable");
+      return transaction(callback, options);
+    });
+    mocks.put.mockRejectedValueOnce(new Error("ambiguous PUT"));
+    try {
+      await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toBeInstanceOf(AggregateError);
+      expect(mocks.remove).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(prisma, "$transaction", { value: transaction, configurable: true, writable: true });
+    }
+  });
+
+  it("holds the visibility lock through object buffering before a private transition", async () => {
+    const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    let release!: () => void, ready!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const buffering = new Promise<void>((r) => { ready = r; });
+    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToByteArray: async () => { ready(); await gate; return new Uint8Array([1]); } } });
+    const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+    await buffering;
+    const privatizing = prisma.project.update({ where: { id: projectId }, data: { isPublic: false } });
+    void privatizing.then(() => {});
+    try {
+      const deadline = Date.now() + 3000;
+      let blocked = false;
+      while (Date.now() < deadline) {
+        const [row] = await prisma.$queryRaw<Array<{ blocked: boolean }>>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE "public"."Project"%') AS blocked`;
+        if (row.blocked) { blocked = true; break; }
+        await new Promise<void>((r) => setImmediate(r));
+      }
+      expect(blocked).toBe(true);
+    } finally { release(); await privatizing; }
+    expect((await read).status).toBe(200);
+    const hidden = await getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+    expect(hidden.status).toBe(404);
   });
 
   it("commits an attachment before a waiting revocation and preserves its public history", async () => {
