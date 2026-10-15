@@ -790,12 +790,12 @@ model CanvasItem {
 model CanvasItemComment {
   id         String @id @default(cuid())
   itemId     String
-  authorId   String
+  authorId   String?
   body       String
   createdAt  DateTime @default(now())
 
   item       CanvasItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  author     User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author     User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([itemId, createdAt, id])
   @@index([authorId])

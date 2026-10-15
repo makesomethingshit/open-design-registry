@@ -24,4 +24,8 @@ describe("Canvas spatial and comment contracts", () => {
     });
     expect(canvasExtent([])).toBeNull();
   });
+  it("computes bounds for 250,000 items without exceeding the argument limit", () => {
+    const rects = Array.from({ length: 250_000 }, (_, i) => ({ x: -i, y: i, width: 64, height: 128, zIndex: 0 }));
+    expect(canvasExtent(rects)).toEqual({ left: -249_999, top: 0, right: 64, bottom: 250_127 });
+  });
 });

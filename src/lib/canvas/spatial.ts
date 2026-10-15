@@ -15,7 +15,7 @@ export const canvasRectSchema = z.object({
 
 export const canvasLayoutEditSchema = z.object({
   itemId: z.string().trim().min(1).max(200),
-  expectedCanvasVersion: z.number().int().nonnegative(),
+  expectedCanvasVersion: z.number().int().nonnegative().max(2_147_483_646),
   rect: canvasRectSchema,
 }).strict();
 
@@ -28,10 +28,12 @@ export type CanvasRect = z.infer<typeof canvasRectSchema>;
 
 export function canvasExtent(rects: readonly CanvasRect[]) {
   if (!rects.length) return null;
-  return {
-    left: Math.min(...rects.map((rect) => rect.x)),
-    top: Math.min(...rects.map((rect) => rect.y)),
-    right: Math.max(...rects.map((rect) => rect.x + rect.width)),
-    bottom: Math.max(...rects.map((rect) => rect.y + rect.height)),
-  };
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const rect of rects) {
+    left = Math.min(left, rect.x);
+    top = Math.min(top, rect.y);
+    right = Math.max(right, rect.x + rect.width);
+    bottom = Math.max(bottom, rect.y + rect.height);
+  }
+  return { left, top, right, bottom };
 }
