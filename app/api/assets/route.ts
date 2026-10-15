@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { assetUrl, getObject, legacyObjectUrl } from "@/src/lib/storage";
 import { documentImageProjectId } from "@/src/lib/project-document-images";
 import { renderProjectDocument } from "@/src/lib/project-document";
+import { mayReadCanvasAsset } from "@/src/lib/canvas/items";
 
 const bucket = process.env.S3_BUCKET ?? "open-design-registry";
 
@@ -49,7 +50,10 @@ export async function GET(request: Request) {
     ...previews.map(({ revision }) => revision.project),
     ...revisions.map(({ project }) => project),
   ];
-  if (!owners.some((project) => project.isPublic || project.ownerId === session?.user.id)) return notFound();
+  const canRead = key.startsWith("canvas-items/")
+    ? await mayReadCanvasAsset(key, session?.user.id ?? null)
+    : owners.some((project) => project.isPublic || project.ownerId === session?.user.id);
+  if (!canRead) return notFound();
 
   try {
     const object = await getObject(key);

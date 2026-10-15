@@ -1,0 +1,3 @@
+ALTER TABLE "CanvasItem" DROP CONSTRAINT "CanvasItem_authorId_fkey";
+ALTER TABLE "CanvasItem" ALTER COLUMN "authorId" DROP NOT NULL;
+ALTER TABLE "CanvasItem" ADD CONSTRAINT "CanvasItem_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
