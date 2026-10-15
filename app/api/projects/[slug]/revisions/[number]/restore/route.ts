@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { toPublicRevision } from "@/src/lib/revisions";
+import { notifyProjectWatchers } from "@/src/lib/project-watch-notifications";
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -56,12 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         },
       });
       const published = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
-      if (lockedProject.isPublic) {
-        const watchers = await tx.projectWatch.findMany({ where: { projectId: project.id, userId: { not: session.user.id } }, select: { userId: true } });
-        if (watchers.length) {
-          await tx.notification.createMany({ data: watchers.map(({ userId }) => ({ recipientId: userId, actorId: session.user.id, type: "REVISION_PUBLISHED" as const, projectId: project.id, revisionId: published.id })) });
-        }
-      }
+      if (lockedProject.isPublic) await notifyProjectWatchers(tx, project.id, session.user.id, { type: "REVISION_PUBLISHED", revisionId: published.id });
       return published;
     });
     return NextResponse.json(toPublicRevision(revision), { status: 201 });

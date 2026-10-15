@@ -27,6 +27,7 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children: unknown }) => createElement("a", { href }, children as never) }));
 
 const { ProjectWatchButton } = await import("./project-watch-button");
+const { ProjectRelationButton } = await import("./project-relation-button");
 
 function isElement(node: unknown): node is ReactElement<Record<string, unknown>> {
   return Boolean(node && typeof node === "object" && "type" in node && "props" in node);
@@ -50,7 +51,9 @@ function renderControl(initialWatched = false, signedIn = true) {
     hasRendered = true;
   }
   mocks.stateIndex = 0;
-  return ProjectWatchButton({ initialWatched, signedIn, slug: "demo" });
+  const relation = ProjectWatchButton({ initialWatched, signedIn, slug: "demo" });
+  if (!isElement(relation) || relation.type !== ProjectRelationButton) throw new Error("ProjectWatchButton must render ProjectRelationButton");
+  return ProjectRelationButton(relation.props as never);
 }
 
 function watchButton(tree: unknown) {
@@ -80,8 +83,10 @@ describe("ProjectWatchButton", () => {
   it("is visually distinct from the Star button", async () => {
     const { ProjectStarButton } = await import("./project-star-button");
     mocks.stateIndex = 0;
-    const starTree = ProjectStarButton({ initialStarred: false, signedIn: true, slug: "demo" });
-     const starComponent = find(starTree, (element) => element.type === Button);
+    const starRelation = ProjectStarButton({ initialStarred: false, signedIn: true, slug: "demo" });
+    if (!isElement(starRelation) || starRelation.type !== ProjectRelationButton) throw new Error("ProjectStarButton must render ProjectRelationButton");
+    const starTree = ProjectRelationButton(starRelation.props as never);
+    const starComponent = find(starTree, (element) => element.type === Button);
     expect((starComponent as ReactElement<Record<string, unknown>>).props.variant).toBe("secondary");
     const watchComponent = find(renderControl(), (element) => element.type === Button);
     expect((watchComponent as ReactElement<Record<string, unknown>>).props.variant).toBe("primary");
