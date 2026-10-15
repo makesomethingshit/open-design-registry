@@ -78,4 +78,13 @@ db("Canvas membership PostgreSQL production paths", () => {
     expect((await readCanvases(slug, null, canvas.id))[0].ownerId).toBeNull();
     await expect(changeCanvasAccess(slug, canvas.id, strangerId, "withdraw")).rejects.toMatchObject({ status: 403 });
   });
+  it("requires ownership transfer before deleting a Project owner with public Canvas history", async () => {
+    const canvas = await applyForCanvas(slug, contributorId);
+    await changeCanvasAccess(slug, canvas.id, ownerId, "approve");
+    await expect(prisma.user.delete({ where: { id: ownerId } })).rejects.toMatchObject({ code: "P2003" });
+    expect(await prisma.projectCanvas.findUnique({ where: { id: canvas.id } })).not.toBeNull();
+    await prisma.project.update({ where: { id: projectId }, data: { ownerId: strangerId } });
+    await prisma.user.delete({ where: { id: ownerId } });
+    expect(await readCanvases(slug, null, canvas.id)).toHaveLength(1);
+  });
 });
