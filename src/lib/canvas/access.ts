@@ -7,7 +7,7 @@ export type CanvasAccessStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVOKED"
 export type CanvasAccessFacts = {
   projectPublic: boolean;
   projectOwnerId: string;
-  canvasOwnerId: string;
+  canvasOwnerId: string | null;
   status: CanvasAccessStatus;
   /** Set once on first approval, never cleared by revocation/reapplication. */
   previouslyApproved: boolean;
@@ -15,7 +15,7 @@ export type CanvasAccessFacts = {
 
 export function mayReadCanvas(viewerId: string | null, facts: CanvasAccessFacts): boolean {
   if (!facts.projectPublic) return false;
-  if (viewerId === facts.projectOwnerId || viewerId === facts.canvasOwnerId) return true;
+  if (viewerId !== null && (viewerId === facts.projectOwnerId || viewerId === facts.canvasOwnerId)) return true;
   return facts.status === "APPROVED" || facts.previouslyApproved;
 }
 

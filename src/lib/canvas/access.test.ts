@@ -23,6 +23,7 @@ describe("Canvas access policy draft", () => {
     }
   });
   it("never exposes first-time applicants or a private project", () => {
+    expect(mayReadCanvas(null, { ...base, canvasOwnerId: null, status: "PENDING", previouslyApproved: false })).toBe(false);
     expect(mayReadCanvas(null, { ...base, status: "PENDING", previouslyApproved: false })).toBe(false);
     expect(mayReadCanvas("designer", { ...base, status: "PENDING", previouslyApproved: false })).toBe(true);
     for (const viewer of [null, "designer", "project-owner"]) {
