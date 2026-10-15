@@ -64,4 +64,14 @@ db("Canvas PostgreSQL + S3-compatible storage", () => {
       expect((await storage.getObject(item.assetKey!)).ContentLength).toBe(image().size);
     } finally { client.destroy(); }
   });
+  it("retains a document image referenced only by Canvas source provenance", async () => {
+    const source = `project-documents/${projectId}/${crypto.randomUUID()}.png`; keys.push(source);
+    await storage.putObject(image(), source);
+    await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "REFERENCE", body: "Reference notes", sourceUrl: storage.legacyObjectUrl(source) });
+    const client = new S3Client({ region: process.env.S3_REGION ?? "us-east-1", endpoint: process.env.S3_ENDPOINT, forcePathStyle: true, credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID!, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY! } });
+    try {
+      expect(await cleanupDocumentImages({ prisma, client, bucket: process.env.S3_BUCKET!, endpoint: process.env.S3_ENDPOINT, apply: true, now: new Date(Date.now() + 8 * 24 * 3600000), log: () => {} })).toMatchObject({ retained: 1, deleted: 0, errors: 0 });
+      expect((await storage.getObject(source)).ContentLength).toBe(image().size);
+    } finally { client.destroy(); }
+  });
 });

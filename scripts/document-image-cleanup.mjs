@@ -22,12 +22,14 @@ export function cleanupOptions(args) {
 // Conservative: even a reference in code, an unrelated document or a private
 // project retains the object. Reading protection is not a deletion criterion.
 export async function hasReference(tx, key, { bucket, endpoint, region }) {
+  // shortcut: provenance URL lookalikes retain bytes; normalize more URL forms if retention becomes costly.
   const references = await tx.$queryRawUnsafe(`
     SELECT 'document' AS kind, '' AS value WHERE EXISTS (SELECT 1 FROM "Project" WHERE document ~* $1)
     UNION ALL SELECT 'key', "sourceKey" FROM "Revision" WHERE "sourceKey" = $2
     UNION ALL SELECT 'key', key FROM "Preview" WHERE key = $2
     UNION ALL SELECT 'key', "assetKey" FROM "Change" WHERE "assetKey" = $2
     UNION ALL SELECT 'key', "assetKey" FROM "CanvasItem" WHERE "assetKey" = $2
+    UNION ALL SELECT 'canvas-source', "sourceUrl" FROM "CanvasItem" WHERE "sourceUrl" ~* $1
     UNION ALL SELECT 'url', "coverUrl" FROM "Project" WHERE "coverUrl" ~* $1
     UNION ALL SELECT 'url', url FROM "Preview" WHERE url ~* $1
     UNION ALL SELECT 'url', "sourceUrl" FROM "Revision" WHERE "sourceUrl" ~* $1
