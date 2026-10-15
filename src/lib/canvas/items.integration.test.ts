@@ -17,7 +17,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
   beforeEach(async () => {
     vi.clearAllMocks(); mocks.actorId = null;
     mocks.put.mockResolvedValue("unused"); mocks.remove.mockResolvedValue(undefined);
-    mocks.get.mockResolvedValue({ Body: { transformToByteArray: async () => new Uint8Array([1]) }, ContentType: "image/png" });
+    mocks.get.mockImplementation(async () => ({ Body: { transformToWebStream: () => new ReadableStream({ start(c) { c.enqueue(new Uint8Array([1])); c.close(); } }) }, ContentType: "image/png" }));
     const suffix = crypto.randomUUID();
     [ownerId, authorId] = ["owner", "author"].map((role) => `canvas-item-${role}-${suffix}`);
     for (const id of [ownerId, authorId]) await prisma.user.create({ data: { id, name: id, email: `${id}@example.test` } });
@@ -106,7 +106,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     let release!: () => void, ready!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
     const buffering = new Promise<void>((r) => { ready = r; });
-    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToByteArray: async () => { ready(); await gate; return new Uint8Array([1]); } } });
+    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToWebStream: () => new ReadableStream({ async pull(c) { ready(); await gate; c.enqueue(new Uint8Array([1])); c.close(); } }) } });
     const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
     await buffering;
     const privatizing = prisma.project.update({ where: { id: projectId }, data: { isPublic: false } });
@@ -124,6 +124,18 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     expect((await read).status).toBe(200);
     const hidden = await getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
     expect(hidden.status).toBe(404);
+  });
+  it.each([undefined, 1])("caps storage streams with absent or inaccurate length %s before buffering oversized bytes", async (length) => {
+    const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    const cancel = vi.fn();
+    let chunks = 0;
+    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", ContentLength: length, Body: { transformToWebStream: () => new ReadableStream({
+      pull(c) { c.enqueue(new Uint8Array(++chunks === 1 ? 10 * 1024 * 1024 : 1)); }, cancel,
+    }) } });
+    const response = await getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+    expect(response.status).toBe(404);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(chunks).toBeLessThanOrEqual(3);
   });
 
   it("commits an attachment before a waiting revocation and preserves its public history", async () => {

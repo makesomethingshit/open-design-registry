@@ -83,8 +83,18 @@ export async function readCanvasAsset(key: string, actorId: string | null) {
     if (!await tx.canvasItem.findFirst({ where: { canvasId: canvas.id, assetKey: key }, select: { id: true } })) return null;
     const object = await getObject(key);
     if (!object.Body || !canvasImageMimeTypes.has(object.ContentType ?? "") || (object.ContentLength ?? 0) > maxCanvasImageBytes) return null;
-    const bytes = await object.Body.transformToByteArray();
-    if (bytes.byteLength > maxCanvasImageBytes) return null;
-    return { bytes: Buffer.from(bytes), contentType: object.ContentType! };
+    const reader = object.Body.transformToWebStream().getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxCanvasImageBytes) { await reader.cancel(); return null; }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    return { bytes: Buffer.concat(chunks, size), contentType: object.ContentType! };
   }, imageReferenceTransactionOptions);
 }
