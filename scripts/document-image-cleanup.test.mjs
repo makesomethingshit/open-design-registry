@@ -15,7 +15,8 @@ beforeEach(() => {
     return Promise.resolve({ LastModified: old });
   }) };
 });
-const run = (options = {}) => cleanupDocumentImages({ prisma, client, bucket: "test", now, log: vi.fn(), ...options });
+// Existing fixtures represent a bucket with document objects and no Canvas objects.
+const run = (options = {}) => cleanupDocumentImages({ prisma, client: { send: (command) => command.input.Prefix === "canvas-items/" ? Promise.resolve({ Contents: [] }) : client.send(command) }, bucket: "test", now, log: vi.fn(), ...options });
 it("defaults to a seven-day dry-run and rejects unsafe or unknown options", () => {
   expect(cleanupOptions([])).toEqual({ apply: false, graceHours: 168 });
   expect(() => cleanupOptions(["--grace-hours", "0"])).toThrow();
@@ -71,4 +72,16 @@ it("follows continuation tokens without skipping pages", async () => {
   });
   expect(await run()).toMatchObject({ scanned: 1, candidates: 1 });
   expect(client.send.mock.calls[1][0].input.ContinuationToken).toBe("page2");
+});
+it("retries orphaned Canvas objects while retaining referenced and archived assets", async () => {
+  const canvasKey = "canvas-items/canvas/00000000-0000-4000-8000-000000000001.png";
+  const canvasClient = { send: vi.fn((command) => {
+    if (command.constructor.name === "ListObjectsV2Command") return Promise.resolve({ Contents: command.input.Prefix === "canvas-items/" ? [{ Key: canvasKey, LastModified: old }] : [] });
+    return Promise.resolve({ LastModified: old });
+  }) };
+  tx.$queryRawUnsafe.mockResolvedValueOnce([{ kind: "key", value: canvasKey }]);
+  expect(await run({ client: canvasClient, apply: true })).toMatchObject({ retained: 1, deleted: 0 });
+  canvasClient.send.mockImplementationOnce(() => Promise.resolve({ Contents: [] }));
+  expect(await run({ client: canvasClient, apply: true })).toMatchObject({ deleted: 1, errors: 0 });
+  expect(tx.documentImageDeletion.upsert).toHaveBeenCalledWith({ where: { key: canvasKey }, create: { key: canvasKey }, update: {} });
 });

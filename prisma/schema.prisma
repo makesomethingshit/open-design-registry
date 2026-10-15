@@ -757,7 +757,7 @@ enum CanvasItemOrigin {
 model CanvasItem {
   id          String @id @default(cuid())
   canvasId    String
-  authorId    String
+  authorId    String?
   kind        CanvasItemKind
   origin      CanvasItemOrigin @default(ORIGINAL)
   body        String?
@@ -776,7 +776,7 @@ model CanvasItem {
   updatedAt   DateTime @updatedAt
 
   canvas      ProjectCanvas @relation(fields: [canvasId], references: [id], onDelete: Cascade)
-  author      User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author      User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
   comments    CanvasItemComment[]
 
   @@index([canvasId, archivedAt, sortOrder, id])
