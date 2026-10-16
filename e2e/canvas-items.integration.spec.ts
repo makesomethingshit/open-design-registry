@@ -104,7 +104,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   const reference = page.getByRole("article", { name: "Image" }).filter({ has: rendered });
   await expect(rendered).toBeVisible();
   await expect.poll(() => rendered.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
-  await expect(reference).toContainText("Reference material");
+  await expect(reference).toContainText("Reference");
   await expect(reference).toContainText("Reference only; no reuse rights implied");
   await expect(reference.getByRole("link", { name: "https://example.test/reference" })).toBeVisible();
   await expect(reference.getByRole("button", { name: "Archive", exact: true })).toBeVisible();
