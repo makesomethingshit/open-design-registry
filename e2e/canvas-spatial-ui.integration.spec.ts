@@ -140,7 +140,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         }));
         expect(desktopDimensions.documentWidth).toBeLessThanOrEqual(desktopDimensions.viewportWidth);
         expect(desktopDimensions.boardWidth).toBeLessThanOrEqual(1440);
-        await page.screenshot({ style: "nextjs-portal { display: none !important; }", path: testInfo.outputPath(`canvas-board-desktop-1440x768-${theme}.png`) });
+        await page.screenshot({ fullPage: true, style: "nextjs-portal { display: none !important; }", path: testInfo.outputPath(`canvas-board-desktop-1440x768-${theme}.png`) });
 
         for (const width of [390, 320]) {
           await page.setViewportSize({ width, height: 844 });
@@ -153,7 +153,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
           expect(mobileDimensions.documentWidth).toBeLessThanOrEqual(mobileDimensions.viewportWidth);
           expect(mobileDimensions.boardWidth).toBeLessThanOrEqual(width);
           await expect(board.getByRole("button", { name: "Fit", exact: true })).toBeVisible();
-          await page.screenshot({ style: "nextjs-portal { display: none !important; }", path: testInfo.outputPath(`canvas-board-mobile-${width}-${theme}.png`) });
+          await page.screenshot({ fullPage: true, style: "nextjs-portal { display: none !important; }", path: testInfo.outputPath(`canvas-board-mobile-${width}-${theme}.png`) });
 
           await viewport.focus();
           const beforeMobilePan = await world.getAttribute("style");
