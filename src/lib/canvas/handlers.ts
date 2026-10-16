@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auth } from "../auth";
-import { applyForCanvas, canvasFailure, changeCanvasAccess, readCanvases } from "./service";
+import { applyForCanvas, canvasFailure, canvasView, changeCanvasAccess, readCanvases } from "./service";
 
 type Scope = { slug: string; canvasId?: string };
 const accessInput = z.object({ action: z.enum(["approve", "reject", "revoke", "withdraw"]) }).strict();
@@ -11,12 +11,19 @@ export async function canvasRequest(request: Request, { slug, canvasId }: Scope)
   try {
     if (request.method === "GET") {
       const rows = await readCanvases(slug, session?.user.id ?? null, canvasId);
-      return Response.json(canvasId ? rows[0] : rows);
+      const views = rows.map((canvas) => canvasView(canvas, session?.user.id ?? null));
+      return Response.json(canvasId ? views[0] : views);
     }
-    if (!canvasId) return Response.json(await applyForCanvas(slug, session!.user.id), { status: 200 });
+    if (!canvasId) {
+      const canvas = await applyForCanvas(slug, session!.user.id);
+      const view = (await readCanvases(slug, session!.user.id, canvas.id)).map((row) => canvasView(row, session!.user.id))[0];
+      return Response.json(view, { status: 200 });
+    }
     const parsed = accessInput.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return Response.json({ error: "Invalid access action" }, { status: 400 });
-    return Response.json(await changeCanvasAccess(slug, canvasId, session!.user.id, parsed.data.action));
+    await changeCanvasAccess(slug, canvasId, session!.user.id, parsed.data.action);
+    const view = (await readCanvases(slug, session!.user.id, canvasId)).map((row) => canvasView(row, session!.user.id))[0];
+    return Response.json(view);
   } catch (error) {
     const response = canvasFailure(error);
     if (response) return response;

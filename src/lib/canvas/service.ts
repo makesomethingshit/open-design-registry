@@ -69,11 +69,30 @@ export async function readCanvases(slug: string, actorId: string | null, canvasI
     const found = await tx.project.findUnique({ where: { slug }, select: { id: true } });
     if (!found) throw new CanvasError(404, "Project not found");
     const project = await lockPublicProject(tx, found.id);
-    const rows = await tx.projectCanvas.findMany({ where: { projectId: project.id, ...(canvasId ? { id: canvasId } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-    const readable = rows.filter((canvas) => mayReadCanvas(actorId, canvasFacts(project, canvas)));
+    const rows = await tx.projectCanvas.findMany({ where: { projectId: project.id, ...(canvasId ? { id: canvasId } : {}) }, include: { owner: { select: { name: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    const readable = rows.filter((canvas) => mayReadCanvas(actorId, canvasFacts(project, canvas))).map((canvas) => ({ ...canvas, projectOwnerId: project.ownerId }));
     if (canvasId && !readable.length) throw new CanvasError(404, "Canvas not found");
     return readable;
   });
+}
+
+export function canvasView(canvas: Awaited<ReturnType<typeof readCanvases>>[number], viewerId: string | null) {
+  const isProjectOwner = viewerId === canvas.projectOwnerId;
+  const isOwnCanvas = viewerId !== null && viewerId === canvas.ownerId;
+  const privateStatus = isProjectOwner || isOwnCanvas;
+  return {
+    id: canvas.id,
+    ownerName: canvas.owner?.name ?? "Former contributor",
+    accessStatus: privateStatus ? canvas.accessStatus : canvas.accessStatus === "APPROVED" ? "APPROVED" : "REVOKED",
+    firstApprovedAt: canvas.firstApprovedAt?.toISOString() ?? null,
+    ...("layoutVersion" in canvas && typeof canvas.layoutVersion === "number" ? { layoutVersion: canvas.layoutVersion } : {}),
+    isOwnCanvas,
+    canEdit: isOwnCanvas && canvas.accessStatus === "APPROVED",
+    canComment: viewerId !== null && canvas.accessStatus === "APPROVED",
+    canManage: isProjectOwner && !isOwnCanvas,
+    canWithdraw: isOwnCanvas && (canvas.accessStatus === "PENDING" || canvas.accessStatus === "APPROVED"),
+    canReapply: isOwnCanvas && (canvas.accessStatus === "REJECTED" || canvas.accessStatus === "REVOKED"),
+  };
 }
 
 export function canvasFailure(error: unknown): Response | null {

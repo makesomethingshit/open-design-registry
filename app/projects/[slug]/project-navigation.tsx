@@ -28,7 +28,8 @@ export default function ProjectNavigation({ slug, counts, isOwner, proposalDetai
   const router = useRouter();
   const navigation = useRef<HTMLDivElement>(null);
   const section = pathname.slice(base.length + 1).split("/")[0];
-  const currentHref = proposalDetail || section === "contribute" ? `${base}/proposals` : sections.includes(section as typeof sections[number]) || section === "settings" ? `${base}/${section}` : base;
+  const currentSection = section === "canvases" ? "discussions" : section;
+  const currentHref = proposalDetail || section === "contribute" ? `${base}/proposals` : sections.includes(currentSection as typeof sections[number]) || section === "settings" ? `${base}/${currentSection}` : base;
   useEffect(() => {
     navigation.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
   }, [currentHref]);
