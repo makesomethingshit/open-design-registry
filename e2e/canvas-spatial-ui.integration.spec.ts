@@ -13,6 +13,12 @@ test.describe("Canvas spatial detail page in a real browser", () => {
     const suffix = crypto.randomUUID();
     const ownerContext = await browser.newContext({ baseURL });
     const owner = await ownerContext.newPage();
+    const duplicateKeyWarnings: string[] = [];
+    const collectDuplicateKeyWarnings = (target: Page) => target.on("console", (message) => {
+      if (message.text().toLowerCase().includes("same key")) duplicateKeyWarnings.push(message.text());
+    });
+    collectDuplicateKeyWarnings(page);
+    collectDuplicateKeyWarnings(owner);
     let projectId: string | undefined;
     let ownerId: string | undefined;
     let authorId: string | undefined;
@@ -165,6 +171,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await expect(board.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
       await expect(board.getByRole("button", { name: "Post feedback", exact: true })).toHaveCount(0);
       await expect(board.locator("[data-drag-handle]")).toHaveCount(0);
+      expect(duplicateKeyWarnings).toEqual([]);
     } finally {
       const projectFilters = [
         ...(projectId ? [{ id: projectId }] : []),
