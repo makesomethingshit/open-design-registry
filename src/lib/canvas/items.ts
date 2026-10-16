@@ -46,6 +46,13 @@ export async function createCanvasItem(slug: string, canvasId: string, actorId: 
       while (position && occupied.some((item) => position!.x < item.x + item.width && position!.x + position!.width > item.x && position!.y < item.y + item.height && position!.y + position!.height > item.y)) {
         position = canvasInitialPosition(++itemIndex);
       }
+      if (!position) {
+        itemIndex = 0;
+        position = canvasInitialPosition(itemIndex);
+        while (position && occupied.some((item) => position!.x < item.x + item.width && position!.x + position!.width > item.x && position!.y < item.y + item.height && position!.y + position!.height > item.y)) {
+          position = canvasInitialPosition(++itemIndex);
+        }
+      }
       if (!position) throw new CanvasError(409, "Canvas has reached its initial placement limit");
       const sortOrder = occupied.reduce((maximum, item) => Math.max(maximum, item.sortOrder), -1) + 1;
       return tx.canvasItem.create({ data: {

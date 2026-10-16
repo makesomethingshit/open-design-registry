@@ -22,10 +22,12 @@ export async function editCanvasLayout(slug: string, canvasId: string, actorId: 
     const boardItems = await tx.canvasItem.findMany({ where: { canvasId }, orderBy: [{ zIndex: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
     const rest = boardItems.filter((candidate) => candidate.id !== item.id);
     const ordered = parsed.data.action === "front" ? [...rest, ...boardItems.filter((candidate) => candidate.id === item.id)] : [...boardItems.filter((candidate) => candidate.id === item.id), ...rest];
-    const items = [];
-    for (const [zIndex, candidate] of ordered.entries()) {
-      items.push(candidate.zIndex === zIndex ? candidate : await tx.canvasItem.update({ where: { id: candidate.id }, data: { zIndex }, include: { author: { select: { name: true } } } }));
-    }
+    const changed = ordered.flatMap((candidate, zIndex) => candidate.zIndex === zIndex ? [] : [{ id: candidate.id, zIndex }]);
+    if (changed.length) await tx.$executeRaw`
+      UPDATE "CanvasItem" AS item SET "zIndex" = layer."zIndex", "updatedAt" = NOW()
+      FROM jsonb_to_recordset(${JSON.stringify(changed)}::jsonb) AS layer(id text, "zIndex" integer)
+      WHERE item.id = layer.id AND item."canvasId" = ${canvasId}`;
+    const items = await tx.canvasItem.findMany({ where: { canvasId }, orderBy: [{ zIndex: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
     return { items, layoutVersion: expectedCanvasVersion + 1 };
   });
 }
@@ -43,12 +45,23 @@ export async function createCanvasComment(slug: string, canvasId: string, actorI
   });
 }
 
-export async function readCanvasComments(slug: string, canvasId: string, itemId: string, actorId: string | null) {
+export async function readCanvasComments(slug: string, canvasId: string, itemId: string, actorId: string | null, cursor?: string | null) {
+  let after: { createdAt: Date; id: string } | undefined;
+  if (cursor) {
+    try {
+      const value = JSON.parse(cursor);
+      if (typeof value.id !== "string" || !value.id || value.id.length > 200 || typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt))) throw new Error();
+      after = { id: value.id, createdAt: new Date(value.createdAt) };
+    } catch { throw new CanvasError(400, "Invalid feedback cursor"); }
+  }
   return prisma.$transaction(async (tx) => {
     const { project, canvas } = await lockCanvas(tx, slug, canvasId);
     if (!mayReadCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(404, "Canvas not found");
     const item = await tx.canvasItem.findFirst({ where: { id: itemId, canvasId } });
     if (!item) throw new CanvasError(404, "Item not found");
-    return tx.canvasItemComment.findMany({ where: { itemId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, itemId: true, body: true, createdAt: true, author: { select: { name: true } } } });
+    const rows = await tx.canvasItemComment.findMany({ take: 51, where: { itemId, ...(after ? { OR: [{ createdAt: { gt: after.createdAt } }, { createdAt: after.createdAt, id: { gt: after.id } }] } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, itemId: true, body: true, createdAt: true, author: { select: { name: true } } } });
+    const comments = rows.slice(0, 50);
+    const last = comments.at(-1);
+    return { comments, nextCursor: rows.length > 50 && last ? JSON.stringify({ createdAt: last.createdAt.toISOString(), id: last.id }) : null };
   });
 }

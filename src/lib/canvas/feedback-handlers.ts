@@ -45,7 +45,10 @@ export async function canvasFeedbackRequest(request: Request, { slug, canvasId }
     if (request.method === "GET") {
       const itemId = new URL(request.url).searchParams.get("itemId");
       if (!itemId || itemId.length > 200) return Response.json({ error: "Item ID required" }, { status: 400 });
-      return Response.json(await readCanvasComments(slug, canvasId, itemId, session?.user.id ?? null));
+      const cursor = new URL(request.url).searchParams.get("cursor");
+      if (cursor && cursor.length > 500) return Response.json({ error: "Invalid feedback cursor" }, { status: 400 });
+      const page = await readCanvasComments(slug, canvasId, itemId, session?.user.id ?? null, cursor);
+      return Response.json(page.comments, { headers: page.nextCursor ? { "x-next-cursor": page.nextCursor } : {} });
     }
     const { oversized, input } = await readFeedbackJson(request);
     if (oversized) return Response.json({ error: "Canvas feedback request exceeds the 64 KiB limit" }, { status: 413 });

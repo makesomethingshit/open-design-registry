@@ -32,13 +32,48 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
   const stack = (stackItemId: string, version: number, action: "front" | "back") => canvasFeedbackRequest(request("PATCH", { itemId: stackItemId, expectedCanvasVersion: version, action }), { slug, canvasId });
   const comment = () => canvasFeedbackRequest(request("POST", { itemId, body: "Improve contrast" }), { slug, canvasId });
 
+  it("paginates tied timestamps without duplicates and enforces visibility on every page", async () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    await prisma.canvasItemComment.createMany({ data: Array.from({ length: 105 }, (_, index) => ({ id: `${itemId}-${String(index).padStart(3, "0")}`, itemId, body: `Comment ${index}`, createdAt })) });
+    const first = await readCanvasComments(slug, canvasId, itemId, null);
+    const second = await readCanvasComments(slug, canvasId, itemId, null, first.nextCursor);
+    const third = await readCanvasComments(slug, canvasId, itemId, null, second.nextCursor);
+    expect([first.comments.length, second.comments.length, third.comments.length]).toEqual([50, 50, 5]);
+    expect(new Set([...first.comments, ...second.comments, ...third.comments].map((entry) => entry.id)).size).toBe(105);
+    expect(third.nextCursor).toBeNull();
+    const response = await canvasFeedbackRequest(new Request(`http://localhost?itemId=${itemId}`), { slug, canvasId });
+    expect((await response.json()).length).toBe(50);
+    expect(response.headers.get("x-next-cursor")).toBe(first.nextCursor);
+    await expect(readCanvasComments(slug, canvasId, itemId, null, "broken")).rejects.toMatchObject({ status: 400 });
+    await prisma.project.update({ where: { id: projectId }, data: { isPublic: false } });
+    await expect(readCanvasComments(slug, canvasId, itemId, null, first.nextCursor)).rejects.toThrow("Project is no longer public");
+  });
+
+  it("reorders a thousand layers with one SQL update", async () => {
+    await prisma.canvasItem.createMany({ data: Array.from({ length: 1000 }, (_, index) => ({ id: `${itemId}-layer-${index}`, canvasId, kind: "TEXT" as const, origin: "ORIGINAL" as const, body: "Layer", zIndex: index + 1 })) });
+    const original = prisma.$transaction.bind(prisma);
+    let updateCount = 0;
+    prisma.$transaction = (async (callback: any, options: any) => original(async (tx) => {
+      const execute = tx.$executeRaw.bind(tx);
+      return callback(new Proxy(tx, { get(target, key) {
+        if (key === "$executeRaw") return (...args: any[]) => { updateCount++; return (execute as any)(...args); };
+        return Reflect.get(target, key);
+      } }));
+    }, options)) as typeof prisma.$transaction;
+    try {
+      const result = await editCanvasLayout(slug, canvasId, authorId, { itemId, expectedCanvasVersion: 0, action: "front" });
+      expect(updateCount).toBe(1);
+      expect("items" in result && result.items?.at(-1)).toMatchObject({ id: itemId, zIndex: 1000 });
+    } finally { prisma.$transaction = original; }
+  });
+
   it("atomically increments once for two competing versions and returns HTTP 409 for the loser", async () => {
     await createCanvasComment(slug, canvasId, viewerId, { itemId, body: "Stable identity" });
     const results = await Promise.all([layout(), layout()]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
     expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 1 });
     expect(await prisma.canvasItem.findUnique({ where: { id: itemId } })).toMatchObject(rect);
-    expect(await readCanvasComments(slug, canvasId, itemId, null)).toMatchObject([{ itemId, body: "Stable identity" }]);
+    expect((await readCanvasComments(slug, canvasId, itemId, null)).comments).toMatchObject([{ itemId, body: "Stable identity" }]);
     expect((await layout()).status).toBe(409);
     expect((await layout(1)).status).toBe(200);
   });
@@ -154,13 +189,13 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
 
   it("preserves comments after archival and anonymizes deleted authors", async () => {
     const created = await createCanvasComment(slug, canvasId, authorId, { itemId, body: "My feedback" });
-    const publicComments = await readCanvasComments(slug, canvasId, itemId, null);
+    const publicComments = (await readCanvasComments(slug, canvasId, itemId, null)).comments;
     expect(publicComments[0]).toMatchObject({ id: created.id, itemId, body: "My feedback", author: { name: authorId } });
     expect(publicComments[0]).not.toHaveProperty("authorId");
     await archiveCanvasItem(slug, canvasId, itemId, authorId);
     expect((await comment()).status).toBe(409);
     await prisma.user.delete({ where: { id: authorId } });
-    expect(await readCanvasComments(slug, canvasId, itemId, null)).toMatchObject([{ id: created.id, itemId, body: "My feedback", author: null }]);
+    expect((await readCanvasComments(slug, canvasId, itemId, null)).comments).toMatchObject([{ id: created.id, itemId, body: "My feedback", author: null }]);
     expect(await prisma.canvasItem.findUnique({ where: { id: itemId } })).toMatchObject({ authorId: null });
     expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ ownerId: null });
   });

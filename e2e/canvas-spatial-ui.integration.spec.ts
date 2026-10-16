@@ -64,6 +64,8 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       };
       page.on("request", countUnchanged);
       await moveHandle.click();
+      await board.getByLabel("X position", { exact: true }).fill("040");
+      await board.getByRole("button", { name: "Save layout", exact: true }).click();
       await immediateDrag(page, board.locator(`[data-item-id="${moveItem.id}"] [data-resize-handle]`), 0, 0);
       await board.getByRole("button", { name: "Fit", exact: true }).click();
       await expect.poll(async () => (await prisma.projectCanvas.findUniqueOrThrow({ where: { id: canvasId } })).layoutVersion).toBe(beforeClick.layoutVersion);
@@ -102,6 +104,69 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         return actual.every((value, index) => Math.abs(value - expected[index]) < 0.01);
       }, persistedGeometry)).toBe(true);
 
+      // A committed archive with a damaged response must refresh both panels.
+      for (const failure of ["json", "network"]) {
+        const lostItem = await prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Lost archive response", x: 0, y: 0 } });
+        await page.reload();
+        await board.getByLabel("Select an item").selectOption(lostItem.id);
+        const lostUrl = `**/items/${lostItem.id}`;
+        await page.route(lostUrl, async (route) => {
+          await route.fetch();
+          if (failure === "network") await route.abort("failed");
+          else await route.fulfill({ status: 200, contentType: "application/json", body: "{" });
+        });
+        await board.getByRole("button", { name: "Archive selected item", exact: true }).click();
+        await expect(board.getByText("Archived item · comments stay with this item", { exact: true })).toBeVisible();
+        await expect(page.getByRole("region", { name: "Canvas items", exact: true }).locator("article[data-archived=true]").filter({ hasText: "Lost archive response" })).toHaveCount(1);
+        await page.unroute(lostUrl);
+        await prisma.canvasItem.delete({ where: { id: lostItem.id } });
+      }
+
+      await prisma.canvasItemComment.createMany({ data: Array.from({ length: 55 }, (_, index) => ({ itemId: moveItem.id, body: `Paged feedback ${index}`, createdAt: new Date("2026-01-01") })) });
+      await page.reload();
+      await board.getByLabel("Select an item").selectOption(moveItem.id);
+      await expect(board.getByRole("list", { name: `Feedback for item ${moveItem.id}` }).locator("li")).toHaveCount(50);
+      await board.getByRole("button", { name: "Load more feedback", exact: true }).click();
+      await expect(board.getByRole("list", { name: `Feedback for item ${moveItem.id}` }).locator("li")).toHaveCount(55);
+      await prisma.canvasItemComment.deleteMany({ where: { itemId: moveItem.id } });
+
+      // Hold an old cancellation reload until a newer reload has applied.
+      let releaseOld!: () => void;
+      let oldReady!: () => void;
+      const oldGate = new Promise<void>((resolve) => { releaseOld = resolve; });
+      const oldCaptured = new Promise<void>((resolve) => { oldReady = resolve; });
+      let itemReads = 0;
+      const itemsPattern = `**/canvases/${canvasId}/items`;
+      await page.route(itemsPattern, async (route) => {
+        if (route.request().method() !== "GET" || ++itemReads !== 1) return route.continue();
+        const response = await route.fetch();
+        oldReady();
+        await oldGate;
+        await route.fulfill({ response });
+      });
+      const cancelReload = async () => {
+        const handle = board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`);
+        await handle.scrollIntoViewIfNeeded();
+        const box = await handle.boundingBox();
+        if (!box) throw new Error("Missing reload handle");
+        await page.mouse.move(box.x + 10, box.y + 10); await page.mouse.down();
+        await page.evaluate(() => window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1 })));
+        await page.mouse.up();
+      };
+      await cancelReload();
+      await oldCaptured;
+      await prisma.canvasItem.update({ where: { id: moveItem.id }, data: { x: moved.x + 7 } });
+      await cancelReload();
+      await expect.poll(() => reentered.evaluate((el) => parseFloat((el as HTMLElement).style.left))).toBeCloseTo(moved.x + 7, 2);
+      const oldResponse = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(`/canvases/${canvasId}/items`));
+      releaseOld();
+      await oldResponse;
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect.poll(() => reentered.evaluate((el) => parseFloat((el as HTMLElement).style.left))).toBeCloseTo(moved.x + 7, 2);
+      await page.unroute(itemsPattern);
+      await prisma.canvasItem.update({ where: { id: moveItem.id }, data: { x: moved.x } });
+      await page.reload();
+
       for (const selector of ["[data-drag-handle]", "[data-resize-handle]"]) {
         const handle = reentered.locator(selector);
         const before = await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } });
@@ -110,7 +175,9 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         if (!box) throw new Error("Missing cancellation handle");
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
         await page.mouse.down();
-        await page.evaluate(() => {
+        await handle.evaluate((element) => {
+          element.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 2, pointerType: "touch", bubbles: true }));
+          window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 2 }));
           window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 500, clientY: 500 }));
           window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1 }));
         });
@@ -172,7 +239,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await board.getByRole("button", { name: "Archive selected item", exact: true }).click();
       expect((await archiveSelected).status()).toBe(200);
       await expect(board.getByText("Archived item · comments stay with this item", { exact: true })).toBeVisible();
-      const archiveInPanel = page.getByRole("region", { name: "Canvas items" }).getByRole("article", { name: "Note, archived" }).filter({ hasText: "Archive target" });
+      const archiveInPanel = page.getByRole("region", { name: "Canvas items", exact: true }).getByRole("article", { name: "Note, archived" }).filter({ hasText: "Archive target" });
       await expect(archiveInPanel).toContainText("Archived. This item and its attribution remain in the Canvas history.");
       await expect(viewport.locator(`[data-item-id="${archiveItem.id}"]`)).toBeVisible();
       await board.getByRole("button", { name: "Hide archived items", exact: true }).click();
@@ -274,7 +341,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await viewport.hover({ position: { x: viewportBox.width - 8, y: viewportBox.height / 2 } });
       await page.mouse.wheel(0, -100);
       await expect.poll(() => world.getAttribute("style")).not.toBe(wheelView);
-      const composer = page.getByRole("region", { name: "Canvas items" });
+      const composer = page.getByRole("region", { name: "Canvas items", exact: true });
       await board.getByLabel("Select an item").selectOption(resizeItem.id);
       await board.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Keep my feedback draft");
       await board.getByRole("button", { name: "Zoom in", exact: true }).click();
@@ -388,6 +455,9 @@ async function immediateDrag(page: Page, handle: import("@playwright/test").Loca
   await handle.evaluate((element, { x, y, dx, dy }) => {
     element.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 1, clientX: x, clientY: y, bubbles: true }));
     window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x + dx, clientY: y + dy, bubbles: true }));
+    element.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 2, pointerType: "touch", clientX: x, clientY: y, bubbles: true }));
+    window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 2, clientX: x + 300, clientY: y + 300 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 2 }));
     window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, clientX: x + dx, clientY: y + dy, bubbles: true }));
   }, { x, y, dx, dy });
   await page.mouse.up();

@@ -84,6 +84,14 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     expect(await prisma.canvasItem.findUnique({ where: { id: customizedItem.id }, select: { x: true, y: true } })).toEqual({ x: 123, y: 0 });
     expect(await prisma.canvasItem.findFirst({ where: { canvasId: customized.id, body: "Keep sibling at origin" }, select: { x: true, y: true } })).toEqual({ x: 0, y: 0 });
   });
+  it("reuses an early empty slot when all later initial slots are blocked", async () => {
+    await prisma.canvasItem.create({ data: { canvasId, kind: "TEXT", origin: "ORIGINAL", body: "Block later slots", x: 0, y: 260, width: 8192, height: 1_000_000 } });
+    // Skip the four early slots via the item count, while keeping them geometrically empty.
+    await prisma.canvasItem.createMany({ data: Array.from({ length: 3 }, () => ({ canvasId, kind: "TEXT" as const, origin: "ORIGINAL" as const, body: "Off grid", x: -1000, y: -1000 })) });
+    const item = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Fits early" });
+    expect(item).toMatchObject({ x: 0, y: 0 });
+  });
+
   it("places new items in distinct grid slots without changing existing custom geometry", async () => {
     const existing = await prisma.canvasItem.create({ data: {
       canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Customized legacy item",

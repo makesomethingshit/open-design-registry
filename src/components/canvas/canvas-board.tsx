@@ -78,13 +78,17 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const interaction = useRef<Interaction | null>(null);
   const viewport = useRef<HTMLDivElement>(null);
 
+  const reloadGeneration = useRef(0);
+  const [commentCursor, setCommentCursor] = useState<string | null>(null);
   const reload = useCallback(async () => {
+    const generation = ++reloadGeneration.current;
     const canvasResponse = await fetch(`/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}`);
     if (!canvasResponse.ok) throw new Error("This Canvas is unavailable.");
     const canvas = await canvasResponse.json() as { layoutVersion: number };
     const itemsResponse = await fetch(itemUrl(slug, canvasId));
     if (!itemsResponse.ok) throw new Error("This Canvas is unavailable.");
     const nextItems = await itemsResponse.json() as CanvasItem[];
+    if (generation !== reloadGeneration.current) return;
     setVersion(canvas.layoutVersion);
     versionRef.current = canvas.layoutVersion;
     setItems(nextItems);
@@ -107,6 +111,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   }, [selected?.id, selected?.x, selected?.y, selected?.width, selected?.height]);
   useEffect(() => {
     setComments([]);
+    setCommentCursor(null);
     setDraft("");
     if (!selected) return;
     const controller = new AbortController();
@@ -114,15 +119,35 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load feedback for this item.");
         const result = await response.json() as CanvasComment[];
-        if (selectedIdRef.current === selected.id) setComments(result);
+        if (!controller.signal.aborted && selectedIdRef.current === selected.id) {
+          setComments(result);
+          setCommentCursor(response.headers.get("x-next-cursor"));
+        }
       })
       .catch((cause: unknown) => { if (!controller.signal.aborted && selectedIdRef.current === selected.id) setError(cause instanceof Error ? cause.message : "Could not load feedback."); });
     return () => controller.abort();
   }, [slug, canvasId, selected?.id]);
 
+  const loadMoreComments = async () => {
+    if (!selected || !commentCursor || busyRef.current) return;
+    const itemId = selected.id;
+    busyRef.current = true; setBusy(true);
+    try {
+      const response = await fetch(`${feedbackUrl(slug, canvasId)}?itemId=${encodeURIComponent(itemId)}&cursor=${encodeURIComponent(commentCursor)}`);
+      if (!response.ok) throw new Error("Could not load more feedback.");
+      const result = await response.json() as CanvasComment[];
+      if (selectedIdRef.current === itemId) {
+        setComments((current) => [...current, ...result.filter((entry) => !current.some((existing) => existing.id === entry.id))]);
+        setCommentCursor(response.headers.get("x-next-cursor"));
+      }
+    } catch (cause) { if (selectedIdRef.current === itemId) setError(cause instanceof Error ? cause.message : "Could not load more feedback."); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
   const saveRect = useCallback(async (itemId: string, rect: Pick<CanvasItem, "x" | "y" | "width" | "height" | "zIndex">) => {
     if (!canEdit || busyRef.current) return false;
     busyRef.current = true;
+    ++reloadGeneration.current;
     setBusy(true);
     setError("");
     try {
@@ -143,10 +168,11 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   }, [slug, canvasId, reload, canEdit]);
 
   const begin = (event: ReactPointerEvent<HTMLElement>, next: Interaction) => {
-    if (busyRef.current || (next.kind !== "pan" && !canEdit)) return;
+    if (interaction.current || busyRef.current || (next.kind !== "pan" && !canEdit)) return;
     if (next.kind !== "pan") setSelectedId(next.itemId);
     event.preventDefault();
     event.stopPropagation();
+    ++reloadGeneration.current;
     interaction.current = next;
     viewport.current?.setPointerCapture(event.pointerId);
   };
@@ -210,6 +236,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     const nextDrafts = Object.fromEntries(geometryKeys.map((key) => [key, String(rect[key])])) as GeometryDraft;
     numberDraftsRef.current = nextDrafts;
     setNumberDrafts(nextDrafts);
+    if (geometryKeys.every((key) => rect[key] === selected[key])) return;
     setItems((current) => current.map((item) => item.id === selected.id ? { ...item, ...rect } : item));
     void saveRect(selected.id, { ...rect, zIndex: selected.zIndex });
   };
@@ -217,6 +244,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const changeZ = async (action: "front" | "back") => {
     if (!selected || !canEdit || busyRef.current || selected.archivedAt) return;
     busyRef.current = true;
+    ++reloadGeneration.current;
     setBusy(true);
     setError("");
     try {
@@ -243,6 +271,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const archiveItem = async (itemId: string) => {
     if (!canEdit || busyRef.current) return;
     busyRef.current = true;
+    ++reloadGeneration.current;
     setBusy(true);
     setError("");
     try {
@@ -252,7 +281,12 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       setItems((current) => current.map((item) => item.id === archived.id ? { ...item, ...archived, author: archived.author ?? item.author } : item));
       setShowArchived(true);
       onArchive?.();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not archive this item."); }
+    } catch (cause) {
+      await reload().catch(() => {});
+      setShowArchived(true);
+      onArchive?.();
+      setError(cause instanceof Error ? cause.message : "Could not archive this item.");
+    }
     finally { busyRef.current = false; setBusy(false); }
   };
 
@@ -291,6 +325,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     const submittedDraft = draft;
     if (busyRef.current) return;
     busyRef.current = true;
+    ++reloadGeneration.current;
     setBusy(true); setError("");
     try {
       let response: Response;
@@ -417,6 +452,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
           <ol className={styles.comments} aria-label={`Feedback for item ${selected.id}`}>
             {comments.map((comment) => <li key={comment.id}><strong>{comment.author?.name ?? "Designer"}</strong><p>{comment.body}</p><time dateTime={comment.createdAt}>{new Date(comment.createdAt).toLocaleString()}</time></li>)}
           </ol>
+          {commentCursor && <Button variant="secondary" disabled={busy} onClick={() => void loadMoreComments()}>Load more feedback</Button>}
           {canComment && !selected.archivedAt ? <form className={styles.commentForm} onSubmit={submitComment}>
             <Field id="canvas-feedback" label="Add feedback" required>
               <Textarea maxLength={10000} required value={draft} onChange={(event) => setDraft(event.target.value)} />
