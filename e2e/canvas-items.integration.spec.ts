@@ -101,7 +101,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await page.getByRole("button", { name: "Add item", exact: true }).focus();
   await page.keyboard.press("Enter");
   const rendered = panel.getByRole("img", { name: "One pixel reference image" });
-  const reference = panel.getByRole("article", { name: "Image" }).filter({ has: rendered });
+  const reference = panel.getByRole("article", { name: "Image" }).filter({ hasText: "Reference only; no reuse rights implied" });
   await expect(rendered).toBeVisible();
   await expect.poll(() => rendered.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
   await expect(reference).toContainText("Reference");
