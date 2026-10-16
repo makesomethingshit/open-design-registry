@@ -19,6 +19,12 @@ describe("project route navigation", () => {
     expect(html).toContain('href="/projects/demo/settings"');
     expect(html).toMatch(/aria-current="page"[^>]*href="\/projects\/demo\/proposals"/);
   });
+  it("marks Canvas details as part of Discussions without adding a top-level tab", () => {
+    state.pathname = "/projects/demo/canvases/canvas1";
+    const html = renderToStaticMarkup(<ProjectNavigation counts={counts} isOwner={false} slug="demo" />);
+    expect(html).toMatch(/aria-current="page"[^>]*href="\/projects\/demo\/discussions"/);
+    expect(html).not.toContain('href="/projects/demo/canvases"');
+  });
   it("preserves old section/filter and contribution return URLs", () => {
     expect(legacyProjectDestination("/projects/demo", "?proposalStatus=closed", "#proposals")).toBe("/projects/demo/proposals?proposalStatus=closed#proposals");
     expect(legacyProjectDestination("/projects/demo", "?proposalStatus=closed", "")).toBe("/projects/demo/proposals?proposalStatus=closed");

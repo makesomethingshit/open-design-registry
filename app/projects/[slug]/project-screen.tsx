@@ -17,12 +17,14 @@ import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import { prisma } from "@/src/lib/prisma";
+import { canvasView, readCanvases } from "@/src/lib/canvas/service";
 import IssueBoard from "./issue-board";
 import ProjectDocument from "./project-document";
 import ProjectAbout from "./project-about";
 import ProjectSettingsForm from "./project-settings-form";
 import ProposalList, { type ProposalListItem } from "./proposal-list";
 import RevisionPublishForm from "./revision-publish-form";
+import { CanvasMembership } from "./canvases/canvas-membership";
 import styles from "./project.module.css";
 
 export default async function ProjectScreen({ params, searchParams, view = "overview" }: { view?: ProjectView; params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; issueStatus?: string; publish?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string; pageSize?: string; cursor?: string }> }) {
@@ -62,7 +64,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     ? await prisma.project.findFirst({ where: { slug: cursor, forkedFromProjectId: base.id, isPublic: true }, select: { slug: true } })
     : null;
   const forkCursorQuery: { cursor?: { slug: string }; skip?: number } = forkCursor ? { cursor: { slug: forkCursor.slug }, skip: 1 } : {};
-  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests, openQuestions] = await Promise.all([
+  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests, openQuestions, canvasRows] = await Promise.all([
     view === "revisions"
       ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, ...cursorQuery, take: pageSize + 1, select: revisionHistorySelect })
       : view === "new-issue"
@@ -95,6 +97,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     view === "overview"
       ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "ISSUE", isOpenQuestion: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 3, select: { id: true, title: true, sourceDiscussionId: true, revision: { select: { number: true, isPublished: true } } } })
       : Promise.resolve([]),
+    view === "discussions" ? readCanvases(slug, session?.user.id ?? null) : Promise.resolve([]),
   ]);
   const revisions = view === "new-issue" ? revisionRows : revisionRows.slice(0, pageSize);
   const releases = releaseRows.slice(0, pageSize);
@@ -221,6 +224,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       </li>)}</ul> : <p className={styles.muted}>No discussions yet.</p>}
       <p className={styles.discussionSort}>Newest discussions first</p>
       <ProjectListPagination cursor={cursor} label="Discussion" nextCursor={discussionNextCursor} pageSize={pageSize} slug={project.slug} view="discussions" />
+      <CanvasMembership canvases={canvasRows.map((canvas) => canvasView(canvas, session?.user.id ?? null))} embedded isProjectOwner={session?.user.id === project.ownerId} signedIn={Boolean(session)} slug={slug} />
     </section>}
 
     {view === "issues" && <section aria-labelledby="issues-heading" className={styles.section} id="issues">

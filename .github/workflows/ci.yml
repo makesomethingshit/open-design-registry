@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main, fix-project-document-overview, feat/canvas-a-membership, feat/canvas-b-items]
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
     inputs:
       ref:
@@ -122,7 +122,7 @@ jobs:
       - run: npm run build
 
   e2e:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       S3_ENDPOINT: http://127.0.0.1:9000
@@ -169,10 +169,12 @@ jobs:
           RUN_DOCUMENT_IMAGE_CLEANUP_TEST: "1"
       - run: npm run test:e2e
       # Browser reports and traces can contain session tokens; keep them off public artifacts.
-      - name: Upload participation screen evidence
+      - name: Upload browser screen evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: participation-screenshots
-          path: test-results/**/mobile-*.png
+          name: browser-screenshots
+          path: |
+            test-results/**/mobile-*.png
+            test-results/**/canvas-*.png
           retention-days: 7
