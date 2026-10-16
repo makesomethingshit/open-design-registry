@@ -25,13 +25,15 @@ const mocks = vi.hoisted(() => ({
   findStarCount: vi.fn(),
   findWatchCount: vi.fn(),
   headerActions: vi.fn(),
+  readCanvases: vi.fn().mockResolvedValue([]),
+  readCanvasPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
 }));
 
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), usePathname: () => "/projects/demo", useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, findFirst: mocks.findForkCursor, findMany: mocks.findForks }, revision: { findMany: mocks.findRevisions, count: mocks.countRevisions }, release: { findMany: mocks.findReleases }, issue: { findMany: mocks.findIssues, count: mocks.countIssues }, discussion: { findMany: mocks.findDiscussions }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
-vi.mock("@/src/lib/canvas/service", () => ({ readCanvases: vi.fn().mockResolvedValue([]), canvasView: vi.fn() }));
+vi.mock("@/src/lib/canvas/service", () => ({ readCanvases: mocks.readCanvases, readCanvasPage: mocks.readCanvasPage, canvasView: vi.fn() }));
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
 vi.mock("@/src/lib/revision-bundle", () => ({ publicBundleFiles: () => [], readRevisionBundle: mocks.readBundle }));
@@ -317,6 +319,15 @@ describe("Project Releases section", () => {
 });
 
 describe("Project Discussions section", () => {
+
+  it("does not read public Canvases while an owner views a private project's Discussions", async () => {
+    const privateProject = project();
+    privateProject.isPublic = false;
+    mocks.readCanvasPage.mockResolvedValue({ items: [], nextCursor: null });
+
+    await expect(renderProjectPage({ user: { id: "owner" } }, privateProject, 0, 0, "discussions")).resolves.not.toContain('id="canvases"');
+    expect(mocks.readCanvasPage).not.toHaveBeenCalled();
+  });
 
   it("shows summary rows with title, author, created time, and comment count", async () => {
     const markup = await renderProjectPage(null, project(), 0, 0, "discussions");

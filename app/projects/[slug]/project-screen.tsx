@@ -17,7 +17,7 @@ import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import { prisma } from "@/src/lib/prisma";
-import { canvasView, readCanvases } from "@/src/lib/canvas/service";
+import { canvasView, readCanvasPage } from "@/src/lib/canvas/service";
 import IssueBoard from "./issue-board";
 import ProjectDocument from "./project-document";
 import ProjectAbout from "./project-about";
@@ -97,7 +97,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     view === "overview"
       ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "ISSUE", isOpenQuestion: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 3, select: { id: true, title: true, sourceDiscussionId: true, revision: { select: { number: true, isPublished: true } } } })
       : Promise.resolve([]),
-    view === "discussions" ? readCanvases(slug, session?.user.id ?? null) : Promise.resolve([]),
+    view === "discussions" && base.isPublic ? readCanvasPage(slug, session?.user.id ?? null) : Promise.resolve({ items: [], nextCursor: null }),
   ]);
   const revisions = view === "new-issue" ? revisionRows : revisionRows.slice(0, pageSize);
   const releases = releaseRows.slice(0, pageSize);
@@ -224,7 +224,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       </li>)}</ul> : <p className={styles.muted}>No discussions yet.</p>}
       <p className={styles.discussionSort}>Newest discussions first</p>
       <ProjectListPagination cursor={cursor} label="Discussion" nextCursor={discussionNextCursor} pageSize={pageSize} slug={project.slug} view="discussions" />
-      <CanvasMembership canvases={canvasRows.map((canvas) => canvasView(canvas, session?.user.id ?? null))} embedded isProjectOwner={session?.user.id === project.ownerId} signedIn={Boolean(session)} slug={slug} />
+      {project.isPublic && <CanvasMembership canvases={canvasRows.items.map((canvas) => canvasView(canvas, session?.user.id ?? null))} embedded isProjectOwner={session?.user.id === project.ownerId} nextCursor={canvasRows.nextCursor} signedIn={Boolean(session)} slug={slug} />}
     </section>}
 
     {view === "issues" && <section aria-labelledby="issues-heading" className={styles.section} id="issues">
