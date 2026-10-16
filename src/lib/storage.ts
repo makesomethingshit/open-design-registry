@@ -29,8 +29,8 @@ export async function deleteObject(key: string) {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
-export async function getObject(key: string) {
-  return client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+export async function getObject(key: string, abortSignal?: AbortSignal) {
+  return client.send(new GetObjectCommand({ Bucket: bucket, Key: key }), abortSignal ? { abortSignal } : undefined);
 }
 
 export async function documentImageExists(key: string, abortSignal = AbortSignal.timeout(5000)) {

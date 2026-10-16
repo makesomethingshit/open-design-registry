@@ -27,6 +27,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     await changeCanvasAccess(slug, canvasId, ownerId, "approve");
   });
   afterEach(async () => {
+    await prisma.moderationAssetBlock.deleteMany({ where: { key: { startsWith: `canvas-items/${canvasId}/` } } });
     await prisma.documentImageDeletion.deleteMany({ where: { key: { startsWith: `canvas-items/${canvasId}/` } } });
     await prisma.project.deleteMany({ where: { id: projectId } });
     await prisma.user.deleteMany({ where: { id: { in: [ownerId, authorId] } } });
@@ -101,7 +102,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     }
   });
 
-  it("holds the visibility lock through object buffering before a private transition", async () => {
+  it("releases project and Canvas locks during a delayed read and rejects after a private transition", async () => {
     const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
     let release!: () => void, ready!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
@@ -109,21 +110,67 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToWebStream: () => new ReadableStream({ async pull(c) { ready(); await gate; c.enqueue(new Uint8Array([1])); c.close(); } }) } });
     const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
     await buffering;
-    const privatizing = prisma.project.update({ where: { id: projectId }, data: { isPublic: false } });
-    void privatizing.then(() => {});
-    try {
-      const deadline = Date.now() + 3000;
-      let blocked = false;
-      while (Date.now() < deadline) {
-        const [row] = await prisma.$queryRaw<Array<{ blocked: boolean }>>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE "public"."Project"%') AS blocked`;
-        if (row.blocked) { blocked = true; break; }
-        await new Promise<void>((r) => setImmediate(r));
-      }
-      expect(blocked).toBe(true);
-    } finally { release(); await privatizing; }
+    await expect(prisma.project.update({ where: { id: projectId }, data: { isPublic: false } })).resolves.toMatchObject({ isPublic: false });
+    release();
+    expect((await read).status).toBe(404);
+  });
+  it("lets a revocation finish during a delayed read and preserves public read-only history", async () => {
+    const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    let release!: () => void, ready!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const fetching = new Promise<void>((r) => { ready = r; });
+    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToWebStream: () => new ReadableStream({ async pull(c) { ready(); await gate; c.enqueue(new Uint8Array([1])); c.close(); } }) } });
+    const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+    await fetching;
+    await expect(changeCanvasAccess(slug, canvasId, ownerId, "revoke")).resolves.toMatchObject({ accessStatus: "REVOKED" });
+    release();
     expect((await read).status).toBe(200);
-    const hidden = await getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
-    expect(hidden.status).toBe(404);
+  });
+  it("rechecks moderation after a delayed storage read", async () => {
+    const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    let release!: () => void, ready!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const fetching = new Promise<void>((r) => { ready = r; });
+    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToWebStream: () => new ReadableStream({ async pull(c) { ready(); await gate; c.enqueue(new Uint8Array([1])); c.close(); } }) } });
+    const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+    await fetching;
+    await prisma.moderationAssetBlock.create({ data: { key: item.assetKey!, reportId: crypto.randomUUID(), blockedById: ownerId, reason: "Concurrent moderation" } });
+    release();
+    expect((await read).status).toBe(404);
+  });
+
+  it("times out delayed storage headers and cancels the response body that arrives afterward", async () => {
+    const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    let resolveFetch!: (object: unknown) => void;
+    mocks.get.mockReturnValueOnce(new Promise((resolve) => { resolveFetch = resolve; }));
+    const nativeSetTimeout = globalThis.setTimeout;
+    const timeout = vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback: TimerHandler, delay = 0, ...args: unknown[]) =>
+      nativeSetTimeout(callback, delay === 10_000 ? 10 : delay, ...args)) as typeof setTimeout);
+    const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+    try {
+      await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledOnce());
+      expect((await read).status).toBe(404);
+    } finally { timeout.mockRestore(); }
+    const lateCancel = vi.fn();
+    resolveFetch({ ContentType: "image/png", Body: { transformToWebStream: () => new ReadableStream({ cancel: lateCancel }) } });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(lateCancel).toHaveBeenCalledOnce();
+  });
+  it("times out a storage body that stalls while buffering", async () => {
+    const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    let streamStarted!: () => void;
+    const started = new Promise<void>((resolve) => { streamStarted = resolve; });
+    const cancel = vi.fn();
+    mocks.get.mockResolvedValueOnce({ ContentType: "image/png", Body: { transformToWebStream: () => new ReadableStream({ pull() { streamStarted(); return new Promise<void>(() => {}); }, cancel }) } });
+    const nativeSetTimeout = globalThis.setTimeout;
+    const timeout = vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback: TimerHandler, delay = 0, ...args: unknown[]) =>
+      nativeSetTimeout(callback, delay === 10_000 ? 10 : delay, ...args)) as typeof setTimeout);
+    try {
+      const read = getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey!)}`));
+      await started;
+      expect((await read).status).toBe(404);
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally { timeout.mockRestore(); }
   });
   it.each([undefined, 1])("caps storage streams with absent or inaccurate length %s before buffering oversized bytes", async (length) => {
     const item = await createCanvasItem(slug, canvasId, authorId, metadata, image());
