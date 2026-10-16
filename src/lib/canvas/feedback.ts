@@ -49,6 +49,6 @@ export async function readCanvasComments(slug: string, canvasId: string, itemId:
     if (!mayReadCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(404, "Canvas not found");
     const item = await tx.canvasItem.findFirst({ where: { id: itemId, canvasId } });
     if (!item) throw new CanvasError(404, "Item not found");
-    return tx.canvasItemComment.findMany({ where: { itemId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
+    return tx.canvasItemComment.findMany({ where: { itemId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, itemId: true, body: true, createdAt: true, author: { select: { name: true } } } });
   });
 }

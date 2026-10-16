@@ -1,6 +1,6 @@
 # Contributor Canvas C — spatial board and item feedback (#132)
 
-**Status: DRAFT; the spatial workspace is integrated in the Canvas detail route and its focused Chromium UI test passes.** Based on PR #167 / #166. Stacked browser regressions and CI are still pending.
+The spatial workspace is integrated in the Canvas detail route, based on PR #167 / #166. Full browser coverage exercises membership, items, pointer and keyboard layout editing, feedback, retention and responsive themes. The PR body records results and exact-SHA CI links.
 
 ## Contract
 - Miro-like freely positioned 2D work surface, with predictable selection, pan/zoom, fit/reset and keyboard/mobile alternatives. No vector editor, connector engine, multiplayer cursors or general-purpose object merging.

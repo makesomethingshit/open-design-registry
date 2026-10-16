@@ -137,10 +137,13 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
 
   it("preserves comments after archival and anonymizes deleted authors", async () => {
     const created = await createCanvasComment(slug, canvasId, authorId, { itemId, body: "My feedback" });
+    const publicComments = await readCanvasComments(slug, canvasId, itemId, null);
+    expect(publicComments[0]).toMatchObject({ id: created.id, itemId, body: "My feedback", author: { name: authorId } });
+    expect(publicComments[0]).not.toHaveProperty("authorId");
     await archiveCanvasItem(slug, canvasId, itemId, authorId);
     expect((await comment()).status).toBe(409);
     await prisma.user.delete({ where: { id: authorId } });
-    expect(await readCanvasComments(slug, canvasId, itemId, null)).toMatchObject([{ id: created.id, itemId, authorId: null, body: "My feedback", author: null }]);
+    expect(await readCanvasComments(slug, canvasId, itemId, null)).toMatchObject([{ id: created.id, itemId, body: "My feedback", author: null }]);
     expect(await prisma.canvasItem.findUnique({ where: { id: itemId } })).toMatchObject({ authorId: null });
     expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ ownerId: null });
   });
