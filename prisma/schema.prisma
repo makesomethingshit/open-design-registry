@@ -39,6 +39,7 @@ model User {
   rightsDeclarations RevisionRightsDeclaration[]
   designRequestParticipations DesignRequestParticipation[]
   ownedCanvases ProjectCanvas[] @relation("CanvasOwner")
+  canvasItems CanvasItem[]
   canvasApprovals ProjectCanvas[] @relation("CanvasApprover")
 }
 
@@ -732,8 +733,45 @@ model ProjectCanvas {
   project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   owner           User? @relation("CanvasOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   approvedBy      User? @relation("CanvasApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  items           CanvasItem[]
 
   @@unique([projectId, ownerId])
   @@index([projectId, accessStatus])
   @@index([ownerId])
+}
+
+
+// Mutable discussion artifacts, not immutable Revision files.
+enum CanvasItemKind {
+  IMAGE
+  TEXT
+}
+
+enum CanvasItemOrigin {
+  ORIGINAL
+  REFERENCE
+}
+
+model CanvasItem {
+  id          String @id @default(cuid())
+  canvasId    String
+  authorId    String?
+  kind        CanvasItemKind
+  origin      CanvasItemOrigin @default(ORIGINAL)
+  body        String?
+  assetKey    String?
+  altText     String?
+  sourceUrl   String?
+  rightsNote  String?
+  sortOrder   Int @default(0)
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  canvas      ProjectCanvas @relation(fields: [canvasId], references: [id], onDelete: Cascade)
+  author      User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([canvasId, archivedAt, sortOrder, id])
+  @@index([authorId])
+  @@index([assetKey])
 }

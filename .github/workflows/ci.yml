@@ -167,6 +167,10 @@ jobs:
         run: npx vitest run scripts/document-image-cleanup.integration.test.mjs
         env:
           RUN_DOCUMENT_IMAGE_CLEANUP_TEST: "1"
+      - name: Verify Canvas assets against PostgreSQL and MinIO
+        run: npx vitest run src/lib/canvas/storage.integration.test.ts
+        env:
+          RUN_CANVAS_STORAGE_TEST: "1"
       - run: npm run test:e2e
       # Browser reports and traces can contain session tokens; keep them off public artifacts.
       - name: Upload browser screen evidence

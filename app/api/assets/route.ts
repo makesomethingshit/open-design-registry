@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { assetUrl, getObject, legacyObjectUrl } from "@/src/lib/storage";
 import { documentImageProjectId } from "@/src/lib/project-document-images";
 import { renderProjectDocument } from "@/src/lib/project-document";
+import { readCanvasAsset } from "@/src/lib/canvas/items";
 
 const bucket = process.env.S3_BUCKET ?? "open-design-registry";
 
@@ -31,6 +32,12 @@ export async function GET(request: Request) {
   const storedUrls = new Set<string>([assetUrl(key), legacyObjectUrl(key), key, ...(hasUrl ? [requestedUrl!] : [])]);
 
   const session = await auth.api.getSession({ headers: request.headers });
+  if (key.startsWith("canvas-items/")) {
+    try {
+      const object = await readCanvasAsset(key, session?.user.id ?? null);
+      return object ? new NextResponse(object.bytes as unknown as BodyInit, { headers: { "Content-Type": object.contentType, "Content-Length": String(object.bytes.byteLength), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } }) : notFound();
+    } catch { return notFound(); }
+  }
   const imageProjectId = documentImageProjectId(key);
   const [projects, previews, revisions, documentProject] = await Promise.all([
     prisma.project.findMany({ where: { coverUrl: { in: [...storedUrls] } }, select: { isPublic: true, ownerId: true } }),
