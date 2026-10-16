@@ -20,10 +20,11 @@ export type CanvasView = {
   layoutVersion?: number;
 };
 
-type Props = { slug: string; canvases: CanvasView[]; signedIn: boolean; isProjectOwner: boolean; embedded?: boolean };
+type Props = { slug: string; canvases: CanvasView[]; signedIn: boolean; isProjectOwner: boolean; embedded?: boolean; nextCursor?: string | null };
 
-export function CanvasMembership({ slug, canvases, signedIn, isProjectOwner, embedded = false }: Props) {
+export function CanvasMembership({ slug, canvases, signedIn, isProjectOwner, embedded = false, nextCursor }: Props) {
   const ownCanvas = canvases.find((canvas) => canvas.isOwnCanvas);
+  const ownerNeedsActivation = isProjectOwner && ownCanvas && ownCanvas.accessStatus !== "APPROVED";
   return <section aria-labelledby="canvases-heading" className={`${styles.page}${embedded ? ` ${styles.embedded}` : ""}`} id={embedded ? "canvases" : undefined}>
     {!embedded && <nav aria-label="Project collaboration" className={styles.subnav}>
       <Link href={`/projects/${slug}/discussions`}>Discussions</Link>
@@ -31,15 +32,20 @@ export function CanvasMembership({ slug, canvases, signedIn, isProjectOwner, emb
     </nav>}
     <header className={styles.header}>
       <div><p className={styles.eyebrow}>Collaboration</p><h2 id="canvases-heading">Canvases</h2><p className={styles.intro}>Each designer has a separate Canvas. Approved work and its retained history stay readable; only an approved owner can edit their Canvas.</p></div>
-      {!ownCanvas && (signedIn
-        ? <CanvasAction slug={slug} label={isProjectOwner ? "Create my Canvas" : "Apply for a Canvas"} action="apply" primary />
-        : <Link className={styles.primaryAction} href={`/login?next=${encodeURIComponent(`/projects/${slug}/discussions#canvases`)}`}>Sign in to apply</Link>)}
+      <div className={styles.actions}>
+        {embedded && <Link href={`/projects/${slug}/canvases`}>View all Canvases</Link>}
+        {!ownCanvas && (signedIn
+          ? <CanvasAction slug={slug} label={isProjectOwner ? "Create my Canvas" : "Apply for a Canvas"} action="apply" primary />
+          : <Link className={styles.primaryAction} href={`/login?next=${encodeURIComponent(`/projects/${slug}/discussions#canvases`)}`}>Sign in to apply</Link>)}
+        {ownerNeedsActivation && <CanvasAction slug={slug} label="Activate my Canvas" action="apply" primary />}
+      </div>
     </header>
-    {canvases.length ? <ul className={styles.list}>{canvases.map((canvas) => <CanvasRow canvas={canvas} key={canvas.id} slug={slug} />)}</ul> : <p className={styles.muted}>{isProjectOwner ? "Create your Canvas or invite a designer to apply. No applications are waiting." : "No approved Canvases yet. Apply to start your own."}</p>}
+    {canvases.length ? <ul className={styles.list}>{canvases.map((canvas) => <CanvasRow canvas={canvas} hideReapply={Boolean(ownerNeedsActivation && canvas.isOwnCanvas)} key={canvas.id} slug={slug} />)}</ul> : <p className={styles.muted}>{isProjectOwner ? "Create your Canvas or invite a designer to apply. No applications are waiting." : "No approved Canvases yet. Apply to start your own."}</p>}
+    {!embedded && nextCursor && <nav aria-label="Canvas pages" className={styles.actions}><Link href={`/projects/${slug}/canvases?cursor=${encodeURIComponent(nextCursor)}`}>Next page of Canvases</Link></nav>}
   </section>;
 }
 
-function CanvasRow({ canvas, slug }: { canvas: CanvasView; slug: string }) {
+function CanvasRow({ canvas, slug, hideReapply = false }: { canvas: CanvasView; slug: string; hideReapply?: boolean }) {
   const publicHistory = !canvas.isOwnCanvas && !canvas.canManage && canvas.firstApprovedAt !== null && canvas.accessStatus === "REVOKED";
   const privateApplication = canvas.firstApprovedAt === null && (canvas.accessStatus === "PENDING" || canvas.accessStatus === "REJECTED");
   const status = privateApplication
@@ -58,7 +64,7 @@ function CanvasRow({ canvas, slug }: { canvas: CanvasView; slug: string }) {
       {canvas.canManage && canvas.accessStatus === "PENDING" && <><CanvasAction action="approve" canvasId={canvas.id} label="Approve" slug={slug} /><CanvasAction action="reject" canvasId={canvas.id} label="Reject" slug={slug} /></>}
       {canvas.canManage && canvas.accessStatus === "APPROVED" && <CanvasAction action="revoke" canvasId={canvas.id} label="Revoke access" slug={slug} />}
       {canvas.canWithdraw && <CanvasAction action="withdraw" canvasId={canvas.id} label={canvas.accessStatus === "APPROVED" ? "Withdraw access" : "Withdraw application"} slug={slug} />}
-      {canvas.canReapply && <CanvasAction action="apply" label="Reapply" primary slug={slug} />}
+      {canvas.canReapply && !hideReapply && <CanvasAction action="apply" label="Reapply" primary slug={slug} />}
     </div>
   </li>;
 }
