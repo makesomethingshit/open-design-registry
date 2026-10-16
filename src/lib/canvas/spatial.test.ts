@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasCommentInputSchema, canvasExtent, canvasLayoutEditSchema, canvasRectSchema } from "./spatial";
+import { canvasCommentInputSchema, canvasExtent, canvasLayerEditSchema, canvasLayoutEditSchema, canvasLayoutOperationSchema, canvasRectSchema } from "./spatial";
 
 const rect = { x: -240, y: 150, width: 400, height: 300, zIndex: 2 };
 
@@ -13,6 +13,11 @@ describe("Canvas spatial and comment contracts", () => {
     expect(canvasLayoutEditSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: 0, rect }).success).toBe(true);
     expect(canvasLayoutEditSchema.safeParse({ itemId: "item-1", rect }).success).toBe(false);
     expect(canvasLayoutEditSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: -1, rect }).success).toBe(false);
+    expect(canvasLayerEditSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: 0, action: "front" }).success).toBe(true);
+    expect(canvasLayerEditSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: 0, action: "back" }).success).toBe(true);
+    expect(canvasLayoutOperationSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: 0, rect }).success).toBe(true);
+    expect(canvasLayoutOperationSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: 0, action: "front" }).success).toBe(true);
+    expect(canvasLayoutOperationSchema.safeParse({ itemId: "item-1", expectedCanvasVersion: 0, action: "sideways" }).success).toBe(false);
   });
   it("keeps feedback bound to item ID and rejects empty comments", () => {
     expect(canvasCommentInputSchema.safeParse({ itemId: "item-1", body: " Improve spacing " }).success).toBe(true);

@@ -19,6 +19,14 @@ export const canvasLayoutEditSchema = z.object({
   rect: canvasRectSchema,
 }).strict();
 
+export const canvasLayerEditSchema = z.object({
+  itemId: z.string().trim().min(1).max(200),
+  expectedCanvasVersion: z.number().int().nonnegative().max(2_147_483_646),
+  action: z.enum(["front", "back"]),
+}).strict();
+
+export const canvasLayoutOperationSchema = z.union([canvasLayoutEditSchema, canvasLayerEditSchema]);
+
 export const canvasCommentInputSchema = z.object({
   itemId: z.string().trim().min(1).max(200),
   body: z.string().trim().min(1).max(10_000),

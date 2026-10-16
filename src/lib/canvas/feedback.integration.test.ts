@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../prisma";
 import { applyForCanvas, changeCanvasAccess } from "./service";
 import { archiveCanvasItem, createCanvasItem } from "./items";
-import { createCanvasComment, readCanvasComments } from "./feedback";
+import { createCanvasComment, editCanvasLayout, readCanvasComments } from "./feedback";
 import { canvasFeedbackRequest } from "./feedback-handlers";
 
 const session = vi.hoisted(() => ({ actorId: null as string | null }));
@@ -29,6 +29,7 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
   });
   const request = (method: string, body: unknown) => new Request("http://localhost", { method, body: JSON.stringify(body) });
   const layout = (version = 0, overrides = {}) => canvasFeedbackRequest(request("PATCH", { itemId, expectedCanvasVersion: version, rect, ...overrides }), { slug, canvasId });
+  const stack = (stackItemId: string, version: number, action: "front" | "back") => canvasFeedbackRequest(request("PATCH", { itemId: stackItemId, expectedCanvasVersion: version, action }), { slug, canvasId });
   const comment = () => canvasFeedbackRequest(request("POST", { itemId, body: "Improve contrast" }), { slug, canvasId });
 
   it("atomically increments once for two competing versions and returns HTTP 409 for the loser", async () => {
@@ -50,6 +51,54 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
       await expect(layout()).rejects.toThrow("layout persistence failed");
       expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 0 });
       expect(await prisma.canvasItem.findUnique({ where: { id: itemId } })).toMatchObject({ x: 0, y: 0 });
+    } finally {
+      await prisma.$executeRawUnsafe(`DROP TRIGGER "${name}" ON "CanvasItem"`);
+      await prisma.$executeRawUnsafe(`DROP FUNCTION "${name}"()`);
+    }
+  });
+
+  it("applies a stack operation in one versioned write and returns complete authored items", async () => {
+    const second = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "REFERENCE", body: "Second item", sourceUrl: "https://example.org/source", rightsNote: "Shared with permission" });
+    await prisma.canvasItem.update({ where: { id: second.id }, data: { zIndex: 8 } });
+
+    const response = await stack(second.id, 0, "back");
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.layoutVersion).toBe(1);
+    expect(result.items.map((item: { id: string; zIndex: number }) => [item.id, item.zIndex])).toEqual([[second.id, 0], [itemId, 1]]);
+    expect(result.items[0]).toMatchObject({
+      id: second.id, kind: "TEXT", origin: "REFERENCE", body: "Second item", sourceUrl: "https://example.org/source",
+      rightsNote: "Shared with permission", author: { name: authorId },
+    });
+    expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 1 });
+  });
+
+  it("serializes a stack operation against a simultaneous rectangle save", async () => {
+    const stacked = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Stacked" });
+    const results = await Promise.all([stack(stacked.id, 0, "front"), layout()]);
+    expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 1 });
+    const stackWon = results[0].status === 200;
+    expect(await prisma.canvasItem.findUnique({ where: { id: stacked.id }, select: { zIndex: true } })).toMatchObject({ zIndex: stackWon ? 1 : 0 });
+    expect(await prisma.canvasItem.findUnique({ where: { id: itemId }, select: { zIndex: true, x: true } })).toMatchObject(stackWon ? { zIndex: 0, x: 0 } : { zIndex: 3, x: rect.x });
+
+    const retry = await stack(stacked.id, 1, "back");
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).layoutVersion).toBe(2);
+  });
+
+  it("rolls back every z-index update and the version when a middle stack update fails", async () => {
+    const second = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Second item" });
+    await prisma.canvasItem.update({ where: { id: second.id }, data: { zIndex: 8 } });
+    const name = `canvas_stack_fail_${crypto.randomUUID().replaceAll("-", "")}`;
+    await prisma.$executeRawUnsafe(`CREATE FUNCTION "${name}"() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'stack persistence failed'; END; $$ LANGUAGE plpgsql`);
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER "${name}" BEFORE UPDATE ON "CanvasItem" FOR EACH ROW WHEN (NEW.id = '${itemId}') EXECUTE FUNCTION "${name}"()`);
+    try {
+      await expect(editCanvasLayout(slug, canvasId, authorId, { itemId: second.id, expectedCanvasVersion: 0, action: "back" })).rejects.toThrow("stack persistence failed");
+      expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 0 });
+      expect(await prisma.canvasItem.findMany({ where: { id: { in: [itemId, second.id] } }, orderBy: { id: "asc" }, select: { id: true, zIndex: true } })).toEqual(
+        expect.arrayContaining([{ id: itemId, zIndex: 0 }, { id: second.id, zIndex: 8 }]),
+      );
     } finally {
       await prisma.$executeRawUnsafe(`DROP TRIGGER "${name}" ON "CanvasItem"`);
       await prisma.$executeRawUnsafe(`DROP FUNCTION "${name}"()`);

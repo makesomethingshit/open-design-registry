@@ -1,0 +1,60 @@
+.boardSection { display: grid; gap: var(--odr-space-3); min-width: 0; }
+.canvasPage { display: grid; gap: var(--odr-space-4); min-width: 0; padding-block: var(--odr-space-4); }
+.canvasPage > a { color: var(--odr-accent); text-decoration: underline; text-underline-offset: 0.15em; }
+.canvasPage > header { display: grid; gap: var(--odr-space-1); }
+.canvasPage > header p, .canvasPage > header h1 { margin: 0; }
+.canvasPage > header p { color: var(--odr-text-muted); font-size: var(--odr-font-label); }
+.canvasPage > header h1 { color: var(--odr-text-primary); font-size: var(--odr-font-title); line-height: var(--odr-line-title); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--odr-space-3); }
+.zoomControls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--odr-space-2); }
+.zoomControls button, .numericFields button, .commentForm button { min-height: var(--odr-touch-target); }
+.zoomControls output { min-width: 3.5rem; color: var(--odr-text-muted); text-align: center; font-variant-numeric: tabular-nums; }
+.boardState, .version { color: var(--odr-text-muted); font-size: var(--odr-font-label); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 18rem; gap: var(--odr-space-3); min-width: 0; }
+.viewport { position: relative; min-width: 0; height: min(68vh, 48rem); min-height: 24rem; overflow: hidden; border: 1px solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background-color: var(--odr-surface-subtle); background-image: radial-gradient(var(--odr-border-default) 1px, transparent 1px); background-size: 20px 20px; touch-action: none; cursor: grab; }
+.viewport:active { cursor: grabbing; }
+.world { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; transform-origin: 0 0; will-change: transform; }
+.item { position: absolute; display: flex; flex-direction: column; min-width: 4rem; min-height: 4rem; overflow: auto; border: 2px solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); color: var(--odr-text-primary); box-shadow: var(--odr-shadow-card); cursor: default; }
+.item:focus-visible { outline: var(--odr-focus-width) solid var(--odr-accent); outline-offset: var(--odr-focus-offset); }
+.selected { border-color: var(--odr-accent); box-shadow: 0 0 0 2px var(--odr-accent-soft); }
+.dragHandle { flex: 0 0 auto; justify-content: flex-start; min-height: 2.5rem; border: 0; border-bottom: 1px solid var(--odr-border-subtle); border-radius: 0; background: var(--odr-surface-subtle); color: var(--odr-text-secondary); text-align: left; touch-action: none; cursor: move; }
+.cardBody { display: grid; align-content: start; gap: var(--odr-space-2); min-height: 0; overflow: auto; padding: var(--odr-space-3); }
+.cardKind, .itemBody, .rightsNote { margin: 0; overflow-wrap: anywhere; }
+.cardKind, .rightsNote { color: var(--odr-text-muted); font-size: var(--odr-font-caption); line-height: var(--odr-line-caption); }
+.itemBody { color: var(--odr-text-primary); font-size: var(--odr-font-body); line-height: var(--odr-line-body); white-space: pre-wrap; }
+.cardBody a { color: var(--odr-accent); overflow-wrap: anywhere; }
+.itemImage { display: block; width: 100%; max-height: 12rem; object-fit: contain; background: var(--odr-surface-subtle); }
+.readOnly { margin: 0; color: var(--odr-text-muted); font-size: var(--odr-font-caption); }
+.resizeHandle { position: absolute; right: 0; bottom: 0; width: 2.75rem; height: 2.75rem; border: 0; border-radius: 0.5rem 0 0 0; background: var(--odr-accent); clip-path: polygon(100% 0, 100% 100%, 0 100%); cursor: nwse-resize; touch-action: none; }
+.feedback { display: grid; align-content: start; gap: var(--odr-space-3); min-width: 0; max-height: min(68vh, 48rem); overflow: auto; padding: var(--odr-space-4); border: 1px solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
+.feedbackHeader { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--odr-space-2); }
+.feedback h2, .feedback h3, .layoutPanel h2 { margin: 0; font-size: var(--odr-font-section); line-height: var(--odr-line-section); overflow-wrap: anywhere; }
+.feedbackHeader span, .empty, .comments time { color: var(--odr-text-muted); font-size: var(--odr-font-caption); }
+.feedback h3 { font-size: var(--odr-font-body); }
+.empty { margin: 0; }
+.comments { display: grid; gap: var(--odr-space-3); padding: 0; margin: 0; list-style: none; }
+.comments li { min-width: 0; padding-top: var(--odr-space-3); border-top: 1px solid var(--odr-border-subtle); overflow-wrap: anywhere; }
+.comments p { margin: var(--odr-space-1) 0; white-space: pre-wrap; }
+.comments time { display: block; }
+.commentForm { display: grid; gap: var(--odr-space-2); }
+.commentForm textarea { min-width: 0; }
+.commentForm button:disabled, .numericFields button:disabled { cursor: not-allowed; opacity: 0.6; }
+.layoutPanel { display: grid; gap: var(--odr-space-3); min-width: 0; padding: var(--odr-space-4); border: 1px solid var(--odr-border-default); border-radius: var(--odr-radius-panel); background: var(--odr-surface-panel); }
+.numericFields { display: flex; flex-wrap: wrap; align-items: end; gap: var(--odr-space-2); }
+.numericFields label { display: grid; gap: var(--odr-space-1); min-width: 6rem; color: var(--odr-text-muted); font-size: var(--odr-font-caption); }
+.numericFields input { font-variant-numeric: tabular-nums; }
+.version { margin: 0; }
+.error { margin: 0; padding: var(--odr-space-3); border-radius: var(--odr-radius-control); background: var(--odr-danger-bg); color: var(--odr-danger-fg); overflow-wrap: anywhere; }
+.archivedToggle { justify-self: start; min-height: var(--odr-touch-target); padding-inline: var(--odr-space-3); border: 1px solid var(--odr-border-control); border-radius: var(--odr-radius-control); background: var(--odr-control-bg); color: var(--odr-control-fg); font: inherit; }
+@media (max-width: 55rem) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .feedback { max-height: none; }
+}
+@media (max-width: 25rem) {
+  .viewport { height: 52vh; min-height: 16rem; }
+  .zoomControls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .zoomControls button { width: 100%; }
+  .boardState { width: 100%; }
+  .numericFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .numericFields > button { width: 100%; }
+}
