@@ -50,6 +50,7 @@ type Props = {
   readOnlyLabel?: string;
   renderItem?: (props: CanvasItemCardProps) => ReactNode;
   onArchive?: () => void;
+  refreshRevision?: number;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -57,7 +58,7 @@ const itemUrl = (slug: string, canvasId: string) => `/api/projects/${encodeURICo
 const feedbackUrl = (slug: string, canvasId: string) => `/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}/comments`;
 const layoutUrl = (slug: string, canvasId: string) => `/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}/layout`;
 
-export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel, renderItem, onArchive }: Props) {
+export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel, renderItem, onArchive, refreshRevision = 0 }: Props) {
   const [items, setItems] = useState<CanvasItem[]>([]);
   const [comments, setComments] = useState<CanvasComment[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -91,6 +92,12 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
 
   useEffect(() => { void reload().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load this Canvas.")); }, [reload]);
 
+  const refreshedRevision = useRef(0);
+  useEffect(() => {
+    if (busy || refreshedRevision.current === refreshRevision) return;
+    refreshedRevision.current = refreshRevision;
+    void reload().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not refresh this Canvas."));
+  }, [refreshRevision, busy, reload]);
   const selected = items.find((item) => item.id === selectedId) ?? null;
   useEffect(() => {
     if (!selected) return;
@@ -165,6 +172,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       if (!active || active.pointerId !== event.pointerId) return;
       interaction.current = null;
       if (active.kind === "pan") return;
+      if (!active.latest || geometryKeys.every((key) => active.latest![key] === active.rect[key])) return;
       const item = items.find((candidate) => candidate.id === active.itemId);
       if (item) {
         const rect = active.latest ?? active.rect;
@@ -267,6 +275,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   };
 
   const wheelZoom = (event: WheelEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest("[data-item-id]")) return;
     event.preventDefault();
     const box = viewport.current?.getBoundingClientRect();
     if (!box) return;

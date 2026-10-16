@@ -44,7 +44,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
 
       const [moveItem, resizeItem, archiveItem] = await Promise.all([
         prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "REFERENCE", body: "Move target", sourceUrl: "https://example.org/reference", rightsNote: "Used with permission", x: 40, y: 45, width: 240, height: 180, zIndex: 0 } }),
-        prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Resize target", x: 360, y: 75, width: 220, height: 170, zIndex: 1 } }),
+        prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Resize target " + "Long scrollable note. ".repeat(80), x: 360, y: 75, width: 220, height: 170, zIndex: 1 } }),
         prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Archive target", x: 3_000, y: 1_800, width: 220, height: 170, zIndex: 2 } }),
       ]);
       const detailPath = `/projects/${slug}/canvases/${canvasId}`;
@@ -57,6 +57,19 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       await board.getByRole("button", { name: "Fit", exact: true }).click();
       const moveHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`);
+      const beforeClick = await prisma.projectCanvas.findUniqueOrThrow({ where: { id: canvasId } });
+      let unchangedWrites = 0;
+      const countUnchanged = (request: import("@playwright/test").Request) => {
+        if (new URL(request.url()).pathname.endsWith("/layout") && request.method() === "PATCH") unchangedWrites++;
+      };
+      page.on("request", countUnchanged);
+      await moveHandle.click();
+      await immediateDrag(page, board.locator(`[data-item-id="${moveItem.id}"] [data-resize-handle]`), 0, 0);
+      await board.getByRole("button", { name: "Fit", exact: true }).click();
+      await expect.poll(async () => (await prisma.projectCanvas.findUniqueOrThrow({ where: { id: canvasId } })).layoutVersion).toBe(beforeClick.layoutVersion);
+      expect(unchangedWrites).toBe(0);
+      page.off("request", countUnchanged);
+      expect((await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } })).updatedAt).toEqual(moveItem.updatedAt);
       const moveSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
       const moveZoom = await board.locator("[data-testid=canvas-world]").evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
       await immediateDrag(page, moveHandle, 72, 48);
@@ -249,6 +262,36 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       const ownerBoard = owner.getByRole("region", { name: "Canvas board" });
       await expect(ownerBoard.getByRole("region", { name: /Spatial Canvas/ })).toBeVisible();
       await expect(ownerBoard.getByLabel("Select an item").locator("option")).toHaveCount(4);
+      await board.getByRole("button", { name: "Fit", exact: true }).click();
+      const scrollCard = board.locator(`[data-item-id="${resizeItem.id}"]`);
+      const wheelView = await world.getAttribute("style");
+      await scrollCard.hover();
+      await page.mouse.wheel(0, 250);
+      await expect.poll(() => scrollCard.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      expect(await world.getAttribute("style")).toBe(wheelView);
+      const viewportBox = await viewport.boundingBox();
+      if (!viewportBox) throw new Error("Missing viewport");
+      await viewport.hover({ position: { x: viewportBox.width - 8, y: viewportBox.height / 2 } });
+      await page.mouse.wheel(0, -100);
+      await expect.poll(() => world.getAttribute("style")).not.toBe(wheelView);
+      const composer = page.getByRole("region", { name: "Canvas items" });
+      await board.getByLabel("Select an item").selectOption(resizeItem.id);
+      await board.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Keep my feedback draft");
+      await board.getByRole("button", { name: "Zoom in", exact: true }).click();
+      const keptView = await world.getAttribute("style");
+      await composer.getByRole("textbox", { name: "Note", exact: true }).fill("Refresh without remount");
+      await composer.getByRole("button", { name: "Add item", exact: true }).click();
+      const added = composer.getByRole("article", { name: "Note", exact: true }).filter({ hasText: "Refresh without remount" });
+      await expect(added).toBeVisible();
+      await expect(board.locator("[data-item-id]").filter({ hasText: "Refresh without remount" })).toHaveCount(1);
+      await expect(board.getByRole("textbox", { name: "Add feedback", exact: true })).toHaveValue("Keep my feedback draft");
+      await expect(board.getByLabel("Select an item")).toHaveValue(resizeItem.id);
+      expect(await world.getAttribute("style")).toBe(keptView);
+      await added.getByRole("button", { name: "Archive", exact: true }).click();
+      await expect(composer.getByRole("article", { name: "Note, archived", exact: true }).filter({ hasText: "Refresh without remount" })).toHaveAttribute("data-archived", "true");
+      await expect(board.getByRole("textbox", { name: "Add feedback", exact: true })).toHaveValue("Keep my feedback draft");
+      expect(await world.getAttribute("style")).toBe(keptView);
+
       await ownerBoard.getByLabel("Select an item").selectOption(moveItem.id);
       await ownerBoard.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Keep this with the moved note");
       await ownerBoard.getByRole("button", { name: "Post feedback", exact: true }).click();
@@ -281,10 +324,12 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await board.getByLabel("Select an item").selectOption(resizeItem.id);
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       await expect(board.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
+      await composer.getByRole("textbox", { name: "Note", exact: true }).fill("Keep my item draft");
       await board.getByRole("button", { name: "Archive selected item", exact: true }).click();
       await expect(board.getByText("Archived item · comments stay with this item", { exact: true })).toBeVisible();
       await expect(board.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
       await expect(board.getByRole("button", { name: "Post feedback", exact: true })).toHaveCount(0);
+      await expect(composer.getByRole("textbox", { name: "Note", exact: true })).toHaveValue("Keep my item draft");
       await expect(board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`)).toHaveCount(0);
 
       expect((await owner.request.patch(`/api/projects/${slug}/canvases/${canvasId}`, { data: { action: "revoke" } })).status()).toBe(200);

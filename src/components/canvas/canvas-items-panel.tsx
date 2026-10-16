@@ -9,7 +9,7 @@ import styles from "./canvas-items.module.css";
 type Kind = "TEXT" | "IMAGE";
 type Origin = "ORIGINAL" | "REFERENCE";
 
-export function CanvasItemsPanel({ slug, canvasId, canEdit, onChange }: { slug: string; canvasId: string; canEdit: boolean; onChange?: () => void }) {
+export function CanvasItemsPanel({ slug, canvasId, canEdit, onChange, refreshRevision = 0 }: { slug: string; canvasId: string; canEdit: boolean; onChange?: () => void; refreshRevision?: number }) {
   const [items, setItems] = useState<CanvasItemCardItem[]>([]);
   const [kind, setKind] = useState<Kind>("TEXT");
   const [origin, setOrigin] = useState<Origin>("ORIGINAL");
@@ -37,7 +37,7 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit, onChange }: { slug: 
     }).catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "Canvas items could not be loaded. Try again."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [endpoint]);
+  }, [endpoint, refreshRevision]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

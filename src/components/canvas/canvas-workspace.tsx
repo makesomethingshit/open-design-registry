@@ -9,7 +9,7 @@ export function CanvasWorkspace({ slug, canvasId, canEdit, canComment }: { slug:
   const [revision, setRevision] = useState(0);
   const [itemRevision, setItemRevision] = useState(0);
   return <div style={{ display: "grid", gap: "var(--odr-space-5)", minWidth: 0 }}>
-    <CanvasBoard canvasId={canvasId} canComment={canComment} canEdit={canEdit} key={`board-${revision}`} onArchive={() => setItemRevision((current) => current + 1)} renderItem={({ item, readOnly, selected }) => <CanvasItemCard item={item} readOnly={readOnly} selected={selected} />} slug={slug} />
-    <CanvasItemsPanel key={`items-${itemRevision}`} canvasId={canvasId} canEdit={canEdit} onChange={() => setRevision((current) => current + 1)} slug={slug} />
+    <CanvasBoard canvasId={canvasId} canComment={canComment} canEdit={canEdit} refreshRevision={revision} onArchive={() => setItemRevision((current) => current + 1)} renderItem={({ item, readOnly, selected }) => <CanvasItemCard item={item} readOnly={readOnly} selected={selected} />} slug={slug} />
+    <CanvasItemsPanel refreshRevision={itemRevision} canvasId={canvasId} canEdit={canEdit} onChange={() => setRevision((current) => current + 1)} slug={slug} />
   </div>;
 }
