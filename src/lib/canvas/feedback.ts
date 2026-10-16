@@ -19,9 +19,9 @@ export async function editCanvasLayout(slug: string, canvasId: string, actorId: 
       layoutVersion: expectedCanvasVersion + 1,
     };
 
-    const active = await tx.canvasItem.findMany({ where: { canvasId, archivedAt: null }, orderBy: [{ zIndex: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
-    const rest = active.filter((candidate) => candidate.id !== item.id);
-    const ordered = parsed.data.action === "front" ? [...rest, ...active.filter((candidate) => candidate.id === item.id)] : [...active.filter((candidate) => candidate.id === item.id), ...rest];
+    const boardItems = await tx.canvasItem.findMany({ where: { canvasId }, orderBy: [{ zIndex: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
+    const rest = boardItems.filter((candidate) => candidate.id !== item.id);
+    const ordered = parsed.data.action === "front" ? [...rest, ...boardItems.filter((candidate) => candidate.id === item.id)] : [...boardItems.filter((candidate) => candidate.id === item.id), ...rest];
     const items = [];
     for (const [zIndex, candidate] of ordered.entries()) {
       items.push(candidate.zIndex === zIndex ? candidate : await tx.canvasItem.update({ where: { id: candidate.id }, data: { zIndex }, include: { author: { select: { name: true } } } }));

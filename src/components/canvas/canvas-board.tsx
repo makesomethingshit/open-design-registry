@@ -70,6 +70,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const [numberDrafts, setNumberDrafts] = useState<GeometryDraft>({ x: "0", y: "0", width: "320", height: "240" });
   const numberDraftsRef = useRef(numberDrafts);
   const [draft, setDraft] = useState("");
+  const [commentSubmissionUnknown, setCommentSubmissionUnknown] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
@@ -77,15 +78,15 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const viewport = useRef<HTMLDivElement>(null);
 
   const reload = useCallback(async () => {
-    const [canvasResponse, itemsResponse] = await Promise.all([
-      fetch(`/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}`),
-      fetch(itemUrl(slug, canvasId)),
-    ]);
-    if (!canvasResponse.ok || !itemsResponse.ok) throw new Error("This Canvas is unavailable.");
+    const canvasResponse = await fetch(`/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}`);
+    if (!canvasResponse.ok) throw new Error("This Canvas is unavailable.");
     const canvas = await canvasResponse.json() as { layoutVersion: number };
+    const itemsResponse = await fetch(itemUrl(slug, canvasId));
+    if (!itemsResponse.ok) throw new Error("This Canvas is unavailable.");
+    const nextItems = await itemsResponse.json() as CanvasItem[];
     setVersion(canvas.layoutVersion);
     versionRef.current = canvas.layoutVersion;
-    setItems(await itemsResponse.json() as CanvasItem[]);
+    setItems(nextItems);
   }, [slug, canvasId]);
 
   useEffect(() => { void reload().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load this Canvas.")); }, [reload]);
@@ -271,16 +272,44 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selected || !draft.trim()) return;
+    if (!selected || !draft.trim() || commentSubmissionUnknown) return;
     const itemId = selected.id;
     const submittedDraft = draft;
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true); setError("");
     try {
-      const response = await fetch(feedbackUrl(slug, canvasId), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ itemId, body: submittedDraft }) });
-      if (!response.ok) throw new Error("This item no longer accepts feedback.");
-      const comment = await response.json() as CanvasComment;
+      let response: Response;
+      try {
+        response = await fetch(feedbackUrl(slug, canvasId), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ itemId, body: submittedDraft }) });
+      } catch {
+        setCommentSubmissionUnknown(true);
+        setError("We could not confirm whether feedback was saved. Reload this Canvas before trying again.");
+        return;
+      }
+      if (!response.ok) {
+        if (response.status >= 500) {
+          setCommentSubmissionUnknown(true);
+          setError("We could not confirm whether feedback was saved. Reload this Canvas before trying again.");
+          return;
+        }
+        throw new Error("This item no longer accepts feedback.");
+      }
+      let commentPayload: unknown;
+      try { commentPayload = await response.json(); }
+      catch {
+        setCommentSubmissionUnknown(true);
+        setError("We could not confirm whether feedback was saved. Reload this Canvas before trying again.");
+        return;
+      }
+      if (!commentPayload || typeof commentPayload !== "object"
+        || !("id" in commentPayload) || typeof commentPayload.id !== "string"
+        || !("itemId" in commentPayload) || commentPayload.itemId !== itemId) {
+        setCommentSubmissionUnknown(true);
+        setError("We could not confirm whether feedback was saved. Reload this Canvas before trying again.");
+        return;
+      }
+      const comment = commentPayload as CanvasComment;
       if (selectedIdRef.current === itemId) {
         setComments((current) => current.some((entry) => entry.id === comment.id) ? current : [...current, comment]);
         setDraft((current) => current === submittedDraft ? "" : current);
@@ -314,6 +343,9 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     </div>
 
     {error && <p role="alert" className={styles.error}>{error}</p>}
+    {commentSubmissionUnknown && <p role="status" className={styles.readOnly}>
+      We could not confirm whether feedback was saved. Reload this Canvas before trying again. <Button variant="secondary" onClick={() => window.location.reload()}>Reload Canvas</Button>
+    </p>}
     <div className={styles.boardTools}>
       <Field id="canvas-item-select" label="Select an item">
         <Select value={selectedId ?? ""} onChange={(event) => {
@@ -375,7 +407,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
             <Field id="canvas-feedback" label="Add feedback" required>
               <Textarea maxLength={10000} required value={draft} onChange={(event) => setDraft(event.target.value)} />
             </Field>
-            <Button type="submit" disabled={busy || !draft.trim()}>Post feedback</Button>
+            <Button type="submit" disabled={busy || commentSubmissionUnknown || !draft.trim()}>Post feedback</Button>
           </form> : <p className={styles.readOnly}>{selected.archivedAt ? "Archived items do not accept new feedback." : "This Canvas is read-only."}</p>}
         </>}
       </aside>

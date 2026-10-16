@@ -54,6 +54,31 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await expect(board.getByLabel("Select an item").locator("option")).toHaveCount(4);
       await expect(board.getByText("Used with permission", { exact: true })).toBeVisible();
 
+      let releaseCanvasResponse!: () => void;
+      let canvasResponseStarted!: () => void;
+      const canvasResponseGate = new Promise<void>((resolve) => { releaseCanvasResponse = resolve; });
+      const canvasResponseSeen = new Promise<void>((resolve) => { canvasResponseStarted = resolve; });
+      let canvasReleased = false;
+      let itemsRequestedBeforeCanvas = false;
+      const watchItemRequest = (request: import("@playwright/test").Request) => {
+        if (new URL(request.url()).pathname.endsWith(`/canvases/${canvasId}/items`) && !canvasReleased) itemsRequestedBeforeCanvas = true;
+      };
+      page.on("request", watchItemRequest);
+      await page.route(`**/api/projects/${slug}/canvases/${canvasId}`, async (route) => {
+        canvasResponseStarted();
+        await canvasResponseGate;
+        await route.continue();
+      }, { times: 1 });
+      const reloadWithHeldCanvas = page.reload();
+      await canvasResponseSeen;
+      await page.waitForTimeout(100);
+      canvasReleased = true;
+      releaseCanvasResponse();
+      await reloadWithHeldCanvas;
+      page.off("request", watchItemRequest);
+      expect(itemsRequestedBeforeCanvas).toBe(false);
+      expect(itemsRequestedBeforeCanvas).toBe(false);
+
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       await board.getByRole("button", { name: "Fit", exact: true }).click();
       const moveHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`);
@@ -147,6 +172,12 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       expect(fitBounds[1]!.y).toBeGreaterThanOrEqual(fitBounds[0]!.y - 1);
       expect(fitBounds[1]!.x + fitBounds[1]!.width).toBeLessThanOrEqual(fitBounds[0]!.x + fitBounds[0]!.width + 1);
       expect(fitBounds[1]!.y + fitBounds[1]!.height).toBeLessThanOrEqual(fitBounds[0]!.y + fitBounds[0]!.height + 1);
+      await board.getByLabel("Select an item").selectOption(moveItem.id);
+      const archivedLayerResponse = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
+      await board.getByRole("button", { name: "Send to back", exact: true }).click();
+      const archivedLayerResult = await (await archivedLayerResponse).json() as { items: Array<{ id: string; zIndex: number; archivedAt: string | null }> };
+      expect(archivedLayerResult.items.map((item) => [item.id, item.zIndex, Boolean(item.archivedAt)]))
+        .toEqual([[moveItem.id, 0, false], [resizeItem.id, 1, false], [archiveItem.id, 2, true]]);
       await board.getByRole("button", { name: "Hide archived items", exact: true }).click();
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       const resizeHandleOnSelected = board.locator(`[data-item-id="${resizeItem.id}"] [data-resize-handle]`);
@@ -219,10 +250,30 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await ownerBoard.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Keep this with the moved note");
       await ownerBoard.getByRole("button", { name: "Post feedback", exact: true }).click();
       await expect(ownerBoard.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
+      const commentsUrl = `**/api/projects/${slug}/canvases/${canvasId}/comments`;
+      let committedCommentResponse = 0;
+      await owner.route(commentsUrl, async (route) => {
+        if (route.request().method() !== "POST") { await route.continue(); return; }
+        const response = await route.fetch();
+        committedCommentResponse = response.status();
+        await route.fulfill({ status: 502, contentType: "text/plain", body: "Response lost after the write committed" });
+      });
+      await ownerBoard.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Saved, but response was lost");
+      await ownerBoard.getByRole("button", { name: "Post feedback", exact: true }).click();
+      await expect(ownerBoard.getByRole("status").filter({ hasText: "We could not confirm whether feedback was saved" })).toBeVisible();
+      expect(committedCommentResponse).toBe(201);
+      expect(await prisma.canvasItemComment.count({ where: { itemId: moveItem.id, body: "Saved, but response was lost" } })).toBe(1);
       await ownerBoard.getByLabel("Select an item").selectOption(resizeItem.id);
       await expect(ownerBoard.getByText("Keep this with the moved note", { exact: true })).toHaveCount(0);
+      await expect(ownerBoard.getByRole("status").filter({ hasText: "We could not confirm whether feedback was saved" })).toBeVisible();
+      await ownerBoard.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Do not submit twice");
+      await expect(ownerBoard.getByRole("button", { name: "Post feedback", exact: true })).toBeDisabled();
+      expect(await prisma.canvasItemComment.count({ where: { itemId: moveItem.id, body: "Saved, but response was lost" } })).toBe(1);
+      await owner.unroute(commentsUrl);
+      await ownerBoard.getByRole("button", { name: "Reload Canvas", exact: true }).click();
       await ownerBoard.getByLabel("Select an item").selectOption(moveItem.id);
       await expect(ownerBoard.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
+      await expect(ownerBoard.getByText("Saved, but response was lost", { exact: true })).toBeVisible();
 
       await board.getByLabel("Select an item").selectOption(resizeItem.id);
       await board.getByLabel("Select an item").selectOption(moveItem.id);
