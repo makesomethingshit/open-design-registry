@@ -115,13 +115,13 @@ node --env-file=.env scripts/run-playwright.mjs
 
 ### 실제 서비스 검사와 fixture 검사
 
-`E2E_INTEGRATION=1`은 [인증](../e2e/auth.spec.ts), [Landing·Explore](../e2e/landing-explore.integration.spec.ts), [MVP 협업](../e2e/mvp.integration.spec.ts)의 실제 DB·스토리지 시나리오를 활성화합니다. 다른 UI 회귀 파일은 fixture·요청 mock·정적 화면 등을 사용합니다. 같은 Playwright 명령으로 실행하더라도 fixture 통과와 실제 서비스 통합 검증을 구별합니다.
+`E2E_INTEGRATION=1`은 [인증](../e2e/auth.spec.ts), [Landing·Explore](../e2e/landing-explore.integration.spec.ts), [MVP 협업](../e2e/mvp.integration.spec.ts), [Canvas 멤버십](../e2e/canvas-membership.integration.spec.ts)의 실제 DB·스토리지 시나리오를 활성화합니다. Canvas 시나리오는 첫 신청 비공개, 승인·거부·재신청, 과거 승인 콘텐츠의 공개 읽기 전용 보존, 키보드 조작과 320/390px 폭을 확인합니다. 다른 UI 회귀 파일은 fixture·요청 mock·정적 화면 등을 사용합니다. 같은 Playwright 명령으로 실행하더라도 fixture 통과와 실제 서비스 통합 검증을 구별합니다.
 
 ### CI 구성과 확인할 범위
 
 일반 PR의 opened·reopened·synchronize 이벤트와 Draft를 ready for review로 바꾸는 이벤트는 PR 제목 형식, test·typecheck·build·e2e를 검사합니다. PR 제목·본문 등 메타데이터 수정은 CI를 다시 실행하지 않습니다. 제목 검사는 다음 PR 실행 시 새 제목을 검사합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화되며, `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`로 Proposal·Canvas 트랜잭션 테스트도 실행합니다.
 
-전체 Playwright E2E는 PR·`main` push·`workflow_dispatch`에서 격리 PostgreSQL·MinIO와 브라우저를 준비해 실행합니다. PR 로그에서 checkout한 SHA와 브라우저 테스트의 passed·skipped·failed 결과를 확인합니다. PR E2E가 skipped 또는 실패했다면 성공으로 취급하지 않습니다. 높은 위험 변경은 병합 전에 실제 브라우저 검증 범위가 요구사항을 포함하는지 확인하고, 별도 수동 실행도 최신 PR SHA를 지정해 수행합니다. main 실행 결과는 병합 후 검증이며 병합 전 검증을 대신하지 않습니다.
+전체 Playwright E2E는 PR·`main` push·`workflow_dispatch`에서 격리 PostgreSQL·MinIO와 브라우저를 준비해 실행합니다. PR 로그에서 checkout한 SHA와 브라우저 테스트의 passed·skipped·failed 결과를 확인합니다. PR E2E가 skipped 또는 실패했다면 성공으로 취급하지 않습니다. 수동 확인만 가능한 화면 검증은 자동 E2E의 통과로 간주하지 말고, 수행자·정확한 SHA·화면 범위·결과를 PR에 기록합니다. 높은 위험 변경은 병합 전에 실제 브라우저 검증 범위가 요구사항을 포함하는지 확인하고, 별도 수동 실행도 최신 PR SHA를 지정해 수행합니다. main 실행 결과는 병합 후 검증이며 병합 전 검증을 대신하지 않습니다.
 
 이 워크플로가 기본 브랜치에 반영된 뒤 GitHub Actions의 CI → Run workflow에서 `ref`에 검증할 PR의 최신 커밋 SHA를 입력하거나 다음 명령을 사용합니다.
 

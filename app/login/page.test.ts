@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeNextPath } from "./page";
+import { safeNextPath } from "./login-helpers";
 
 describe("login return path", () => {
   it("restores a local contribution path without allowing an external redirect", () => {

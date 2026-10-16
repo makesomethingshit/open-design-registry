@@ -1,10 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@/src/lib/prisma", () => ({ prisma: {} }));
-vi.mock("@/src/lib/session", () => ({ getSession: vi.fn() }));
-vi.mock("@/src/lib/revision-bundle", () => ({ publicBundleFiles: vi.fn(), readRevisionBundle: vi.fn() }));
-
-const { parseInitialChanges } = await import("./page");
+import { describe, expect, it } from "vitest";
+import { parseInitialChanges } from "./proposal-helpers";
 
 describe("prepared proposal handoff", () => {
   it("keeps supported selected changes and drops malformed URL state", () => {

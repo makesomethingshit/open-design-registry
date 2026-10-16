@@ -7,10 +7,7 @@ import { Button } from "@/src/components/ui/button";
 import { Field, Input } from "@/src/components/ui/field";
 import { focusFirstInvalid, invalidFieldErrors } from "@/src/components/ui/form";
 import { FormColumn, PageGrid, PageHeader, Panel, Stack } from "@/src/components/ui/layout";
-
-export function safeNextPath(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
-}
+import { safeNextPath } from "./login-helpers";
 
 export default function LoginPage() {
   const router = useRouter();
