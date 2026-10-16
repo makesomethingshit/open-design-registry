@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { getSession } from "@/src/lib/session";
 import { prisma } from "@/src/lib/prisma";
-import { canvasView, readCanvases } from "@/src/lib/canvas/service";
+import { CanvasError, canvasView, readCanvases } from "@/src/lib/canvas/service";
+import { PrivateProjectWrite } from "@/src/lib/project-visibility-lock";
 import { CanvasWorkspace } from "@/src/components/canvas/canvas-workspace";
 import { CanvasDetail } from "../canvas-membership";
 
@@ -14,7 +15,10 @@ export default async function CanvasDetailPage({ params }: Props) {
   if (!project?.isPublic) notFound();
   let canvas;
   try { canvas = (await readCanvases(slug, session?.user.id ?? null, canvasId))[0]; }
-  catch { notFound(); }
+  catch (error) {
+    if (error instanceof PrivateProjectWrite || error instanceof CanvasError && error.status === 404) notFound();
+    throw error;
+  }
   if (!canvas) notFound();
   const view = canvasView(canvas, session?.user.id ?? null);
   return <CanvasDetail canvas={view} canvasId={canvasId} slug={slug}>

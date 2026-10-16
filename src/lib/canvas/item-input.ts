@@ -33,3 +33,4 @@ export const canvasItemInput = z.discriminatedUnion("kind", [
 
 export const canvasImageMimeTypes = new Set(["image/png", "image/jpeg"]);
 export const maxCanvasImageBytes = 10 * 1024 * 1024;
+export const maxCanvasMultipartRequestBytes = maxCanvasImageBytes + 64 * 1024;

@@ -3,6 +3,7 @@ import { prisma } from "../prisma";
 import { applyForCanvas, changeCanvasAccess } from "./service";
 import { archiveCanvasItem, createCanvasItem } from "./items";
 import { canvasItemRequest } from "./item-handlers";
+import { maxCanvasMultipartRequestBytes } from "./item-input";
 import { GET as getAsset } from "../../../app/api/assets/route";
 
 const mocks = vi.hoisted(() => ({ actorId: null as string | null, put: vi.fn(), remove: vi.fn(), get: vi.fn() }));
@@ -285,5 +286,96 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     expect(await prisma.canvasItem.findUnique({ where: { id: item.id } })).toMatchObject({ authorId: null, assetKey: item.assetKey });
     mocks.actorId = null;
     expect((await getAsset(new Request(`http://localhost/api/assets?key=${encodeURIComponent(item.assetKey)}`))).status).toBe(200);
+  });
+
+  it("authorizes a multipart writer before consuming the request body", async () => {
+    mocks.actorId = ownerId;
+    const form = new FormData();
+    for (const [key, value] of Object.entries(metadata)) form.set(key, value);
+    form.set("file", image());
+    const request = new Request("http://localhost", { method: "POST", body: form });
+    const parse = vi.spyOn(Request.prototype, "formData");
+    try {
+      const response = await canvasItemRequest(request, { slug, canvasId });
+      expect(response.status).toBe(403);
+      expect(request.bodyUsed).toBe(false);
+      expect(parse).not.toHaveBeenCalled();
+    } finally { parse.mockRestore(); }
+  });
+
+  it("releases Canvas locks before waiting for a multipart request body", async () => {
+    mocks.actorId = authorId;
+    const form = new FormData();
+    for (const [key, value] of Object.entries(metadata)) form.set(key, value);
+    form.set("file", image());
+    const encoded = new Request("http://localhost", { method: "POST", body: form });
+    const bytes = new Uint8Array(await encoded.arrayBuffer());
+    let release!: () => void, started!: () => void;
+    const bodyReady = new Promise<void>((resolve) => { started = resolve; });
+    const bodyGate = new Promise<void>((resolve) => { release = resolve; });
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        started();
+        await bodyGate;
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    }, { highWaterMark: 0 });
+    const request = new Request("http://localhost", {
+      method: "POST",
+      headers: { "content-type": encoded.headers.get("content-type")! },
+      body,
+      duplex: "half",
+    } as RequestInit);
+    const pending = canvasItemRequest(request, { slug, canvasId });
+    try {
+      await bodyReady;
+      await expect(changeCanvasAccess(slug, canvasId, ownerId, "revoke")).resolves.toMatchObject({ accessStatus: "REVOKED" });
+    } finally { release(); }
+    expect((await pending).status).toBe(403);
+    expect(mocks.put).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, "1"])("cancels a chunked multipart stream above the byte limit when Content-Length is %s", async (length) => {
+    mocks.actorId = authorId;
+    const chunkBytes = 64 * 1024;
+    const maxChunks = Math.ceil(maxCanvasMultipartRequestBytes / chunkBytes) + 10;
+    let chunks = 0, canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (chunks === maxChunks) { controller.close(); return; }
+        chunks++;
+        controller.enqueue(new Uint8Array(chunkBytes));
+      },
+      cancel() { canceled = true; },
+    });
+    const headers = new Headers({ "content-type": "multipart/form-data; boundary=unused" });
+    if (length) headers.set("content-length", length);
+    const request = new Request("http://localhost", {
+      method: "POST",
+      headers,
+      body,
+      duplex: "half",
+    } as RequestInit);
+    expect(request.headers.get("content-length")).toBe(length ?? null);
+    const parse = vi.spyOn(Request.prototype, "formData");
+    try {
+      const response = await canvasItemRequest(request, { slug, canvasId });
+      expect(response.status).toBe(413);
+      expect(parse).not.toHaveBeenCalled();
+      expect(chunks).toBeLessThanOrEqual(Math.ceil(maxCanvasMultipartRequestBytes / chunkBytes) + 3);
+      await vi.waitFor(() => expect(canceled).toBe(true));
+    } finally { parse.mockRestore(); }
+  });
+
+  it("omits author IDs from public item responses while retaining item and asset identifiers", async () => {
+    const created = await createCanvasItem(slug, canvasId, authorId, metadata, image());
+    mocks.actorId = null;
+    const response = await canvasItemRequest(new Request("http://localhost"), { slug, canvasId });
+    expect(response.status).toBe(200);
+    const rows = await response.json();
+    const item = rows.find((row: { id: string }) => row.id === created.id);
+    expect(item).toMatchObject({ id: created.id, assetKey: created.assetKey, kind: "IMAGE", author: { name: authorId } });
+    expect(item).not.toHaveProperty("authorId");
   });
 });

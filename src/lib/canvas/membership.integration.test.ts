@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../prisma";
-import { applyForCanvas, canvasView, changeCanvasAccess, readCanvases } from "./service";
+import { applyForCanvas, CANVAS_PAGE_SIZE, canvasView, changeCanvasAccess, readCanvasPage, readCanvases } from "./service";
 import { canvasRequest } from "./handlers";
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
@@ -59,6 +59,85 @@ db("Canvas membership PostgreSQL production paths", () => {
     const results = await Promise.allSettled([changeCanvasAccess(slug, canvas.id, ownerId, "approve"), changeCanvasAccess(slug, canvas.id, ownerId, "reject")]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(results.find((r) => r.status === "rejected")).toMatchObject({ reason: { status: 409 } });
+  });
+
+  it("does not approve a first-time application after its owner account is deleted", async () => {
+    const canvas = await applyForCanvas(slug, contributorId);
+    await prisma.user.delete({ where: { id: contributorId } });
+
+    await expect(changeCanvasAccess(slug, canvas.id, ownerId, "approve")).rejects.toMatchObject({ status: 409 });
+    expect(await prisma.projectCanvas.findUnique({ where: { id: canvas.id } })).toMatchObject({ ownerId: null, accessStatus: "PENDING", firstApprovedAt: null });
+
+    const historical = await applyForCanvas(slug, strangerId);
+    await changeCanvasAccess(slug, historical.id, ownerId, "approve");
+    await changeCanvasAccess(slug, historical.id, strangerId, "withdraw");
+    await applyForCanvas(slug, strangerId);
+    await prisma.user.delete({ where: { id: strangerId } });
+    await expect(changeCanvasAccess(slug, historical.id, ownerId, "approve")).rejects.toMatchObject({ status: 409 });
+    expect(await prisma.projectCanvas.findUnique({ where: { id: historical.id } })).toMatchObject({ ownerId: null, accessStatus: "PENDING", firstApprovedAt: expect.any(Date) });
+  });
+
+  it("keeps rejected applications rejected on withdrawal and revoked withdrawal idempotent", async () => {
+    const rejected = await applyForCanvas(slug, contributorId);
+    await changeCanvasAccess(slug, rejected.id, ownerId, "reject");
+    await expect(changeCanvasAccess(slug, rejected.id, contributorId, "withdraw")).rejects.toMatchObject({ status: 409 });
+    expect(await prisma.projectCanvas.findUnique({ where: { id: rejected.id } })).toMatchObject({ accessStatus: "REJECTED", firstApprovedAt: null });
+
+    const approved = await applyForCanvas(slug, strangerId);
+    await changeCanvasAccess(slug, approved.id, ownerId, "approve");
+    await changeCanvasAccess(slug, approved.id, strangerId, "withdraw");
+    expect((await changeCanvasAccess(slug, approved.id, strangerId, "withdraw")).accessStatus).toBe("REVOKED");
+  });
+
+  it("pages bounded results after visibility filtering and keeps each viewer's own Canvas reachable", async () => {
+    const created = new Date("2020-01-01T00:00:00.000Z");
+    const middle = new Date("2021-01-01T00:00:00.000Z");
+    const latest = new Date("2022-01-01T00:00:00.000Z");
+    const publicOwnerIds = Array.from({ length: CANVAS_PAGE_SIZE + 1 }, (_, index) => "canvas-public-" + index + "-" + crypto.randomUUID());
+    const pendingOwnerIds = Array.from({ length: CANVAS_PAGE_SIZE }, (_, index) => "canvas-pending-" + index + "-" + crypto.randomUUID());
+    await prisma.user.createMany({
+      data: [...publicOwnerIds, ...pendingOwnerIds].map((id) => ({ id, email: id + "@example.test", name: id })),
+    });
+    await prisma.projectCanvas.createMany({
+      data: [
+        ...publicOwnerIds.map((ownerId) => ({ projectId, ownerId, accessStatus: "APPROVED" as const, approvedById: ownerId, approvedAt: middle, firstApprovedAt: middle, createdAt: middle })),
+        ...pendingOwnerIds.map((ownerId) => ({ projectId, ownerId, accessStatus: "PENDING" as const, createdAt: created })),
+      ],
+    });
+    const applicantCanvas = await prisma.projectCanvas.create({ data: { projectId, ownerId: contributorId, accessStatus: "PENDING", createdAt: latest } });
+    const ownerCanvas = await applyForCanvas(slug, ownerId);
+
+    const visitorFirst = await readCanvasPage(slug, strangerId);
+    expect(visitorFirst.items).toHaveLength(CANVAS_PAGE_SIZE);
+    expect(visitorFirst.items.every((canvas) => canvas.accessStatus === "APPROVED")).toBe(true);
+    expect(visitorFirst.nextCursor).not.toBeNull();
+    const visitorSecond = await readCanvasPage(slug, strangerId, visitorFirst.nextCursor);
+    expect(visitorSecond.items).toHaveLength(2);
+    expect(visitorSecond.items.every((canvas) => canvas.accessStatus === "APPROVED")).toBe(true);
+    expect(visitorSecond.nextCursor).toBeNull();
+    session.userId = strangerId;
+    const apiFirstPage = await canvasRequest(new Request("http://localhost"), { slug });
+    expect(apiFirstPage.headers.get("x-next-cursor")).toBe(visitorFirst.nextCursor);
+    expect(Array.isArray(await apiFirstPage.json())).toBe(true);
+    const apiSecondPage = await canvasRequest(new Request("http://localhost?cursor=" + visitorFirst.nextCursor), { slug });
+    expect(apiSecondPage.headers.get("x-next-cursor")).toBeNull();
+    expect(Array.isArray(await apiSecondPage.json())).toBe(true);
+
+    const applicantFirst = await readCanvasPage(slug, contributorId);
+    expect(applicantFirst.items.some((canvas) => canvas.id === applicantCanvas.id)).toBe(true);
+    expect(applicantFirst.items.filter((canvas) => canvas.accessStatus === "PENDING")).toHaveLength(1);
+
+    const ownerPages = [];
+    let page = await readCanvasPage(slug, ownerId);
+    ownerPages.push(page);
+    while (page.nextCursor) {
+      page = await readCanvasPage(slug, ownerId, page.nextCursor);
+      ownerPages.push(page);
+    }
+    expect(ownerPages.every((result) => result.items.length <= CANVAS_PAGE_SIZE + 1)).toBe(true);
+    expect(ownerPages[0].items.some((canvas) => canvas.id === ownerCanvas.id)).toBe(true);
+    const visibleIds = new Set(ownerPages.flatMap((result) => result.items.map((canvas) => canvas.id)));
+    expect(visibleIds.size).toBe(await prisma.projectCanvas.count({ where: { projectId } }));
   });
 
   it("reads fresh project ownership and private state after a competing transaction", async () => {

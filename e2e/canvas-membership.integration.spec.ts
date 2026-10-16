@@ -97,6 +97,7 @@ test("Canvas applications stay private until first approval and retained history
     expect(privateCanvas).not.toHaveProperty("ownerId");
     expect(privateCanvas).not.toHaveProperty("email");
 
+    await applicant.reload();
     await applicant.locator("#canvases").getByRole("button", { name: "Reapply", exact: true }).press("Enter");
     await expect(applicant.locator("#canvases").getByRole("listitem").filter({ hasText: "Your Canvas" })).toContainText("Awaiting approval");
     await page.reload();
@@ -151,6 +152,19 @@ test("Canvas applications stay private until first approval and retained history
       await visitor.setViewportSize({ width, height: 844 });
       expect(await visitor.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
+
+    await applicant.reload();
+    await applicant.locator("#canvases").getByRole("button", { name: "Reapply", exact: true }).press("Enter");
+    await expect(applicant.locator("#canvases").getByRole("listitem").filter({ hasText: "Your Canvas" })).toContainText("Reapplication pending");
+    const applicantUser = await prisma.user.findUniqueOrThrow({ where: { email: applicantEmail }, select: { id: true } });
+    await prisma.project.update({ where: { slug }, data: { ownerId: applicantUser.id } });
+    await applicant.reload();
+    const transferredOwner = applicant.locator("#canvases");
+    const activateCanvas = transferredOwner.getByRole("button", { name: "Activate my Canvas", exact: true });
+    await expect(activateCanvas).toBeVisible();
+    await activateCanvas.press("Enter");
+    await expect(transferredOwner.getByRole("listitem").filter({ hasText: "Your Canvas" })).toContainText("Approved");
+    await prisma.project.update({ where: { slug }, data: { ownerId: owner.id } });
   } finally {
     await visitorContext?.close().catch(() => {});
     await applicantContext?.close().catch(() => {});

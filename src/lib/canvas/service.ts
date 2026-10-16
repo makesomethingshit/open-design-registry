@@ -1,11 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { lockPublicProject, PrivateProjectWrite } from "../project-visibility-lock";
-import { mayReadCanvas } from "./access";
 
 export class CanvasError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
+
+export const CANVAS_PAGE_SIZE = 20;
 
 export async function lockCanvas(tx: Prisma.TransactionClient, slug: string, canvasId: string) {
   const found = await tx.project.findUnique({ where: { slug }, select: { id: true } });
@@ -54,8 +55,10 @@ export async function changeCanvasAccess(slug: string, canvasId: string, actorId
     if (actorId !== (action === "withdraw" ? canvas.ownerId : project.ownerId)) throw new CanvasError(403, "Canvas permission required");
     const next = action === "approve" ? "APPROVED" : action === "reject" ? "REJECTED" : "REVOKED";
     if (canvas.accessStatus === next) return canvas;
+    if (action === "approve" && canvas.ownerId === null) throw new CanvasError(409, "Canvas application has no owner");
     if ((action === "approve" || action === "reject") && canvas.accessStatus !== "PENDING") throw new CanvasError(409, "Application is no longer pending");
     if (action === "revoke" && canvas.accessStatus !== "APPROVED") throw new CanvasError(409, "Canvas is not approved");
+    if (action === "withdraw" && canvas.accessStatus === "REJECTED") throw new CanvasError(409, "Rejected applications cannot be withdrawn");
     const now = new Date();
     return tx.projectCanvas.update({ where: { id: canvas.id }, data: {
       accessStatus: next,
@@ -64,15 +67,66 @@ export async function changeCanvasAccess(slug: string, canvasId: string, actorId
   });
 }
 
-export async function readCanvases(slug: string, actorId: string | null, canvasId?: string) {
+function visibleCanvasesWhere(project: { id: string; ownerId: string }, actorId: string | null): Prisma.ProjectCanvasWhereInput {
+  return {
+    projectId: project.id,
+    ...(actorId === project.ownerId ? {} : {
+      OR: [
+        { accessStatus: "APPROVED" },
+        { firstApprovedAt: { not: null } },
+        ...(actorId ? [{ ownerId: actorId }] : []),
+      ],
+    }),
+  };
+}
+
+export async function readCanvasPage(slug: string, actorId: string | null, cursor?: string | null) {
   return prisma.$transaction(async (tx) => {
     const found = await tx.project.findUnique({ where: { slug }, select: { id: true } });
     if (!found) throw new CanvasError(404, "Project not found");
     const project = await lockPublicProject(tx, found.id);
-    const rows = await tx.projectCanvas.findMany({ where: { projectId: project.id, ...(canvasId ? { id: canvasId } : {}) }, include: { owner: { select: { name: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-    const readable = rows.filter((canvas) => mayReadCanvas(actorId, canvasFacts(project, canvas))).map((canvas) => ({ ...canvas, projectOwnerId: project.ownerId }));
-    if (canvasId && !readable.length) throw new CanvasError(404, "Canvas not found");
-    return readable;
+    const visibleWhere = visibleCanvasesWhere(project, actorId);
+    const ownCanvas = actorId
+      ? await tx.projectCanvas.findUnique({ where: { projectId_ownerId: { projectId: project.id, ownerId: actorId } }, include: { owner: { select: { name: true } } } })
+      : null;
+    const where: Prisma.ProjectCanvasWhereInput = {
+      ...visibleWhere,
+      ...(ownCanvas ? { id: { not: ownCanvas.id } } : {}),
+    };
+    const validCursor = cursor
+      ? await tx.projectCanvas.findFirst({ where: { ...where, id: cursor }, select: { id: true } })
+      : null;
+    const rows = await tx.projectCanvas.findMany({
+      where,
+      ...(validCursor ? { cursor: { id: validCursor.id }, skip: 1 } : {}),
+      include: { owner: { select: { name: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: CANVAS_PAGE_SIZE + 1,
+    });
+    const hasNextPage = rows.length > CANVAS_PAGE_SIZE;
+    const items = rows.slice(0, CANVAS_PAGE_SIZE);
+    if (!validCursor && ownCanvas) items.unshift(ownCanvas);
+    return {
+      items: items.map((canvas) => ({ ...canvas, projectOwnerId: project.ownerId })),
+      nextCursor: hasNextPage ? rows[CANVAS_PAGE_SIZE - 1]?.id ?? null : null,
+    };
+  });
+}
+
+export async function readCanvases(slug: string, actorId: string | null, canvasId?: string) {
+  if (!canvasId) return (await readCanvasPage(slug, actorId)).items;
+  return prisma.$transaction(async (tx) => {
+    const found = await tx.project.findUnique({ where: { slug }, select: { id: true } });
+    if (!found) throw new CanvasError(404, "Project not found");
+    const project = await lockPublicProject(tx, found.id);
+    const rows = await tx.projectCanvas.findMany({
+      where: { ...visibleCanvasesWhere(project, actorId), id: canvasId },
+      include: { owner: { select: { name: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 1,
+    });
+    if (!rows.length) throw new CanvasError(404, "Canvas not found");
+    return rows.map((canvas) => ({ ...canvas, projectOwnerId: project.ownerId }));
   });
 }
 
