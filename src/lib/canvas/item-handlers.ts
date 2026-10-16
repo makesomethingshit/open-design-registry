@@ -1,14 +1,14 @@
 import { auth } from "../auth";
 import { archiveCanvasItem, assertCanvasItemWritable, createCanvasItem, readCanvasItems } from "./items";
 import { canvasFailure } from "./service";
-import { maxCanvasMultipartRequestBytes } from "./item-input";
+import { maxCanvasJsonRequestBytes, maxCanvasMultipartRequestBytes } from "./item-input";
 
 type Scope = { slug: string; canvasId: string; itemId?: string };
 
-async function readBoundedMultipartBody(request: Request) {
+async function readBoundedRequestBody(request: Request, maxBytes: number) {
   const declaredLength = request.headers.get("content-length");
-  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxCanvasMultipartRequestBytes) {
-    void request.body?.cancel("Canvas multipart body exceeds the request limit").catch(() => {});
+  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
+    void request.body?.cancel("Canvas request body exceeds the request limit").catch(() => {});
     return null;
   }
   if (!request.body) return new Uint8Array();
@@ -21,8 +21,8 @@ async function readBoundedMultipartBody(request: Request) {
       const { done, value } = await reader.read();
       if (done) return Buffer.concat(chunks, size);
       size += value.byteLength;
-      if (size > maxCanvasMultipartRequestBytes) {
-        void reader.cancel("Canvas multipart body exceeds the request limit").catch(() => {});
+      if (size > maxBytes) {
+        void reader.cancel("Canvas request body exceeds the request limit").catch(() => {});
         return null;
       }
       chunks.push(value);
@@ -43,7 +43,7 @@ export async function canvasItemRequest(request: Request, { slug, canvasId, item
       // Authorize and release the Project→Canvas locks before consuming an
       // attacker-controlled body; createCanvasItem checks again before upload.
       await assertCanvasItemWritable(slug, canvasId, session!.user.id);
-      const bytes = await readBoundedMultipartBody(request);
+      const bytes = await readBoundedRequestBody(request, maxCanvasMultipartRequestBytes);
       if (!bytes) return Response.json({ error: "Multipart request exceeds the 10 MiB image plus 64 KiB metadata limit" }, { status: 413 });
       const contentType = request.headers.get("content-type")!;
       const boundedRequest = new Request(request.url, { method: "POST", headers: { "content-type": contentType }, body: bytes });
@@ -53,7 +53,10 @@ export async function canvasItemRequest(request: Request, { slug, canvasId, item
       input = Object.fromEntries([...form.entries()].filter(([key]) => key !== "file"));
     } else {
       await assertCanvasItemWritable(slug, canvasId, session!.user.id);
-      input = await request.json().catch(() => null);
+      const bytes = await readBoundedRequestBody(request, maxCanvasJsonRequestBytes);
+      if (!bytes) return Response.json({ error: "JSON request exceeds the 64 KiB limit" }, { status: 413 });
+      const boundedRequest = new Request(request.url, { method: "POST", headers: { "content-type": "application/json" }, body: bytes });
+      input = await boundedRequest.json().catch(() => null);
     }
     return Response.json(await createCanvasItem(slug, canvasId, session!.user.id, input, file), { status: 201 });
   } catch (error) {

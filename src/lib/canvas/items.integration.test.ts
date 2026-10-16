@@ -4,7 +4,7 @@ import { prisma } from "../prisma";
 import { applyForCanvas, changeCanvasAccess } from "./service";
 import { archiveCanvasItem, createCanvasItem } from "./items";
 import { canvasItemRequest } from "./item-handlers";
-import { maxCanvasMultipartRequestBytes } from "./item-input";
+import { maxCanvasJsonRequestBytes, maxCanvasMultipartRequestBytes } from "./item-input";
 import { GET as getAsset } from "../../../app/api/assets/route";
 
 const mocks = vi.hoisted(() => ({ actorId: null as string | null, put: vi.fn(), remove: vi.fn(), get: vi.fn() }));
@@ -395,5 +395,44 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     const item = rows.find((row: { id: string }) => row.id === created.id);
     expect(item).toMatchObject({ id: created.id, assetKey: created.assetKey, kind: "IMAGE", author: { name: authorId } });
     expect(item).not.toHaveProperty("authorId");
+  });
+
+  it("accepts a JSON item request exactly at the 64 KiB measured body limit", async () => {
+    mocks.actorId = authorId;
+    const json = JSON.stringify({ kind: "TEXT", origin: "ORIGINAL", body: "Boundary note" });
+    const body = json + " ".repeat(maxCanvasJsonRequestBytes - Buffer.byteLength(json));
+    expect(Buffer.byteLength(body)).toBe(maxCanvasJsonRequestBytes);
+    const response = await canvasItemRequest(new Request("http://localhost", {
+      method: "POST", headers: { "content-type": "application/json" }, body,
+    }), { slug, canvasId });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ body: "Boundary note" });
+  });
+
+  it.each([undefined, "1"])("cancels an oversized chunked JSON body before parsing when Content-Length is %s", async (length) => {
+    mocks.actorId = authorId;
+    const chunkBytes = 8 * 1024;
+    const maxChunks = Math.ceil(maxCanvasJsonRequestBytes / chunkBytes) + 10;
+    let chunks = 0, canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (chunks === maxChunks) { controller.close(); return; }
+        chunks++;
+        controller.enqueue(new Uint8Array(chunkBytes));
+      },
+      cancel() { canceled = true; },
+    });
+    const headers = new Headers({ "content-type": "application/json" });
+    if (length) headers.set("content-length", length);
+    const request = new Request("http://localhost", { method: "POST", headers, body, duplex: "half" } as RequestInit);
+    expect(request.headers.get("content-length")).toBe(length ?? null);
+    const parse = vi.spyOn(Request.prototype, "json");
+    try {
+      const response = await canvasItemRequest(request, { slug, canvasId });
+      expect(response.status).toBe(413);
+      expect(parse).not.toHaveBeenCalled();
+      expect(chunks).toBeLessThanOrEqual(Math.ceil(maxCanvasJsonRequestBytes / chunkBytes) + 3);
+      await vi.waitFor(() => expect(canceled).toBe(true));
+    } finally { parse.mockRestore(); }
   });
 });

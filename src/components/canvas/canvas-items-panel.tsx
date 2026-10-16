@@ -59,7 +59,7 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit, onChange }: { slug: 
     try {
       const body = kind === "IMAGE" ? (() => { const multipart = new FormData(); Object.entries(payload).forEach(([key, value]) => multipart.set(key, String(value))); if (file instanceof File) multipart.set("file", file); return multipart; })() : JSON.stringify(payload);
       const response = await fetch(endpoint, { method: "POST", headers: kind === "TEXT" ? { "content-type": "application/json" } : undefined, body });
-      responseReceived = true;
+      responseReceived = response.status < 500;
       if (!response.ok) throw new Error(response.status === 403 ? "Canvas access changed. Refresh and try again." : "Item could not be saved. Check the details and try again.");
       let created: CanvasItemCardItem;
       try {
@@ -102,7 +102,7 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit, onChange }: { slug: 
         setOrigin("ORIGINAL");
         setReplaceItem(null);
         setSubmissionUnknown(true);
-        setMessage("The request did not return a response and may have been saved. Reload the Canvas to check before submitting again.");
+        setMessage("The server did not confirm whether the item was saved. Reload the Canvas to check before submitting again.");
       } else setError(cause instanceof Error ? cause.message : "Item could not be saved. Try again.");
     } finally { setSaving(false); }
   }
