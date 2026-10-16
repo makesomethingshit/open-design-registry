@@ -43,7 +43,7 @@ test("Canvas applications stay private until first approval and retained history
     await applicant.getByRole("button", { name: "New here? Create an account", exact: true }).click();
     await applicant.getByRole("textbox", { name: "Name", exact: true }).fill("Canvas applicant");
     await applicant.getByRole("textbox", { name: "Email", exact: true }).fill(applicantEmail);
-    await applicant.getByLabel("Password", { exact: true }).fill("integration-password-123");
+    await applicant.getByLabel("Password").fill("integration-password-123");
     await applicant.getByRole("button", { name: "Create account", exact: true }).click();
     await expect(applicant).toHaveURL(new RegExp(`${base}/discussions#canvases$`));
 
