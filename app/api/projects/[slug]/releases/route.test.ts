@@ -234,6 +234,23 @@ describe("project releases route", () => {
     ] });
   });
 
+  it.each(["lookup", "insert"]) ("returns 500 when watcher notification %s fails and rejects the publishing transaction", async (step) => {
+    const failure = new Error("notification unavailable");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    if (step === "lookup") mocks.findWatchers.mockRejectedValueOnce(failure);
+    else {
+      mocks.findWatchers.mockResolvedValueOnce([{ userId: "watcher-1" }]);
+      mocks.createNotifications.mockRejectedValueOnce(failure);
+    }
+
+    try {
+      expect((await POST(request(), { params: Promise.resolve({ slug: "demo" }) })).status).toBe(500);
+      await expect(mocks.transaction.mock.results[0].value).rejects.toBe(failure);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("skips watch notifications when nobody watches the project", async () => {
     const response = await POST(request(), { params: Promise.resolve({ slug: "demo" }) });
     expect(response.status).toBe(201);

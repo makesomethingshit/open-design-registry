@@ -28,10 +28,25 @@ databaseDescribe("release idempotency in PostgreSQL", () => {
     const project = await prisma.project.create({ data: { slug: `release-idempotency-${suffix}`, title: "Release idempotency", description: "", license: "MIT", coverUrl: "https://example.test/cover.png", ownerId: owner.id } });
     const revisions = await Promise.all([1, 2].map((number) => prisma.revision.create({ data: { projectId: project.id, number, title: `Revision ${number}`, changeDescription: `Change ${number}`, sourceUrl: `https://example.test/${suffix}/${number}.zip` } })));
     await prisma.projectWatch.create({ data: { projectId: project.id, userId: watcher.id } });
+    await prisma.projectWatch.create({ data: { projectId: project.id, userId: owner.id } });
     mocks.getSession.mockResolvedValue({ user: { id: owner.id } });
     const body = { title: "Release one", description: "A focused change.", revisionIds: revisions.map(({ id }) => id), requestId: crypto.randomUUID() };
 
     try {
+      const trigger = `release_notification_failure_${suffix.replaceAll("-", "")}`;
+      await prisma.$executeRawUnsafe(`CREATE FUNCTION "${trigger}"() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'watch notification unavailable'; END; $$ LANGUAGE plpgsql`);
+      await prisma.$executeRawUnsafe(`CREATE TRIGGER "${trigger}" BEFORE INSERT ON "Notification" FOR EACH ROW WHEN (NEW."projectId" = '${project.id}') EXECUTE FUNCTION "${trigger}"()`);
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        expect((await createProjectRelease(request(project.slug, body), { slug: project.slug })).status).toBe(500);
+        expect(await prisma.release.count({ where: { projectId: project.id } })).toBe(0);
+        expect(await prisma.releaseRevision.count({ where: { release: { projectId: project.id } } })).toBe(0);
+        expect(await prisma.notification.count({ where: { projectId: project.id } })).toBe(0);
+      } finally {
+        log.mockRestore();
+        await prisma.$executeRawUnsafe(`DROP TRIGGER "${trigger}" ON "Notification"`);
+        await prisma.$executeRawUnsafe(`DROP FUNCTION "${trigger}"()`);
+      }
       const responses = await Promise.all([
         createProjectRelease(request(project.slug, body), { slug: project.slug }),
         createProjectRelease(request(project.slug, body), { slug: project.slug }),
@@ -42,6 +57,8 @@ databaseDescribe("release idempotency in PostgreSQL", () => {
       const releaseId = payloads[0].id as string;
       expect(await prisma.release.count({ where: { projectId: project.id } })).toBe(1);
       expect(await prisma.notification.count({ where: { releaseId } })).toBe(1);
+      expect(await prisma.notification.findFirstOrThrow({ where: { releaseId } })).toMatchObject({ recipientId: watcher.id, actorId: owner.id });
+      expect(await prisma.notification.count({ where: { projectId: project.id, recipientId: owner.id } })).toBe(0);
 
       const replay = await createProjectRelease(request(project.slug, body), { slug: project.slug });
       expect(replay.status).toBe(200);

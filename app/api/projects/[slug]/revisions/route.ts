@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { toPublicRevision } from "@/src/lib/revisions";
+import { notifyProjectWatchers } from "@/src/lib/project-watch-notifications";
 import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
@@ -309,12 +310,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         },
       });
       const published = await tx.revision.update({ where: { id: stagedRevision.id }, data: { isPublished: true }, include: { previews: true } });
-      if (lockedProject.isPublic) {
-        const watchers = await tx.projectWatch.findMany({ where: { projectId: project.id, userId: { not: session.user.id } }, select: { userId: true } });
-        if (watchers.length) {
-          await tx.notification.createMany({ data: watchers.map((watcher) => ({ recipientId: watcher.userId, actorId: session.user.id, type: "REVISION_PUBLISHED", projectId: project.id, revisionId: published.id })) });
-        }
-      }
+      if (lockedProject.isPublic) await notifyProjectWatchers(tx, project.id, session.user.id, { type: "REVISION_PUBLISHED", revisionId: published.id });
       return published;
     }, imageReferenceTransactionOptions);
     return NextResponse.json(toPublicRevision(revision), { status: 201 });
