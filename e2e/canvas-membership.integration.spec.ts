@@ -116,7 +116,7 @@ test("Canvas applications stay private until first approval and retained history
     await expect(ownCanvas).toContainText("Access revoked");
     await expect(ownCanvas.getByRole("button", { name: "Reapply", exact: true })).toBeVisible();
 
-    await visitor.goto(`${base}/discussions#canvases`);
+    await visitor.reload();
     const historyRow = visitor.locator("#canvases").getByRole("listitem").filter({ hasText: "Canvas applicant's Canvas" });
     await expect(historyRow).toContainText("Read-only public history");
     await expect(historyRow).toContainText("first approved");
