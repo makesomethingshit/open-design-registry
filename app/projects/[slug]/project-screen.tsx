@@ -17,12 +17,15 @@ import { getSession } from "@/src/lib/session";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { proposalStatusPresentation } from "@/src/lib/ui/status-presentation";
 import { prisma } from "@/src/lib/prisma";
+import { canvasView, readCanvasPage } from "@/src/lib/canvas/service";
+import { PrivateProjectWrite } from "@/src/lib/project-visibility-lock";
 import IssueBoard from "./issue-board";
 import ProjectDocument from "./project-document";
 import ProjectAbout from "./project-about";
 import ProjectSettingsForm from "./project-settings-form";
 import ProposalList, { type ProposalListItem } from "./proposal-list";
 import RevisionPublishForm from "./revision-publish-form";
+import { CanvasMembership } from "./canvases/canvas-membership";
 import styles from "./project.module.css";
 
 export default async function ProjectScreen({ params, searchParams, view = "overview" }: { view?: ProjectView; params: Promise<{ slug: string }>; searchParams: Promise<{ proposalStatus?: string; issueStatus?: string; publish?: string; contributionTarget?: string; baseRevision?: string; relatedIssue?: string; pageSize?: string; cursor?: string }> }) {
@@ -62,7 +65,17 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     ? await prisma.project.findFirst({ where: { slug: cursor, forkedFromProjectId: base.id, isPublic: true }, select: { slug: true } })
     : null;
   const forkCursorQuery: { cursor?: { slug: string }; skip?: number } = forkCursor ? { cursor: { slug: forkCursor.slug }, skip: 1 } : {};
-  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests, openQuestions] = await Promise.all([
+  let canvasVisibilityChanged = false;
+  const canvasRowsPromise = view === "discussions" && base.isPublic
+    ? readCanvasPage(slug, session?.user.id ?? null).catch(async (error) => {
+      if (!(error instanceof PrivateProjectWrite)) throw error;
+      canvasVisibilityChanged = true;
+      const currentProject = await prisma.project.findUnique({ where: { slug }, select: { isPublic: true, ownerId: true } });
+      if (!currentProject || (!currentProject.isPublic && session?.user.id !== currentProject.ownerId)) notFound();
+      return { items: [], nextCursor: null };
+    })
+    : Promise.resolve({ items: [], nextCursor: null });
+  const [revisionRows, latestRevisionRows, releaseRows, issueRows, discussionRows, forkRows, openIssueCount, revisionCount, openDesignRequests, openQuestions, canvasRows] = await Promise.all([
     view === "revisions"
       ? prisma.revision.findMany({ where: { projectId: base.id, isPublished: true }, orderBy: { number: "asc" }, ...cursorQuery, take: pageSize + 1, select: revisionHistorySelect })
       : view === "new-issue"
@@ -95,6 +108,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
     view === "overview"
       ? prisma.issue.findMany({ where: { projectId: base.id, status: "OPEN", kind: "ISSUE", isOpenQuestion: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 3, select: { id: true, title: true, sourceDiscussionId: true, revision: { select: { number: true, isPublished: true } } } })
       : Promise.resolve([]),
+    canvasRowsPromise,
   ]);
   const revisions = view === "new-issue" ? revisionRows : revisionRows.slice(0, pageSize);
   const releases = releaseRows.slice(0, pageSize);
@@ -221,6 +235,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
       </li>)}</ul> : <p className={styles.muted}>No discussions yet.</p>}
       <p className={styles.discussionSort}>Newest discussions first</p>
       <ProjectListPagination cursor={cursor} label="Discussion" nextCursor={discussionNextCursor} pageSize={pageSize} slug={project.slug} view="discussions" />
+      {project.isPublic && !canvasVisibilityChanged && <CanvasMembership canvases={canvasRows.items.map((canvas) => canvasView(canvas, session?.user.id ?? null))} embedded isProjectOwner={session?.user.id === project.ownerId} nextCursor={canvasRows.nextCursor} signedIn={Boolean(session)} slug={slug} />}
     </section>}
 
     {view === "issues" && <section aria-labelledby="issues-heading" className={styles.section} id="issues">

@@ -38,6 +38,8 @@ model User {
   notificationsCreated Notification[] @relation("NotificationActor")
   rightsDeclarations RevisionRightsDeclaration[]
   designRequestParticipations DesignRequestParticipation[]
+  ownedCanvases ProjectCanvas[] @relation("CanvasOwner")
+  canvasApprovals ProjectCanvas[] @relation("CanvasApprover")
 }
 
 model Session {
@@ -104,6 +106,7 @@ model Project {
   reports     Report[]
   issues      Issue[]
   discussions Discussion[]
+  canvases    ProjectCanvas[]
   proposals   Proposal[]
   notifications Notification[] @relation("NotificationProject")
   forkNotifications Notification[] @relation("NotificationForkedProject")
@@ -704,4 +707,33 @@ model Notification {
   @@index([revisionId])
   @@index([releaseId])
   @@index([proposalId])
+}
+
+
+// Project-scoped, single-owner discussion workspace. No Revision/Proposal authority.
+enum CanvasAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+model ProjectCanvas {
+  id              String @id @default(cuid())
+  projectId       String
+  ownerId         String?
+  accessStatus    CanvasAccessStatus @default(PENDING)
+  approvedById    String?
+  approvedAt      DateTime?
+  firstApprovedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner           User? @relation("CanvasOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  approvedBy      User? @relation("CanvasApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, ownerId])
+  @@index([projectId, accessStatus])
+  @@index([ownerId])
 }

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findProject: vi.fn(),
+  notFound: vi.fn(),
   findForkCursor: vi.fn(),
   findForks: vi.fn(),
   findRevisions: vi.fn(),
@@ -25,12 +26,16 @@ const mocks = vi.hoisted(() => ({
   findStarCount: vi.fn(),
   findWatchCount: vi.fn(),
   headerActions: vi.fn(),
+  readCanvases: vi.fn().mockResolvedValue([]),
+  readCanvasPage: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
 }));
 
-vi.mock("next/navigation", () => ({ notFound: vi.fn(), usePathname: () => "/projects/demo", useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ notFound: mocks.notFound, usePathname: () => "/projects/demo", useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children?: unknown }) => createElement("a", { href }, children as never) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { project: { findUnique: mocks.findProject, findFirst: mocks.findForkCursor, findMany: mocks.findForks }, revision: { findMany: mocks.findRevisions, count: mocks.countRevisions }, release: { findMany: mocks.findReleases }, issue: { findMany: mocks.findIssues, count: mocks.countIssues }, discussion: { findMany: mocks.findDiscussions }, projectStar: { count: mocks.findStarCount }, projectWatch: { count: mocks.findWatchCount } } }));
 vi.mock("@/src/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
+vi.mock("@/src/lib/canvas/service", () => ({ readCanvases: mocks.readCanvases, readCanvasPage: mocks.readCanvasPage, canvasView: vi.fn() }));
+import { PrivateProjectWrite } from "@/src/lib/project-visibility-lock";
 vi.mock("@/src/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/src/lib/storage", () => ({ publicAssetUrl: (value: string) => `/asset/${value}` }));
 vi.mock("@/src/lib/revision-bundle", () => ({ publicBundleFiles: () => [], readRevisionBundle: mocks.readBundle }));
@@ -238,9 +243,9 @@ function cursorPageBySlug<T extends { slug: string }>(rows: T[], args?: { cursor
   return rows.slice(start, args?.take === undefined ? undefined : start + args.take);
 }
 
-async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0, view: Parameters<typeof ProjectPage>[0]["view"] = "overview", searchParams: Awaited<Parameters<typeof ProjectPage>[0]["searchParams"]> = {}) {
+async function renderProjectPage(session: { user: { id: string } } | null, value = project(), starCount = 0, watchCount = 0, view: Parameters<typeof ProjectPage>[0]["view"] = "overview", searchParams: Awaited<Parameters<typeof ProjectPage>[0]["searchParams"]> = {}, projectLookups?: unknown[]) {
   vi.clearAllMocks();
-  mocks.findProject.mockResolvedValue(value);
+  mocks.findProject.mockImplementation(async () => projectLookups?.shift() ?? value);
   mockProjectQueries(value);
   mocks.getSession.mockResolvedValue(session);
   mocks.findStarCount.mockResolvedValue(starCount);
@@ -316,6 +321,39 @@ describe("Project Releases section", () => {
 });
 
 describe("Project Discussions section", () => {
+
+  it("does not read public Canvases while an owner views a private project's Discussions", async () => {
+    const privateProject = project();
+    privateProject.isPublic = false;
+    mocks.readCanvasPage.mockResolvedValue({ items: [], nextCursor: null });
+
+    await expect(renderProjectPage({ user: { id: "owner" } }, privateProject, 0, 0, "discussions")).resolves.not.toContain('id="canvases"');
+    expect(mocks.readCanvasPage).not.toHaveBeenCalled();
+  });
+
+  it("rechecks visibility after a public Canvas read loses a privatization race", async () => {
+    const initial = project();
+    const current = { ...project(), isPublic: false };
+    const notFoundError = new Error("NEXT_NOT_FOUND");
+    mocks.notFound.mockImplementation(() => { throw notFoundError; });
+    mocks.readCanvasPage.mockRejectedValueOnce(new PrivateProjectWrite());
+
+    await expect(renderProjectPage(null, initial, 0, 0, "discussions", {}, [initial, current])).rejects.toBe(notFoundError);
+    expect(mocks.findProject).toHaveBeenCalledTimes(2);
+
+    mocks.readCanvasPage.mockRejectedValueOnce(new PrivateProjectWrite());
+    const ownerMarkup = await renderProjectPage({ user: { id: "owner" } }, initial, 0, 0, "discussions", {}, [initial, current, current]);
+    expect(ownerMarkup).not.toContain('id="canvases"');
+    expect(mocks.findProject).toHaveBeenCalledTimes(3);
+  });
+
+  it("propagates unexpected Canvas read errors without rechecking project visibility", async () => {
+    const failure = new Error("database unavailable");
+    mocks.readCanvasPage.mockRejectedValueOnce(failure);
+
+    await expect(renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "discussions")).rejects.toBe(failure);
+    expect(mocks.findProject).toHaveBeenCalledTimes(1);
+  });
 
   it("shows summary rows with title, author, created time, and comment count", async () => {
     const markup = await renderProjectPage(null, project(), 0, 0, "discussions");

@@ -51,14 +51,21 @@ test database and storage, and run the checks relevant to your change. Describe
 the problem, resulting behavior, validation, and remaining human review in the
 PR template. Preserve existing license and attribution notices for bundled assets.
 
-Normal PRs run `test`, `typecheck`, `build`, `pr-title`, and `secrets`. The secrets
+Normal PRs run `test`, `typecheck`, `build`, `e2e`, `pr-title`, and `secrets`. The secrets
 check scans fetched Git history with Gitleaks and redacts detected values in logs.
 Do not bypass a detection by adding an allowlist for an actual credential;
-revoke or rotate it and remove the exposed material before review. Full E2E runs on
-`main` pushes and manual dispatch; high-risk changes need a maintainer's manual
-E2E run against the exact PR HEAD before merging. See the operations guide for
-the command and how to record the tested SHA. Fork PRs may require workflow
-approval; do not add production credentials to make tests run.
+revoke or rotate it and remove the exposed material before review. Browser E2E
+runs for pull requests, including when a draft PR is marked ready for review, as
+well as `main` pushes and manual dispatch. A green run validates only the browser
+scenarios it actually executed; see the operations guide for coverage and how to
+record a manually tested SHA. Fork PRs may require workflow approval; do not add
+production credentials to make tests run.
+
+Canvas membership browser coverage runs with the integration database and storage:
+it checks first-application privacy, moderation and reapplication, public read-only
+history, keyboard operation, and 320/390px layouts. A CI job that skips or does not
+include a requested browser scenario does not establish that scenario's acceptance;
+record any separate manual run against the exact PR SHA.
 
 Only include synthetic or redistributable sample designs, screenshots, and
 fixtures. Do not attach `.env`, production database exports, authentication
