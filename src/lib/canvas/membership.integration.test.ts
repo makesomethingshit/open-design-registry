@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../prisma";
-import { applyForCanvas, changeCanvasAccess, readCanvases } from "./service";
+import { applyForCanvas, canvasView, changeCanvasAccess, readCanvases } from "./service";
 import { canvasRequest } from "./handlers";
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
@@ -12,7 +12,7 @@ db("Canvas membership PostgreSQL production paths", () => {
   beforeEach(async () => {
     const suffix = crypto.randomUUID();
     [ownerId, contributorId, strangerId] = ["owner", "contributor", "stranger"].map((role) => `canvas-${role}-${suffix}`);
-    for (const id of [ownerId, contributorId, strangerId]) await prisma.user.create({ data: { id, email: `${id}@example.test`, name: id } });
+    for (const [id, name] of [[ownerId, "Project owner"], [contributorId, "Canvas designer"], [strangerId, "Other designer"]] as const) await prisma.user.create({ data: { id, email: `${id}@example.test`, name } });
     slug = `canvas-${suffix}`;
     projectId = (await prisma.project.create({ data: { slug, title: "Canvas", description: "", license: "MIT", coverUrl: "", ownerId, isPublic: true } })).id;
     session.userId = null;
@@ -88,6 +88,62 @@ db("Canvas membership PostgreSQL production paths", () => {
     expect((await patch({ action: "approve" })).status).toBe(403);
     session.userId = ownerId;
     expect((await patch({ action: "approve" })).status).toBe(200);
+  });
+
+  it("projects private first applications and public retained approval history without leaking account metadata", async () => {
+    const canvas = await applyForCanvas(slug, contributorId);
+    const pending = (await readCanvases(slug, contributorId, canvas.id))[0];
+    const applicantView = canvasView(pending, contributorId);
+    expect(applicantView).toMatchObject({ accessStatus: "PENDING", isOwnCanvas: true, canWithdraw: true, canReapply: false });
+    expect(applicantView).not.toHaveProperty("ownerId");
+    expect(applicantView).not.toHaveProperty("email");
+
+    session.userId = null;
+    const publicPendingList = await canvasRequest(new Request("http://localhost"), { slug });
+    expect(publicPendingList.status).toBe(200);
+    expect(await publicPendingList.json()).toEqual([]);
+    session.userId = ownerId;
+    const ownerPending = await (await canvasRequest(new Request("http://localhost"), { slug })).json();
+    expect(ownerPending.find((row: { id: string }) => row.id === canvas.id)).toMatchObject({ id: canvas.id, ownerName: "Canvas designer", accessStatus: "PENDING", firstApprovedAt: null, canManage: true });
+    expect(JSON.stringify(ownerPending)).not.toContain(`${contributorId}@example.test`);
+    expect(JSON.stringify(ownerPending)).not.toContain('"ownerId"');
+
+    await changeCanvasAccess(slug, canvas.id, ownerId, "reject");
+    session.userId = contributorId;
+    const rejected = await (await canvasRequest(new Request("http://localhost"), { slug, canvasId: canvas.id })).json();
+    expect(rejected).toMatchObject({ accessStatus: "REJECTED", firstApprovedAt: null, canReapply: true });
+    session.userId = null;
+    const privateRejectedList = await (await canvasRequest(new Request("http://localhost"), { slug })).json();
+    expect(privateRejectedList).toEqual([]);
+    expect((await canvasRequest(new Request("http://localhost"), { slug, canvasId: canvas.id })).status).toBe(404);
+    session.userId = contributorId;
+    expect((await applyForCanvas(slug, contributorId)).accessStatus).toBe("PENDING");
+    await changeCanvasAccess(slug, canvas.id, contributorId, "withdraw");
+    const withdrawn = canvasView((await readCanvases(slug, contributorId, canvas.id))[0], contributorId);
+    expect(withdrawn).toMatchObject({ accessStatus: "REVOKED", firstApprovedAt: null, canReapply: true, canEdit: false, canComment: false });
+
+    session.userId = ownerId;
+    expect((await applyForCanvas(slug, ownerId)).accessStatus).toBe("APPROVED");
+    session.userId = contributorId;
+    expect((await applyForCanvas(slug, contributorId)).accessStatus).toBe("PENDING");
+    session.userId = ownerId;
+    await changeCanvasAccess(slug, canvas.id, ownerId, "approve");
+    const firstApproval = (await readCanvases(slug, contributorId, canvas.id))[0].firstApprovedAt;
+    await changeCanvasAccess(slug, canvas.id, ownerId, "revoke");
+    session.userId = null;
+    const publicHistory = await (await canvasRequest(new Request("http://localhost"), { slug, canvasId: canvas.id })).json();
+    expect(publicHistory).toMatchObject({ accessStatus: "REVOKED", firstApprovedAt: firstApproval?.toISOString(), canEdit: false, canComment: false, canManage: false });
+    expect(JSON.stringify(publicHistory)).not.toContain(`${contributorId}@example.test`);
+    expect(JSON.stringify(publicHistory)).not.toContain('"ownerId"');
+
+    session.userId = contributorId;
+    const reapplication = await applyForCanvas(slug, contributorId);
+    const retained = (await readCanvases(slug, contributorId, canvas.id))[0];
+    expect(reapplication.accessStatus).toBe("PENDING");
+    expect(canvasView(retained, contributorId)).toMatchObject({ accessStatus: "PENDING", firstApprovedAt: firstApproval?.toISOString(), isOwnCanvas: true, canEdit: false, canComment: false, canWithdraw: true });
+    session.userId = null;
+    const publicPendingHistory = await (await canvasRequest(new Request("http://localhost"), { slug, canvasId: canvas.id })).json();
+    expect(publicPendingHistory).toMatchObject({ accessStatus: "REVOKED", firstApprovedAt: firstApproval?.toISOString(), canEdit: false, canComment: false });
   });
 
   it("retains approved contribution identity anonymously after contributor deletion", async () => {

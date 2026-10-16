@@ -28,6 +28,7 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children: unknown }) => createElement("a", { href }, children as never) }));
 
 const { ProjectStarButton } = await import("./project-star-button");
+const { ProjectRelationButton } = await import("./project-relation-button");
 
 function isElement(node: unknown): node is ReactElement<Record<string, unknown>> {
   return Boolean(node && typeof node === "object" && "type" in node && "props" in node);
@@ -51,7 +52,9 @@ function renderControl(initialStarred = false, signedIn = true) {
     hasRendered = true;
   }
   mocks.stateIndex = 0;
-  return ProjectStarButton({ initialStarred, signedIn, slug: "demo" });
+  const relation = ProjectStarButton({ initialStarred, signedIn, slug: "demo" });
+  if (!isElement(relation) || relation.type !== ProjectRelationButton) throw new Error("ProjectStarButton must render ProjectRelationButton");
+  return ProjectRelationButton(relation.props as never);
 }
 
 function starButton(tree: unknown) {

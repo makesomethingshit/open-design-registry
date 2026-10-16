@@ -7,6 +7,7 @@ import { proposalCanBeReviewed, proposalStatusForChanges } from "./proposal-stat
 import { deleteObject, publicAssetUrl } from "./storage";
 import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameDependencySet, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 import { changedUnitIds, conflictForChange, renamedUnitIds } from "./proposal-conflicts";
+import { notifyProjectWatchers } from "./project-watch-notifications";
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
@@ -200,13 +201,6 @@ async function lockProjects(tx: Prisma.TransactionClient, projectIds: string[]) 
     if (project) projects.set(project.id, project);
   }
   return projects;
-}
-
-async function notifyRevisionWatchers(tx: Prisma.TransactionClient, projectId: string, actorId: string, revisionId: string) {
-  const watchers = await tx.projectWatch.findMany({ where: { projectId, userId: { not: actorId } }, select: { userId: true } });
-  if (watchers.length) {
-    await tx.notification.createMany({ data: watchers.map(({ userId }) => ({ recipientId: userId, actorId, type: "REVISION_PUBLISHED", projectId, revisionId })) });
-  }
 }
 
 function unitChanges(base: RevisionBundle, source: RevisionBundle | null, requested: UnitChangeRequest[]) {
@@ -749,7 +743,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
         if (proposal.authorId !== session.user.id) {
           await tx.notification.create({ data: { recipientId: proposal.authorId, actorId: session.user.id, type: "PROPOSAL_APPLIED", projectId: initial.projectId, proposalId: proposal.id, revisionId: revision.id } });
         }
-        if (lockedProject.isPublic) await notifyRevisionWatchers(tx, initial.projectId, session.user.id, revision.id);
+        if (lockedProject.isPublic) await notifyProjectWatchers(tx, initial.projectId, session.user.id, { type: "REVISION_PUBLISHED", revisionId: revision.id });
         return { revision, alreadyApplied: false };
       }
       const latestWithSource = await tx.revision.findUnique({ where: { id: latest.id }, include: { previews: { orderBy: [{ position: "asc" }, { key: "asc" }] } } });
@@ -813,7 +807,7 @@ export async function applyProposal(request: Request, scope: { id: string }) {
       if (proposal.authorId !== session.user.id) {
         await tx.notification.create({ data: { recipientId: proposal.authorId, actorId: session.user.id, type: "PROPOSAL_APPLIED", projectId: initial.projectId, proposalId: proposal.id, revisionId: revision.id } });
       }
-      if (lockedProject.isPublic) await notifyRevisionWatchers(tx, initial.projectId, session.user.id, revision.id);
+      if (lockedProject.isPublic) await notifyProjectWatchers(tx, initial.projectId, session.user.id, { type: "REVISION_PUBLISHED", revisionId: revision.id });
       return { revision, alreadyApplied: false };
     });
     return NextResponse.json(result, { status: result.alreadyApplied ? 200 : 201 });

@@ -35,7 +35,7 @@ export async function createCanvasItem(slug: string, canvasId: string, actorId: 
       if (!mayEditCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(403, "Canvas is no longer writable");
       if (key && await tx.documentImageDeletion.findUnique({ where: { key } })) throw new CanvasError(409, "Upload expired; upload the image again");
       if (sourceKey && (await tx.documentImageDeletion.findUnique({ where: { key: sourceKey } }) || !await documentImageExists(sourceKey))) throw new CanvasError(409, "Source image expired; upload it again");
-      return tx.canvasItem.create({ data: { ...parsed.data, canvasId, authorId: actorId, assetKey: key } });
+      return tx.canvasItem.create({ data: { ...parsed.data, canvasId, authorId: actorId, assetKey: key }, include: { author: { select: { name: true } } } });
     }, imageReferenceTransactionOptions);
   } catch (error) {
     if (key) {
@@ -75,26 +75,71 @@ export async function readCanvasItems(slug: string, canvasId: string, actorId: s
 }
 
 export async function readCanvasAsset(key: string, actorId: string | null) {
-  return prisma.$transaction(async (tx) => {
-    const reference = await tx.canvasItem.findFirst({ where: { assetKey: key }, select: { canvasId: true, canvas: { select: { project: { select: { slug: true } } } } } });
-    if (!reference) return null;
+  const reference = await prisma.canvasItem.findFirst({ where: { assetKey: key }, select: { canvasId: true, canvas: { select: { project: { select: { slug: true } } } } } });
+  if (!reference) return null;
+  const authorized = () => prisma.$transaction(async (tx) => {
     const { project, canvas } = await lockCanvas(tx, reference.canvas.project.slug, reference.canvasId);
-    if (!mayReadCanvas(actorId, canvasFacts(project, canvas))) return null;
-    if (!await tx.canvasItem.findFirst({ where: { canvasId: canvas.id, assetKey: key }, select: { id: true } })) return null;
-    const object = await getObject(key);
-    if (!object.Body || !canvasImageMimeTypes.has(object.ContentType ?? "") || (object.ContentLength ?? 0) > maxCanvasImageBytes) return null;
-    const reader = object.Body.transformToWebStream().getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
+    return mayReadCanvas(actorId, canvasFacts(project, canvas))
+      && Boolean(await tx.canvasItem.findFirst({ where: { canvasId: canvas.id, assetKey: key }, select: { id: true } }))
+      && !await tx.moderationAssetBlock.findFirst({ where: { key, blocked: true }, select: { key: true } });
+  }, imageReferenceTransactionOptions);
+  if (!await authorized()) return null;
+
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timedOut = false, oversized = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancelBody = (reason: unknown) => {
+    controller.abort(reason);
+    if (reader) void reader.cancel(reason).catch(() => {}).finally(() => {
+      try { reader?.releaseLock(); } catch { /* A read may still be settling. */ }
+    });
+  };
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      const error = new Error("Canvas asset read timed out");
+      cancelBody(error);
+      reject(error);
+    }, 10_000);
+  });
+  try {
+    const read = (async () => {
+      const object = await getObject(key, controller.signal);
+      if (!object.Body) return null;
+      const stream = object.Body.transformToWebStream();
+      if (controller.signal.aborted) {
+        void stream.cancel(controller.signal.reason).catch(() => {});
+        return null;
+      }
+      reader = stream.getReader();
+      if (!canvasImageMimeTypes.has(object.ContentType ?? "") || (object.ContentLength ?? 0) > maxCanvasImageBytes) {
+        cancelBody(new Error("Canvas asset has an invalid type or size"));
+        return null;
+      }
+      const chunks: Uint8Array[] = [];
+      let size = 0;
       for (;;) {
-        const { done, value } = await reader.read();
+        const { done, value } = await Promise.race([reader.read(), timeout]);
         if (done) break;
         size += value.byteLength;
-        if (size > maxCanvasImageBytes) { await reader.cancel(); return null; }
+        if (size > maxCanvasImageBytes) {
+          oversized = true;
+          cancelBody(new Error("Canvas asset exceeds the size limit"));
+          return null;
+        }
         chunks.push(value);
       }
-    } finally { reader.releaseLock(); }
-    return { bytes: Buffer.concat(chunks, size), contentType: object.ContentType! };
-  }, imageReferenceTransactionOptions);
+      return { bytes: Buffer.concat(chunks, size), contentType: object.ContentType! };
+    })();
+    const object = await Promise.race([read, timeout]);
+    if (!object || !await authorized()) return null;
+    return object;
+  } catch (error) {
+    if (!timedOut && !oversized) throw error;
+    return null;
+  } finally {
+    clearTimeout(timer);
+    if (!controller.signal.aborted) reader?.releaseLock();
+  }
 }
