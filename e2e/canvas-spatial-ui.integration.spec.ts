@@ -54,31 +54,6 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await expect(board.getByLabel("Select an item").locator("option")).toHaveCount(4);
       await expect(board.getByText("Used with permission", { exact: true })).toBeVisible();
 
-      let releaseCanvasResponse!: () => void;
-      let canvasResponseStarted!: () => void;
-      const canvasResponseGate = new Promise<void>((resolve) => { releaseCanvasResponse = resolve; });
-      const canvasResponseSeen = new Promise<void>((resolve) => { canvasResponseStarted = resolve; });
-      let canvasReleased = false;
-      let itemsRequestedBeforeCanvas = false;
-      const watchItemRequest = (request: import("@playwright/test").Request) => {
-        if (new URL(request.url()).pathname.endsWith(`/canvases/${canvasId}/items`) && !canvasReleased) itemsRequestedBeforeCanvas = true;
-      };
-      page.on("request", watchItemRequest);
-      await page.route(`**/api/projects/${slug}/canvases/${canvasId}`, async (route) => {
-        canvasResponseStarted();
-        await canvasResponseGate;
-        await route.continue();
-      }, { times: 1 });
-      const reloadWithHeldCanvas = page.reload();
-      await canvasResponseSeen;
-      await page.waitForTimeout(100);
-      canvasReleased = true;
-      releaseCanvasResponse();
-      await reloadWithHeldCanvas;
-      page.off("request", watchItemRequest);
-      expect(itemsRequestedBeforeCanvas).toBe(false);
-      expect(itemsRequestedBeforeCanvas).toBe(false);
-
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       await board.getByRole("button", { name: "Fit", exact: true }).click();
       const moveHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`);

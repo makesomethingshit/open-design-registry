@@ -30,4 +30,6 @@ The spatial workspace is integrated in the Canvas detail route, based on PR #167
 - Archive from the board refreshes the item composer; Fit includes the same active/archived items currently rendered.
 - Pointer resize selects its target. Keyboard movement clamps at coordinate bounds. Numeric controls retain raw text until blur/save, including an unfinished minus sign.
 - New items occupy distinct four-column slots, skipping occupied rectangles. The additive migration backfills only entirely untouched default boards with layoutVersion 0; saved/customized boards retain their coordinates. Initial placement is limited to 15,388 slots within the coordinate bounds.
-- PostgreSQL regression executes the actual migration SQL and checks both backfilled and preserved layouts. Public comment lists expose display attribution without internal author IDs.
+- PostgreSQL regression executes the actual migration SQL and checks both backfilled and preserved layouts. Public comment lists expose display attribution without internal author IDs.- Layer ordering includes archived cards so front/back actions match the rendered stack. The target must still be active.
+- Reload reads the layout version before item geometry, so a concurrent writer cannot pair stale geometry with a newer accepted version; intervening writes cause a conservative 409.
+- Ambiguous comment POSTs (transport failure, 5xx, unreadable response) disable retries with a persistent reload action, including after changing selection.

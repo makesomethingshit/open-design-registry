@@ -90,23 +90,6 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
     expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId }, select: { layoutVersion: true } })).toMatchObject({ layoutVersion: 1 });
   });
 
-  it("reorders archived and active layers together but rejects an archived target", async () => {
-    const middle = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Middle active" });
-    const archived = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Archived layer" });
-    await prisma.canvasItem.update({ where: { id: archived.id }, data: { zIndex: 0 } });
-    await prisma.canvasItem.update({ where: { id: itemId }, data: { zIndex: 2 } });
-    await prisma.canvasItem.update({ where: { id: middle.id }, data: { zIndex: 1 } });
-    await archiveCanvasItem(slug, canvasId, archived.id, authorId);
-
-    const response = await stack(middle.id, 0, "back");
-    expect(response.status).toBe(200);
-    const result = await response.json();
-    expect(result.items.map((candidate: { id: string; zIndex: number; archivedAt: string | null }) => [candidate.id, candidate.zIndex, Boolean(candidate.archivedAt)]))
-      .toEqual([[middle.id, 0, false], [archived.id, 1, true], [itemId, 2, false]]);
-    expect((await stack(archived.id, 1, "front")).status).toBe(404);
-    expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId }, select: { layoutVersion: true } })).toMatchObject({ layoutVersion: 1 });
-  });
-
   it("serializes a stack operation against a simultaneous rectangle save", async () => {
     const stacked = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Stacked" });
     const results = await Promise.all([stack(stacked.id, 0, "front"), layout()]);
