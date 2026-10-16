@@ -55,7 +55,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
     await route.continue();
   });
 
-  await panel.getByLabel("Note", { exact: true }).fill("Original board note");
+  await panel.getByRole("textbox", { name: "Note", exact: true }).fill("Original board note");
   await panel.getByLabel("Source URL (optional)").fill("https://example.test/original");
   await panel.getByLabel("Rights note (optional)").fill("Used with permission for this concept");
   await panel.getByRole("button", { name: "Add item", exact: true }).focus();
@@ -68,7 +68,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
 
   await original.getByRole("button", { name: "Replace with a new item" }).focus();
   await page.keyboard.press("Enter");
-  await panel.getByLabel("Note", { exact: true }).fill("Replacement board note");
+  await panel.getByRole("textbox", { name: "Note", exact: true }).fill("Replacement board note");
   await panel.getByRole("button", { name: "Save replacement" }).focus();
   await page.keyboard.press("Enter");
   await archiveRequest;
@@ -95,7 +95,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await page.getByLabel("Item type").selectOption("IMAGE");
   await page.getByLabel("Contribution type").selectOption("REFERENCE");
   await page.getByLabel("Image file").setInputFiles({ name: "reference.png", mimeType: "image/png", buffer: image });
-  await page.getByLabel("Alternative text").fill("One pixel reference image");
+  await page.getByRole("textbox", { name: "Alternative text", exact: true }).fill("One pixel reference image");
   await page.getByLabel("Source URL (optional)").fill("https://example.test/reference");
   await page.getByLabel("Rights note (optional)").fill("Reference only; no reuse rights implied");
   await page.getByRole("button", { name: "Add item", exact: true }).focus();
