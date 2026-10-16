@@ -132,6 +132,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   const beforeUnknown = await prisma.canvasItem.count({ where: { canvasId } });
   await reference.getByRole("button", { name: "Replace with a new item" }).focus();
   await page.keyboard.press("Enter");
+  await panel.getByLabel("Item type").selectOption("TEXT");
   await panel.getByRole("textbox", { name: "Note", exact: true }).fill("Response-lost replacement");
   loseNextCreateResponse = true;
   await panel.getByRole("button", { name: "Save replacement" }).focus();
