@@ -51,7 +51,10 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       await board.getByRole("button", { name: "Fit", exact: true }).click();
       const moveHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`);
+      const moveSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
       await dragBy(page, moveHandle, 72, 48);
+      expect((await moveSave).status()).toBe(200);
+      await expect(board.getByRole("button", { name: "Save layout", exact: true })).toBeEnabled();
       await expect.poll(async () => {
         const row = await prisma.canvasItem.findUnique({ where: { id: moveItem.id }, select: { x: true, y: true } });
         return row ? [row.x, row.y] : null;
@@ -59,16 +62,21 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       const moved = await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } });
 
       const resizeHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-resize-handle]`);
-      await dragBy(page, resizeHandle, 52, 38);
+      const resizeSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
+      await dragBy(page, resizeHandle, 52, 38, "bottomRight");
+      expect((await resizeSave).status()).toBe(200);
+      await expect(board.getByRole("button", { name: "Save layout", exact: true })).toBeEnabled();
       await expect.poll(async () => (await prisma.canvasItem.findUnique({ where: { id: moveItem.id }, select: { width: true } }))?.width ?? 0).toBeGreaterThan(240);
       const resized = await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } });
 
       await page.reload();
       const reentered = board.locator(`[data-item-id="${moveItem.id}"]`);
-      await expect(reentered).toHaveCSS("left", `${moved.x}px`);
-      await expect(reentered).toHaveCSS("top", `${moved.y}px`);
-      await expect(reentered).toHaveCSS("width", `${resized.width}px`);
-      await expect(reentered).toHaveCSS("height", `${resized.height}px`);
+      const persistedGeometry = [moved.x, moved.y, resized.width, resized.height];
+      await expect.poll(async () => reentered.evaluate((element, expected) => {
+        const style = getComputedStyle(element);
+        const actual = [style.left, style.top, style.width, style.height].map((value) => Number.parseFloat(value));
+        return actual.every((value, index) => Math.abs(value - expected[index]) < 0.01);
+      }, persistedGeometry)).toBe(true);
 
       await reentered.focus();
       const keyboardMove = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
@@ -158,7 +166,11 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await expect(board.getByRole("button", { name: "Post feedback", exact: true })).toHaveCount(0);
       await expect(board.locator("[data-drag-handle]")).toHaveCount(0);
     } finally {
-      if (projectId) await prisma.project.deleteMany({ where: { id: projectId } });
+      const projectFilters = [
+        ...(projectId ? [{ id: projectId }] : []),
+        ...(ownerId ? [{ ownerId }] : []),
+      ];
+      if (projectFilters.length) await prisma.project.deleteMany({ where: { OR: projectFilters } });
       if (ownerId) await prisma.user.deleteMany({ where: { id: ownerId } });
       if (authorId) await prisma.user.deleteMany({ where: { id: authorId } });
       await ownerContext.close();
@@ -176,11 +188,15 @@ async function signUp(page: Page, name: string, email: string) {
   await expect(page.getByRole("button", { name: /^Account/ })).toBeVisible();
 }
 
-async function dragBy(page: Page, handle: import("@playwright/test").Locator, dx: number, dy: number) {
+async function dragBy(page: Page, handle: import("@playwright/test").Locator, dx: number, dy: number, anchor: "center" | "bottomRight" = "center") {
+  await handle.scrollIntoViewIfNeeded();
+  await expect(handle).toBeVisible();
+  await expect(handle).toBeEnabled();
   const box = await handle.boundingBox();
   if (!box) throw new Error("Canvas drag handle is not visible");
-  const x = box.x + Math.min(box.width / 2, 20);
-  const y = box.y + Math.min(box.height / 2, 16);
+  const x = box.x + (anchor === "bottomRight" ? box.width - 4 : Math.min(box.width / 2, 20));
+  const y = box.y + (anchor === "bottomRight" ? box.height - 4 : Math.min(box.height / 2, 16));
+  await handle.click({ trial: true, position: { x: x - box.x, y: y - box.y } });
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + dx, y + dy, { steps: 6 });
