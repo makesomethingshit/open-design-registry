@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSession } from "@/src/lib/session";
 import { prisma } from "@/src/lib/prisma";
 import { canvasView, readCanvases } from "@/src/lib/canvas/service";
+import { CanvasItemsPanel } from "@/src/components/canvas/canvas-items-panel";
 import { CanvasDetail } from "../canvas-membership";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export default async function CanvasDetailPage({ params }: Props) {
   try { canvas = (await readCanvases(slug, session?.user.id ?? null, canvasId))[0]; }
   catch { notFound(); }
   if (!canvas) notFound();
-  return <CanvasDetail canvas={canvasView(canvas, session?.user.id ?? null)} canvasId={canvasId} slug={slug}>
-    {/* B/C item components mount here; CanvasView carries canEdit, canComment, and layoutVersion. */}
+  const view = canvasView(canvas, session?.user.id ?? null);
+  return <CanvasDetail canvas={view} canvasId={canvasId} slug={slug}>
+    <CanvasItemsPanel canvasId={canvasId} canEdit={view.canEdit} slug={slug} />
   </CanvasDetail>;
 }
