@@ -22,6 +22,25 @@ db("Canvas membership PostgreSQL production paths", () => {
     await prisma.user.deleteMany({ where: { id: { in: [ownerId, contributorId, strangerId] } } });
   });
 
+  it("auto-approves the Project owner's own Canvas and preserves its identity on reactivation", async () => {
+    const own = await applyForCanvas(slug, ownerId);
+    expect(own.accessStatus).toBe("APPROVED");
+    expect(own.approvedById).toBe(ownerId);
+    expect(own.approvedAt).not.toBeNull();
+    expect(own.firstApprovedAt).not.toBeNull();
+    expect((await applyForCanvas(slug, ownerId)).id).toBe(own.id);
+
+    await changeCanvasAccess(slug, own.id, ownerId, "withdraw");
+    const again = await applyForCanvas(slug, ownerId);
+    expect(again.id).toBe(own.id);
+    expect(again.accessStatus).toBe("APPROVED");
+    expect(again.firstApprovedAt).toEqual(own.firstApprovedAt);
+    expect(await prisma.projectCanvas.count({ where: { projectId, ownerId } })).toBe(1);
+
+    const contributor = await applyForCanvas(slug, contributorId);
+    expect(contributor.accessStatus).toBe("PENDING");
+  });
+
   it("serializes concurrent first applications and preserves identity/history on reapplication", async () => {
     const [first, second] = await Promise.all([applyForCanvas(slug, contributorId), applyForCanvas(slug, contributorId)]);
     expect(first.id).toBe(second.id);
