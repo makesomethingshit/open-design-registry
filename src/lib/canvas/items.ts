@@ -35,7 +35,7 @@ export async function createCanvasItem(slug: string, canvasId: string, actorId: 
       if (!mayEditCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(403, "Canvas is no longer writable");
       if (key && await tx.documentImageDeletion.findUnique({ where: { key } })) throw new CanvasError(409, "Upload expired; upload the image again");
       if (sourceKey && (await tx.documentImageDeletion.findUnique({ where: { key: sourceKey } }) || !await documentImageExists(sourceKey))) throw new CanvasError(409, "Source image expired; upload it again");
-      return tx.canvasItem.create({ data: { ...parsed.data, canvasId, authorId: actorId, assetKey: key } });
+      return tx.canvasItem.create({ data: { ...parsed.data, canvasId, authorId: actorId, assetKey: key }, include: { author: { select: { name: true } } } });
     }, imageReferenceTransactionOptions);
   } catch (error) {
     if (key) {

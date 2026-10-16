@@ -9,7 +9,7 @@ import styles from "./canvas-items.module.css";
 type Kind = "TEXT" | "IMAGE";
 type Origin = "ORIGINAL" | "REFERENCE";
 
-export function CanvasItemsPanel({ slug, canvasId, canEdit, canComment: _canComment }: { slug: string; canvasId: string; canEdit: boolean; canComment?: boolean }) {
+export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; canvasId: string; canEdit: boolean }) {
   const [items, setItems] = useState<CanvasItemCardItem[]>([]);
   const [kind, setKind] = useState<Kind>("TEXT");
   const [origin, setOrigin] = useState<Origin>("ORIGINAL");
