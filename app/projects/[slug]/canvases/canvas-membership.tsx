@@ -40,7 +40,7 @@ export function CanvasMembership({ slug, canvases, signedIn, isProjectOwner, emb
 }
 
 function CanvasRow({ canvas, slug }: { canvas: CanvasView; slug: string }) {
-  const publicHistory = !canvas.isOwnCanvas && canvas.firstApprovedAt !== null && canvas.accessStatus === "REVOKED";
+  const publicHistory = !canvas.isOwnCanvas && !canvas.canManage && canvas.firstApprovedAt !== null && canvas.accessStatus === "REVOKED";
   const privateApplication = canvas.firstApprovedAt === null && (canvas.accessStatus === "PENDING" || canvas.accessStatus === "REJECTED");
   const status = privateApplication
     ? `${canvas.accessStatus === "PENDING" ? "Awaiting approval" : "Application rejected"}. This private application is visible only to its owner and this project's owner.`
@@ -65,7 +65,7 @@ function CanvasRow({ canvas, slug }: { canvas: CanvasView; slug: string }) {
 
 /** B/C detail components mount as children of this route-level slot. */
 export function CanvasDetail({ slug, canvasId, canvas, children }: { slug: string; canvasId: string; canvas: CanvasView; children?: ReactNode }) {
-  const publicHistory = !canvas.isOwnCanvas && canvas.firstApprovedAt !== null && canvas.accessStatus === "REVOKED";
+  const publicHistory = !canvas.isOwnCanvas && !canvas.canManage && canvas.firstApprovedAt !== null && canvas.accessStatus === "REVOKED";
   const privateApplication = canvas.firstApprovedAt === null && (canvas.accessStatus === "PENDING" || canvas.accessStatus === "REJECTED");
   const state = privateApplication
     ? `${canvas.accessStatus === "PENDING" ? "Awaiting approval" : "Application rejected"}. This private application is visible only to its owner and this project's owner.`
