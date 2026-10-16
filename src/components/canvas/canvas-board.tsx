@@ -40,7 +40,7 @@ const geometryDraft = (item: CanvasItem): GeometryDraft => ({ x: String(item.x),
 type View = { x: number; y: number; zoom: number };
 type Interaction =
   | { kind: "pan"; pointerId: number; clientX: number; clientY: number; view: View }
-  | { kind: "move" | "resize"; pointerId: number; itemId: string; clientX: number; clientY: number; rect: Pick<CanvasItem, "x" | "y" | "width" | "height"> };
+  | { kind: "move" | "resize"; pointerId: number; itemId: string; clientX: number; clientY: number; rect: Pick<CanvasItem, "x" | "y" | "width" | "height">; latest?: Pick<CanvasItem, "x" | "y" | "width" | "height"> };
 export type CanvasItemCardProps = { item: CanvasItem; readOnly: boolean; selected: boolean; onArchive: () => void };
 type Props = {
   slug: string;
@@ -154,9 +154,11 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       }
       const dx = (event.clientX - active.clientX) / view.zoom;
       const dy = (event.clientY - active.clientY) / view.zoom;
-      setItems((current) => current.map((item) => item.id !== active.itemId ? item : active.kind === "move"
-        ? { ...item, x: clamp(active.rect.x + dx, -1_000_000, 1_000_000), y: clamp(active.rect.y + dy, -1_000_000, 1_000_000) }
-        : { ...item, width: clamp(active.rect.width + dx, 64, 8192), height: clamp(active.rect.height + dy, 64, 8192) }));
+      active.latest = active.kind === "move"
+        ? { ...active.rect, x: clamp(active.rect.x + dx, -1_000_000, 1_000_000), y: clamp(active.rect.y + dy, -1_000_000, 1_000_000) }
+        : { ...active.rect, width: clamp(active.rect.width + dx, 64, 8192), height: clamp(active.rect.height + dy, 64, 8192) };
+      const latest = active.latest;
+      setItems((current) => current.map((item) => item.id === active.itemId ? { ...item, ...latest } : item));
     };
     const up = (event: PointerEvent) => {
       const active = interaction.current;
@@ -164,7 +166,10 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       interaction.current = null;
       if (active.kind === "pan") return;
       const item = items.find((candidate) => candidate.id === active.itemId);
-      if (item) void saveRect(item.id, { x: item.x, y: item.y, width: item.width, height: item.height, zIndex: item.zIndex });
+      if (item) {
+        const rect = active.latest ?? active.rect;
+        void saveRect(item.id, { x: rect.x, y: rect.y, width: rect.width, height: rect.height, zIndex: item.zIndex });
+      }
     };
     const cancel = (event: PointerEvent) => {
       const active = interaction.current;

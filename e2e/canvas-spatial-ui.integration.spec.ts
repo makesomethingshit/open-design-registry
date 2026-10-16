@@ -58,7 +58,8 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await board.getByRole("button", { name: "Fit", exact: true }).click();
       const moveHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-drag-handle]`);
       const moveSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
-      await dragBy(page, moveHandle, 72, 48);
+      const moveZoom = await board.locator("[data-testid=canvas-world]").evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
+      await immediateDrag(page, moveHandle, 72, 48);
       expect((await moveSave).status()).toBe(200);
       await expect(board.getByRole("button", { name: "Save layout", exact: true })).toBeEnabled();
       await expect.poll(async () => {
@@ -66,14 +67,18 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         return row ? [row.x, row.y] : null;
       }).not.toEqual([40, 45]);
       const moved = await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } });
+      expect(moved.x).toBeCloseTo(moveItem.x + 72 / moveZoom, 2);
+      expect(moved.y).toBeCloseTo(moveItem.y + 48 / moveZoom, 2);
 
       const resizeHandle = board.locator(`[data-item-id="${moveItem.id}"] [data-resize-handle]`);
       const resizeSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
-      await dragBy(page, resizeHandle, 52, 38, "bottomRight");
+      await immediateDrag(page, resizeHandle, 52, 38);
       expect((await resizeSave).status()).toBe(200);
       await expect(board.getByRole("button", { name: "Save layout", exact: true })).toBeEnabled();
       await expect.poll(async () => (await prisma.canvasItem.findUnique({ where: { id: moveItem.id }, select: { width: true } }))?.width ?? 0).toBeGreaterThan(240);
       const resized = await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } });
+      expect(resized.width).toBeCloseTo(moved.width + 52 / moveZoom, 2);
+      expect(resized.height).toBeCloseTo(moved.height + 38 / moveZoom, 2);
 
       await page.reload();
       const reentered = board.locator(`[data-item-id="${moveItem.id}"]`);
@@ -84,6 +89,29 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         return actual.every((value, index) => Math.abs(value - expected[index]) < 0.01);
       }, persistedGeometry)).toBe(true);
 
+      for (const selector of ["[data-drag-handle]", "[data-resize-handle]"]) {
+        const handle = reentered.locator(selector);
+        const before = await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } });
+        await handle.scrollIntoViewIfNeeded();
+        const box = await handle.boundingBox();
+        if (!box) throw new Error("Missing cancellation handle");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.evaluate(() => {
+          window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 500, clientY: 500 }));
+          window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1 }));
+        });
+        await page.mouse.up();
+        await expect.poll(() => reentered.evaluate((el) => [parseFloat((el as HTMLElement).style.left), parseFloat((el as HTMLElement).style.width)]))
+          .toEqual([Number(before.x.toFixed(3)), Number(before.width.toFixed(3))]);
+        expect(await prisma.canvasItem.findUniqueOrThrow({ where: { id: moveItem.id } })).toMatchObject({ x: before.x, y: before.y, width: before.width, height: before.height });
+      }
+      await prisma.projectCanvas.update({ where: { id: canvasId }, data: { layoutVersion: { increment: 1 } } });
+      const staleSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
+      await immediateDrag(page, reentered.locator("[data-drag-handle]"), 20, 10);
+      expect((await staleSave).status()).toBe(409);
+      await expect(board.getByRole("alert")).toContainText("board changed elsewhere");
+      await expect.poll(() => reentered.evaluate((el) => parseFloat((el as HTMLElement).style.left))).toBeCloseTo(moved.x, 2);
       await reentered.focus();
       const keyboardMove = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
       await reentered.press("Alt+ArrowRight");
@@ -302,5 +330,20 @@ async function dragBy(page: Page, handle: import("@playwright/test").Locator, dx
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + dx, y + dy, { steps: 6 });
+  await page.mouse.up();
+}
+
+async function immediateDrag(page: Page, handle: import("@playwright/test").Locator, dx: number, dy: number) {
+  await handle.scrollIntoViewIfNeeded();
+  const box = await handle.boundingBox();
+  if (!box) throw new Error("Missing pointer handle");
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await handle.evaluate((element, { x, y, dx, dy }) => {
+    element.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 1, clientX: x, clientY: y, bubbles: true }));
+    window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: x + dx, clientY: y + dy, bubbles: true }));
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, clientX: x + dx, clientY: y + dy, bubbles: true }));
+  }, { x, y, dx, dy });
   await page.mouse.up();
 }
