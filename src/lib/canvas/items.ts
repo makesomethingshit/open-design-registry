@@ -6,6 +6,13 @@ import { assetKeyFromStoredUrl, deleteObject, documentImageExists, getObject, pu
 import { documentImageKeyFromUrl } from "../document-image-urls.mjs";
 import { imageReferenceTransactionOptions } from "../project-document-save";
 
+export async function assertCanvasItemWritable(slug: string, canvasId: string, actorId: string) {
+  await prisma.$transaction(async (tx) => {
+    const { project, canvas } = await lockCanvas(tx, slug, canvasId);
+    if (!mayEditCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(403, "Only an approved Canvas owner can write");
+  });
+}
+
 export async function createCanvasItem(slug: string, canvasId: string, actorId: string, input: unknown, file?: File) {
   const parsed = (file ? canvasItemImageMetadata : canvasItemTextInput).safeParse(input);
   if (!parsed.success) throw new CanvasError(400, "Invalid Canvas item");
@@ -22,10 +29,7 @@ export async function createCanvasItem(slug: string, canvasId: string, actorId: 
     if (!valid) throw new CanvasError(400, "Invalid image signature");
   }
   // Upload outside the lock, then recheck fresh ACL before attaching the object.
-  await prisma.$transaction(async (tx) => {
-    const { project, canvas } = await lockCanvas(tx, slug, canvasId);
-    if (!mayEditCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(403, "Only an approved Canvas owner can write");
-  });
+  await assertCanvasItemWritable(slug, canvasId, actorId);
   const key = file ? `canvas-items/${canvasId}/${crypto.randomUUID()}.${file.type === "image/png" ? "png" : "jpg"}` : null;
   try {
     if (file && key) await putObject(file, key);
@@ -70,7 +74,8 @@ export async function readCanvasItems(slug: string, canvasId: string, actorId: s
   return prisma.$transaction(async (tx) => {
     const { project, canvas } = await lockCanvas(tx, slug, canvasId);
     if (!mayReadCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(404, "Canvas not found");
-    return tx.canvasItem.findMany({ where: { canvasId }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
+    const items = await tx.canvasItem.findMany({ where: { canvasId }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
+    return items.map(({ authorId: _authorId, ...item }) => item);
   });
 }
 

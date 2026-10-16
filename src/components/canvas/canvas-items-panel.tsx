@@ -55,9 +55,11 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; ca
     setSaving(true);
     setError("");
     setMessage("");
+    let responseReceived = false;
     try {
       const body = kind === "IMAGE" ? (() => { const multipart = new FormData(); Object.entries(payload).forEach(([key, value]) => multipart.set(key, String(value))); if (file instanceof File) multipart.set("file", file); return multipart; })() : JSON.stringify(payload);
       const response = await fetch(endpoint, { method: "POST", headers: kind === "TEXT" ? { "content-type": "application/json" } : undefined, body });
+      responseReceived = true;
       if (!response.ok) throw new Error(response.status === 403 ? "Canvas access changed. Refresh and try again." : "Item could not be saved. Check the details and try again.");
       let created: CanvasItemCardItem;
       try {
@@ -92,7 +94,14 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; ca
         : previousItem ? "Replacement saved as a new item; the previous item is archived." : `${created.kind === "IMAGE" ? "Image" : "Note"} added.`);
       await refresh().catch(() => setMessage((current) => `${current} The list could not refresh; reload the Canvas to confirm its latest state.`));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Item could not be saved. Try again.");
+      if (!responseReceived) {
+        form.reset();
+        setKind("TEXT");
+        setOrigin("ORIGINAL");
+        setReplaceItem(null);
+        setSubmissionUnknown(true);
+        setMessage("The request did not return a response and may have been saved. Reload the Canvas to check before submitting again.");
+      } else setError(cause instanceof Error ? cause.message : "Item could not be saved. Try again.");
     } finally { setSaving(false); }
   }
 

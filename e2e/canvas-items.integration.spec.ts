@@ -36,12 +36,25 @@ test("adds Canvas notes and images and safely completes a replacement when archi
 
   let createCount = 0;
   let archiveCount = 0;
+  let rejectNextCreate = false;
+  let loseNextCreateResponse = false;
   let releaseArchive!: () => void;
   let archiveStarted!: () => void;
   const archiveGate = new Promise<void>((resolve) => { releaseArchive = resolve; });
   const archiveRequest = new Promise<void>((resolve) => { archiveStarted = resolve; });
   await page.route(`**/api/projects/${slug}/canvases/${canvas.id}/items`, async (route) => {
-    if (route.request().method() === "POST") createCount++;
+    if (route.request().method() === "POST") {
+      createCount++;
+      if (rejectNextCreate) {
+        rejectNextCreate = false;
+        return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Conflict" }) });
+      }
+      if (loseNextCreateResponse) {
+        loseNextCreateResponse = false;
+        await route.fetch();
+        return route.abort("failed");
+      }
+    }
     await route.continue();
   });
   await page.route(`**/api/projects/${slug}/canvases/${canvas.id}/items/*`, async (route) => {
@@ -58,6 +71,12 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await panel.getByRole("textbox", { name: "Note", exact: true }).fill("Original board note");
   await panel.getByLabel("Source URL (optional)").fill("https://example.test/original");
   await panel.getByLabel("Rights note (optional)").fill("Used with permission for this concept");
+  rejectNextCreate = true;
+  await panel.getByRole("button", { name: "Add item", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(panel.getByRole("alert")).toContainText("Item could not be saved");
+  await expect(panel.getByRole("button", { name: "Add item", exact: true })).toBeEnabled();
+  await expect(panel.getByRole("textbox", { name: "Note", exact: true })).toHaveValue("Original board note");
   await panel.getByRole("button", { name: "Add item", exact: true }).focus();
   await page.keyboard.press("Enter");
   const original = panel.getByRole("article", { name: "Note" }).filter({ hasText: "Original board note" });
@@ -108,6 +127,28 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await expect(reference).toContainText("Reference only; no reuse rights implied");
   await expect(reference.getByRole("link", { name: "https://example.test/reference" })).toBeVisible();
   await expect(reference.getByRole("button", { name: "Archive", exact: true })).toBeVisible();
+
+  const referenceItem = await prisma.canvasItem.findFirstOrThrow({ where: { canvasId, altText: "One pixel reference image" } });
+  const beforeUnknown = await prisma.canvasItem.count({ where: { canvasId } });
+  await reference.getByRole("button", { name: "Replace with a new item" }).focus();
+  await page.keyboard.press("Enter");
+  await panel.getByRole("textbox", { name: "Note", exact: true }).fill("Response-lost replacement");
+  loseNextCreateResponse = true;
+  await panel.getByRole("button", { name: "Save replacement" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(panel.getByRole("status")).toContainText("may have been saved");
+  await expect(panel.getByRole("heading", { name: "Add to this Canvas" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add item", exact: true })).toBeDisabled();
+  expect(createCount).toBe(5);
+  expect(archiveCount).toBe(2);
+  expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(beforeUnknown + 1);
+  expect(await prisma.canvasItem.count({ where: { canvasId, body: "Response-lost replacement" } })).toBe(1);
+  expect((await prisma.canvasItem.findUniqueOrThrow({ where: { id: referenceItem.id } })).archivedAt).toBeNull();
+
+  await page.reload();
+  const reloadedPanel = page.getByRole("region", { name: "Canvas items" });
+  await expect(reloadedPanel.getByText("Response-lost replacement", { exact: true })).toHaveCount(1);
+  await expect(reloadedPanel.getByRole("button", { name: "Add item", exact: true })).toBeEnabled();
   } finally {
     const [project, items] = await Promise.all([
       projectId ? prisma.project.findUnique({ where: { id: projectId }, select: { coverUrl: true } }) : null,
