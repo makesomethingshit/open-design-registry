@@ -9,7 +9,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
   test.setTimeout(120_000);
   test.afterAll(() => prisma.$disconnect());
 
-  test("persists move, resize and stack actions; keeps feedback with archived history on desktop and mobile", async ({ page, browser }) => {
+  test("persists move, resize and stack actions; keeps feedback with archived history on desktop and mobile", async ({ page, browser }, testInfo) => {
     const suffix = crypto.randomUUID();
     const ownerContext = await browser.newContext({ baseURL });
     const owner = await ownerContext.newPage();
@@ -127,21 +127,43 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       expect(await board.getByLabel("Zoom level").textContent()).not.toBe(zoomBefore);
       await board.getByRole("button", { name: "Reset", exact: true }).click();
 
-      for (const width of [390, 320]) {
-        await page.setViewportSize({ width, height: 844 });
-        const dimensions = await page.evaluate(() => ({
+      for (const theme of ["light", "dark"] as const) {
+        await page.getByLabel("Theme").selectOption(theme);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+
+        await page.setViewportSize({ width: 1440, height: 768 });
+        await board.getByRole("button", { name: "Fit", exact: true }).click();
+        const desktopDimensions = await page.evaluate(() => ({
           viewportWidth: window.innerWidth,
           documentWidth: document.documentElement.scrollWidth,
           boardWidth: document.querySelector<HTMLElement>("[aria-label='Canvas board']")?.getBoundingClientRect().width ?? 0,
         }));
-        expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
-        expect(dimensions.boardWidth).toBeLessThanOrEqual(width);
-        await expect(board.getByRole("button", { name: "Fit", exact: true })).toBeVisible();
-        await viewport.focus();
-        const beforeMobilePan = await world.getAttribute("style");
-        await viewport.press("ArrowDown");
-        expect(await world.getAttribute("style")).not.toBe(beforeMobilePan);
+        expect(desktopDimensions.documentWidth).toBeLessThanOrEqual(desktopDimensions.viewportWidth);
+        expect(desktopDimensions.boardWidth).toBeLessThanOrEqual(1440);
+        await page.screenshot({ style: "nextjs-portal { display: none !important; }", path: testInfo.outputPath(`canvas-board-desktop-1440x768-${theme}.png`) });
+
+        for (const width of [390, 320]) {
+          await page.setViewportSize({ width, height: 844 });
+          await board.getByRole("button", { name: "Fit", exact: true }).click();
+          const mobileDimensions = await page.evaluate(() => ({
+            viewportWidth: window.innerWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            boardWidth: document.querySelector<HTMLElement>("[aria-label='Canvas board']")?.getBoundingClientRect().width ?? 0,
+          }));
+          expect(mobileDimensions.documentWidth).toBeLessThanOrEqual(mobileDimensions.viewportWidth);
+          expect(mobileDimensions.boardWidth).toBeLessThanOrEqual(width);
+          await expect(board.getByRole("button", { name: "Fit", exact: true })).toBeVisible();
+          await page.screenshot({ style: "nextjs-portal { display: none !important; }", path: testInfo.outputPath(`canvas-board-mobile-${width}-${theme}.png`) });
+
+          await viewport.focus();
+          const beforeMobilePan = await world.getAttribute("style");
+          await viewport.press("ArrowDown");
+          expect(await world.getAttribute("style")).not.toBe(beforeMobilePan);
+        }
       }
+      await page.setViewportSize({ width: 1440, height: 768 });
+      await page.getByLabel("Theme").selectOption("light");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
       await owner.goto(detailPath);
       const ownerBoard = owner.getByRole("region", { name: "Canvas board" });
