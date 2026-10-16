@@ -1,6 +1,6 @@
 # Contributor Canvas C — spatial board and item feedback (#132)
 
-**Status: DRAFT, spatial board implementation and browser acceptance test are in progress.** Based on PR #167 / #166. The final Canvas detail route owns the page shell; this change supplies the reusable board for integration.
+**Status: DRAFT; the spatial workspace is integrated in the Canvas detail route and its focused Chromium UI test passes.** Based on PR #167 / #166. Stacked browser regressions and CI are still pending.
 
 ## Contract
 - Miro-like freely positioned 2D work surface, with predictable selection, pan/zoom, fit/reset and keyboard/mobile alternatives. No vector editor, connector engine, multiplayer cursors or general-purpose object merging.
@@ -14,8 +14,9 @@
 - [x] Versioned atomic layout write/query APIs with two-writer conflict tests on PostgreSQL
 - [x] Comment read/create API with private/revoked/archive/item-membership enforcement
 - [x] Canvas pan/zoom/fit/reset, keyboard move/resize, 320/390px UX and feedback panel
-- [x] Real browser test exercises saved positions, comments, archival and ACL on the Canvas detail URL (run after parent route integration)
+- [x] Real browser test exercises actual pointer move/resize, persisted geometry after reload, one-request layer ordering, feedback on stable item IDs across two designers, archive/revocation read-only history, keyboard alternatives, and 320/390px layouts on the Canvas detail URL
 - [ ] Validate complete stacked migration sequence, typecheck/build and all regressions
+- [ ] Run hardware/screen-reader acceptance with NVDA, JAWS, VoiceOver or TalkBack; Playwright keyboard and viewport checks do not establish assistive-technology or physical-touch behavior
 
 ## API and failure evidence
 - `PATCH .../canvases/:canvasId/layout` accepts the existing strict `{itemId, expectedCanvasVersion, rect}` schema. The owner/visibility/approval and active item membership checks run under Project→Canvas locks. A conditional `UPDATE ... WHERE layoutVersion = expected` increments the version atomically with the item update; stale requests return HTTP 409. Failed item persistence rolls the increment back.
@@ -23,4 +24,4 @@
 - `GET .../comments?itemId=...` reads feedback, including readable archived/history items. `POST .../comments` accepts `{itemId, body}` and rejects anonymous (401), revoked/reapplying (403), archived (409), cross-Canvas or private (404) writes. The same Canvas lock serializes comments with archival and membership changes.
 - Canvas, Item and Comment author references become NULL when contributor accounts are deleted; content, identity and feedback linkage remain. Project-owner account deletion is guarded by the ownership-transfer policy in A.
 - `canvasExtent` accumulates bounds in one iteration without argument spread; the large case contains 250,000 rectangles.
-- The dedicated Playwright test targets the final Canvas detail URL and exercises actual pointer, keyboard and responsive browser behavior; execution is deferred until the parent integrates the detail route and shared B item card. The UI has not yet been browser-verified on this branch.
+- The focused Playwright run passed in Chromium against the integrated detail route: 1 test passed in 17.4 seconds. It checks 320px and 390px viewport widths and keyboard alternatives in a desktop browser; it does not emulate touch input or certify screen-reader announcements, focus behavior with assistive technology, or physical-device rendering. Run the stacked browser suite and obtain hardware/screen-reader evidence before treating the Draft as fully accepted.
