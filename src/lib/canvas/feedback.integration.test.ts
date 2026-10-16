@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../prisma";
-import { applyForCanvas, changeCanvasAccess } from "./service";
+import { applyForCanvas, changeCanvasAccess, lockCanvasForRead } from "./service";
 import { archiveCanvasItem, createCanvasItem } from "./items";
 import { createCanvasComment, editCanvasLayout, readCanvasComments } from "./feedback";
 import { canvasFeedbackRequest } from "./feedback-handlers";
@@ -49,6 +49,85 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
     await expect(readCanvasComments(slug, canvasId, itemId, null, first.nextCursor)).rejects.toThrow("Project is no longer public");
   });
 
+  it("leaves identical rectangles and existing front/back order unwritten, but rejects stale no-ops", async () => {
+    const second = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Front" });
+    await prisma.canvasItem.update({ where: { id: second.id }, data: { zIndex: 80 } });
+    const before = await prisma.canvasItem.findMany({ where: { canvasId }, orderBy: { id: "asc" } });
+    const canvasBefore = await prisma.projectCanvas.findUniqueOrThrow({ where: { id: canvasId } });
+    const name = `canvas_noop_${crypto.randomUUID().replaceAll("-", "")}`;
+    await prisma.$executeRawUnsafe(`CREATE FUNCTION "${name}"() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'no-op wrote row'; END; $$ LANGUAGE plpgsql`);
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER "${name}" BEFORE UPDATE ON "CanvasItem" FOR EACH ROW WHEN (NEW."canvasId" = '${canvasId}') EXECUTE FUNCTION "${name}"()`);
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER "${name}" BEFORE UPDATE ON "ProjectCanvas" FOR EACH ROW WHEN (NEW.id = '${canvasId}') EXECUTE FUNCTION "${name}"()`);
+    try {
+      const original = before.find((item) => item.id === itemId)!;
+      const sameRect = { x: original.x, y: original.y, width: original.width, height: original.height, zIndex: original.zIndex };
+      expect((await layout(0, { rect: sameRect })).status).toBe(200);
+      expect((await stack(second.id, 0, "front")).status).toBe(200);
+      expect((await stack(itemId, 0, "back")).status).toBe(200);
+      expect(await prisma.canvasItem.findMany({ where: { canvasId }, orderBy: { id: "asc" } })).toEqual(before);
+      expect(await prisma.projectCanvas.findUniqueOrThrow({ where: { id: canvasId } })).toEqual(canvasBefore);
+      expect((await layout(1, { rect: sameRect })).status).toBe(409);
+      expect((await stack(second.id, 1, "front")).status).toBe(409);
+    } finally {
+      await prisma.$executeRawUnsafe(`DROP TRIGGER "${name}" ON "CanvasItem"`);
+      await prisma.$executeRawUnsafe(`DROP TRIGGER "${name}" ON "ProjectCanvas"`);
+      await prisma.$executeRawUnsafe(`DROP FUNCTION "${name}"()`);
+    }
+  });
+
+  it("lets two production feedback GETs finish while another reader holds shared Project and Canvas locks", async () => {
+    const other = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Other" });
+    let release!: () => void, ready!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const locked = new Promise<void>((resolve) => { ready = resolve; });
+    const reader = prisma.$transaction(async (tx) => {
+      await lockCanvasForRead(tx, slug, canvasId);
+      ready(); await gate;
+    }, { timeout: 8000 });
+    await locked;
+    try {
+      const results = await Promise.all([itemId, other.id].map((id) => canvasFeedbackRequest(new Request(`http://localhost?itemId=${id}`), { slug, canvasId })));
+      expect(results.map((response) => response.status)).toEqual([200, 200]);
+    } finally { release(); await reader; }
+  });
+
+  it.each(["revoke", "private"])("reads only committed ACL after a preceding %s transaction", async (action) => {
+    await createCanvasComment(slug, canvasId, viewerId, { itemId, body: "History" });
+    let release!: () => void, ready!: (pid: number) => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const locked = new Promise<number>((resolve) => { ready = resolve; });
+    const writer = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "ProjectCanvas" WHERE id = ${canvasId} FOR UPDATE`;
+      if (action === "private") await tx.project.update({ where: { id: projectId }, data: { isPublic: false } });
+      else await tx.projectCanvas.update({ where: { id: canvasId }, data: { accessStatus: "REVOKED" } });
+      const [{ pid }] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      ready(pid); await gate;
+    });
+    const pid = await locked;
+    session.actorId = null;
+    const reading = canvasFeedbackRequest(new Request(`http://localhost?itemId=${itemId}`), { slug, canvasId });
+    void reading.catch(() => {});
+    try {
+      let blocked = false;
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline) {
+        const [row] = await prisma.$queryRaw<Array<{ blocked: boolean }>>`SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE ${pid}::int = ANY(pg_blocking_pids(pid))) AS blocked`;
+        if (row.blocked) { blocked = true; break; }
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(blocked).toBe(true);
+    } finally { release(); await writer; }
+    const response = await reading;
+    // Previously approved public history stays readable after revocation; privacy blocks it.
+    expect(response.status).toBe(action === "private" ? 404 : 200);
+    if (action === "revoke") {
+      expect(await response.json()).toMatchObject([{ itemId, body: "History" }]);
+      await prisma.projectCanvas.update({ where: { id: canvasId }, data: { firstApprovedAt: null } });
+      expect((await canvasFeedbackRequest(new Request(`http://localhost?itemId=${itemId}`), { slug, canvasId })).status).toBe(404);
+    }
+  });
+
   it("reorders a thousand layers with one SQL update", async () => {
     await prisma.canvasItem.createMany({ data: Array.from({ length: 1000 }, (_, index) => ({ id: `${itemId}-layer-${index}`, canvasId, kind: "TEXT" as const, origin: "ORIGINAL" as const, body: "Layer", zIndex: index + 1 })) });
     const original = prisma.$transaction.bind(prisma);
@@ -75,7 +154,7 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
     expect(await prisma.canvasItem.findUnique({ where: { id: itemId } })).toMatchObject(rect);
     expect((await readCanvasComments(slug, canvasId, itemId, null)).comments).toMatchObject([{ itemId, body: "Stable identity" }]);
     expect((await layout()).status).toBe(409);
-    expect((await layout(1)).status).toBe(200);
+    expect((await layout(1, { rect: { ...rect, x: rect.x + 1 } })).status).toBe(200);
   });
 
   it("rolls back the version increment if the actual item UPDATE fails", async () => {
@@ -127,14 +206,14 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
 
   it("serializes a stack operation against a simultaneous rectangle save", async () => {
     const stacked = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Stacked" });
-    const results = await Promise.all([stack(stacked.id, 0, "front"), layout()]);
+    const results = await Promise.all([stack(stacked.id, 0, "back"), layout()]);
     expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
     expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 1 });
     const stackWon = results[0].status === 200;
-    expect(await prisma.canvasItem.findUnique({ where: { id: stacked.id }, select: { zIndex: true } })).toMatchObject({ zIndex: stackWon ? 1 : stacked.zIndex });
-    expect(await prisma.canvasItem.findUnique({ where: { id: itemId }, select: { zIndex: true, x: true } })).toMatchObject(stackWon ? { zIndex: 0, x: 0 } : { zIndex: 3, x: rect.x });
+    expect(await prisma.canvasItem.findUnique({ where: { id: stacked.id }, select: { zIndex: true } })).toMatchObject({ zIndex: stackWon ? 0 : stacked.zIndex });
+    expect(await prisma.canvasItem.findUnique({ where: { id: itemId }, select: { zIndex: true, x: true } })).toMatchObject(stackWon ? { zIndex: 1, x: 0 } : { zIndex: 3, x: rect.x });
 
-    const retry = await stack(stacked.id, 1, "back");
+    const retry = await stack(stacked.id, 1, "front");
     expect(retry.status).toBe(200);
     expect((await retry.json()).layoutVersion).toBe(2);
   });

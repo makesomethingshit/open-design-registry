@@ -48,8 +48,28 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Archive target", x: 3_000, y: 1_800, width: 220, height: 170, zIndex: 2 } }),
       ]);
       const detailPath = `/projects/${slug}/canvases/${canvasId}`;
+      let releaseInitial!: () => void, initialReady!: () => void;
+      const initialGate = new Promise<void>((resolve) => { releaseInitial = resolve; });
+      const initialCaptured = new Promise<void>((resolve) => { initialReady = resolve; });
+      const initialItemsPattern = `**/canvases/${canvasId}/items`;
+      await page.route(initialItemsPattern, async (route) => {
+        const response = await route.fetch();
+        initialReady(); await initialGate;
+        await route.fulfill({ response });
+      });
       await page.goto(detailPath);
       const board = page.getByRole("region", { name: "Canvas board" });
+      await initialCaptured;
+      const panViewport = board.getByTestId("canvas-viewport");
+      const panBox = await panViewport.boundingBox();
+      if (!panBox) throw new Error("Missing pan viewport");
+      await page.mouse.move(panBox.x + 10, panBox.y + 10);
+      await page.mouse.down();
+      await page.mouse.move(panBox.x + 45, panBox.y + 30);
+      await page.mouse.up();
+      releaseInitial();
+      await expect(board.locator("[data-item-id]")).toHaveCount(3);
+      await page.unroute(initialItemsPattern);
       await expect(board.getByRole("region", { name: /Spatial Canvas/ })).toBeVisible();
       await expect(board.getByLabel("Select an item").locator("option")).toHaveCount(4);
       await expect(board.getByText("Used with permission", { exact: true })).toBeVisible();
@@ -122,12 +142,52 @@ test.describe("Canvas spatial detail page in a real browser", () => {
         await prisma.canvasItem.delete({ where: { id: lostItem.id } });
       }
 
-      await prisma.canvasItemComment.createMany({ data: Array.from({ length: 55 }, (_, index) => ({ itemId: moveItem.id, body: `Paged feedback ${index}`, createdAt: new Date("2026-01-01") })) });
+      await prisma.canvasItemComment.createMany({ data: Array.from({ length: 105 }, (_, index) => ({ id: `${moveItem.id}-paged-${String(index).padStart(3, "0")}`, itemId: moveItem.id, body: `Paged feedback ${index}`, createdAt: new Date("2026-01-01") })) });
       await page.reload();
       await board.getByLabel("Select an item").selectOption(moveItem.id);
-      await expect(board.getByRole("list", { name: `Feedback for item ${moveItem.id}` }).locator("li")).toHaveCount(50);
+      const feedbackList = board.getByRole("list", { name: `Feedback for item ${moveItem.id}` });
+      await expect(feedbackList.locator("li")).toHaveCount(50);
+      await board.getByRole("textbox", { name: "Add feedback", exact: true }).fill("Newest paged feedback");
+      await board.getByRole("button", { name: "Post feedback", exact: true }).click();
+      await expect(board.getByRole("status").filter({ hasText: "Feedback saved." })).toBeVisible();
+      await expect(feedbackList.locator("li")).toHaveCount(50);
+      await expect(feedbackList).not.toContainText("Newest paged feedback");
       await board.getByRole("button", { name: "Load more feedback", exact: true }).click();
-      await expect(board.getByRole("list", { name: `Feedback for item ${moveItem.id}` }).locator("li")).toHaveCount(55);
+      await expect(feedbackList.locator("li")).toHaveCount(100);
+      await board.getByRole("button", { name: "Load more feedback", exact: true }).click();
+      await expect(feedbackList.locator("li")).toHaveCount(106);
+      const expectedComments = await prisma.canvasItemComment.findMany({ where: { itemId: moveItem.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+      expect(await feedbackList.locator("li p").allTextContents()).toEqual(expectedComments.map((entry) => entry.body));
+      expect(new Set(await feedbackList.locator("li p").allTextContents()).size).toBe(106);
+
+      // A delayed next page must not overwrite a newer selection of the same item.
+      await board.getByLabel("Select an item").selectOption(resizeItem.id);
+      await board.getByLabel("Select an item").selectOption(moveItem.id);
+      await expect(feedbackList.locator("li")).toHaveCount(50);
+      let releaseComments!: () => void, commentsReady!: () => void;
+      const commentsGate = new Promise<void>((resolve) => { releaseComments = resolve; });
+      const commentsCaptured = new Promise<void>((resolve) => { commentsReady = resolve; });
+      const commentsPattern = `**/canvases/${canvasId}/comments?**`;
+      await page.route(commentsPattern, async (route) => {
+        if (!new URL(route.request().url()).searchParams.has("cursor")) return route.continue();
+        const response = await route.fetch();
+        commentsReady(); await commentsGate;
+        await route.fulfill({ response });
+      });
+      await board.getByRole("button", { name: "Load more feedback", exact: true }).click();
+      await commentsCaptured;
+      await board.getByLabel("Select an item").selectOption(resizeItem.id);
+      await expect(board.getByRole("list", { name: `Feedback for item ${resizeItem.id}` }).locator("li")).toHaveCount(0);
+      await board.getByLabel("Select an item").selectOption(moveItem.id);
+      await expect(feedbackList.locator("li")).toHaveCount(50);
+      const lateComments = page.waitForResponse((response) => new URL(response.url()).searchParams.has("cursor"));
+      releaseComments(); await lateComments;
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect(feedbackList.locator("li")).toHaveCount(50);
+      await expect(board.getByRole("button", { name: "Load more feedback", exact: true })).toBeEnabled();
+      await board.getByRole("button", { name: "Load more feedback", exact: true }).click();
+      await expect(feedbackList.locator("li")).toHaveCount(100);
+      await page.unroute(commentsPattern);
       await prisma.canvasItemComment.deleteMany({ where: { itemId: moveItem.id } });
 
       // Hold an old cancellation reload until a newer reload has applied.
@@ -166,6 +226,37 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await page.unroute(itemsPattern);
       await prisma.canvasItem.update({ where: { id: moveItem.id }, data: { x: moved.x } });
       await page.reload();
+
+      for (const selector of ["[data-drag-handle]", "[data-resize-handle]"]) {
+        let releaseReload!: () => void, reloadReady!: () => void;
+        const reloadGate = new Promise<void>((resolve) => { releaseReload = resolve; });
+        const reloadCaptured = new Promise<void>((resolve) => { reloadReady = resolve; });
+        let reads = 0;
+        await page.route(itemsPattern, async (route) => {
+          if (route.request().method() !== "GET" || ++reads !== 1) return route.continue();
+          const response = await route.fetch();
+          reloadReady(); await reloadGate;
+          await route.fulfill({ response });
+        });
+        await cancelReload(); await reloadCaptured;
+        const handle = reentered.locator(selector);
+        await handle.scrollIntoViewIfNeeded();
+        const box = await handle.boundingBox();
+        if (!box) throw new Error("Missing stale reload handle");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 20);
+        const optimistic = await reentered.evaluate((el) => [el.style.left, el.style.top, el.style.width, el.style.height]);
+        const response = page.waitForResponse((entry) => new URL(entry.url()).pathname.endsWith(`/canvases/${canvasId}/items`));
+        releaseReload(); await response;
+        await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+        expect(await reentered.evaluate((el) => [el.style.left, el.style.top, el.style.width, el.style.height])).toEqual(optimistic);
+        await page.evaluate(() => window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1 })));
+        await page.mouse.up();
+        await page.unroute(itemsPattern);
+        await expect.poll(() => reentered.evaluate((el) => parseFloat(el.style.left))).toBeCloseTo(moved.x, 2);
+        await expect.poll(() => reentered.evaluate((el) => parseFloat(el.style.width))).toBeCloseTo(resized.width, 2);
+      }
 
       for (const selector of ["[data-drag-handle]", "[data-resize-handle]"]) {
         const handle = reentered.locator(selector);

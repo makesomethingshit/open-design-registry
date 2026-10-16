@@ -71,6 +71,9 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const [numberDrafts, setNumberDrafts] = useState<GeometryDraft>({ x: "0", y: "0", width: "320", height: "240" });
   const numberDraftsRef = useRef(numberDrafts);
   const [draft, setDraft] = useState("");
+  const [commentNotice, setCommentNotice] = useState("");
+  const commentGeneration = useRef(0);
+  const [commentRevision, setCommentRevision] = useState(0);
   const [commentSubmissionUnknown, setCommentSubmissionUnknown] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -110,37 +113,40 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     setNumberDrafts(next);
   }, [selected?.id, selected?.x, selected?.y, selected?.width, selected?.height]);
   useEffect(() => {
+    const generation = ++commentGeneration.current;
     setComments([]);
     setCommentCursor(null);
-    setDraft("");
     if (!selected) return;
     const controller = new AbortController();
     void fetch(`${feedbackUrl(slug, canvasId)}?itemId=${encodeURIComponent(selected.id)}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load feedback for this item.");
         const result = await response.json() as CanvasComment[];
-        if (!controller.signal.aborted && selectedIdRef.current === selected.id) {
+        if (!controller.signal.aborted && generation === commentGeneration.current && selectedIdRef.current === selected.id) {
           setComments(result);
           setCommentCursor(response.headers.get("x-next-cursor"));
         }
       })
-      .catch((cause: unknown) => { if (!controller.signal.aborted && selectedIdRef.current === selected.id) setError(cause instanceof Error ? cause.message : "Could not load feedback."); });
-    return () => controller.abort();
-  }, [slug, canvasId, selected?.id]);
+      .catch((cause: unknown) => { if (!controller.signal.aborted && generation === commentGeneration.current && selectedIdRef.current === selected.id) setError(cause instanceof Error ? cause.message : "Could not load feedback."); });
+    return () => { ++commentGeneration.current; controller.abort(); };
+  }, [slug, canvasId, selected?.id, commentRevision]);
+
+  useEffect(() => { setDraft(""); setCommentNotice(""); }, [slug, canvasId, selected?.id]);
 
   const loadMoreComments = async () => {
     if (!selected || !commentCursor || busyRef.current) return;
     const itemId = selected.id;
+    const generation = commentGeneration.current;
     busyRef.current = true; setBusy(true);
     try {
       const response = await fetch(`${feedbackUrl(slug, canvasId)}?itemId=${encodeURIComponent(itemId)}&cursor=${encodeURIComponent(commentCursor)}`);
       if (!response.ok) throw new Error("Could not load more feedback.");
       const result = await response.json() as CanvasComment[];
-      if (selectedIdRef.current === itemId) {
+      if (generation === commentGeneration.current && selectedIdRef.current === itemId) {
         setComments((current) => [...current, ...result.filter((entry) => !current.some((existing) => existing.id === entry.id))]);
         setCommentCursor(response.headers.get("x-next-cursor"));
       }
-    } catch (cause) { if (selectedIdRef.current === itemId) setError(cause instanceof Error ? cause.message : "Could not load more feedback."); }
+    } catch (cause) { if (generation === commentGeneration.current && selectedIdRef.current === itemId) setError(cause instanceof Error ? cause.message : "Could not load more feedback."); }
     finally { busyRef.current = false; setBusy(false); }
   };
 
@@ -172,7 +178,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     if (next.kind !== "pan") setSelectedId(next.itemId);
     event.preventDefault();
     event.stopPropagation();
-    ++reloadGeneration.current;
+    if (next.kind !== "pan") ++reloadGeneration.current;
     interaction.current = next;
     viewport.current?.setPointerCapture(event.pointerId);
   };
@@ -323,10 +329,11 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     if (!selected || !draft.trim() || commentSubmissionUnknown) return;
     const itemId = selected.id;
     const submittedDraft = draft;
+    const generation = commentGeneration.current;
     if (busyRef.current) return;
     busyRef.current = true;
     ++reloadGeneration.current;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setCommentNotice("");
     try {
       let response: Response;
       try {
@@ -358,9 +365,11 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
         setError("We could not confirm whether feedback was saved. Reload this Canvas before trying again.");
         return;
       }
-      const comment = commentPayload as CanvasComment;
-      if (selectedIdRef.current === itemId) {
-        setComments((current) => current.some((entry) => entry.id === comment.id) ? current : [...current, comment]);
+      if (generation === commentGeneration.current && selectedIdRef.current === itemId) {
+        ++commentGeneration.current;
+        setCommentCursor(null);
+        setCommentRevision((current) => current + 1);
+        setCommentNotice(commentCursor ? "Feedback saved. Showing the oldest page; use Load more feedback to reach your new comment." : "Feedback saved.");
         setDraft((current) => current === submittedDraft ? "" : current);
       }
     } catch (cause) {
@@ -449,6 +458,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
         {!selected ? <p className={styles.empty}>Select an item to read its feedback.</p> : <>
           <h3>{selected.body ?? selected.altText ?? "Canvas item"}</h3>
           {selected.archivedAt && <p className={styles.readOnly}>Archived item · comments stay with this item</p>}
+          {commentNotice && <p role="status">{commentNotice}</p>}
           <ol className={styles.comments} aria-label={`Feedback for item ${selected.id}`}>
             {comments.map((comment) => <li key={comment.id}><strong>{comment.author?.name ?? "Designer"}</strong><p>{comment.body}</p><time dateTime={comment.createdAt}>{new Date(comment.createdAt).toLocaleString()}</time></li>)}
           </ol>

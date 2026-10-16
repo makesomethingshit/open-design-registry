@@ -1,5 +1,5 @@
 import { prisma } from "../prisma";
-import { canvasFacts, CanvasError, lockCanvas } from "./service";
+import { canvasFacts, CanvasError, lockCanvas, lockCanvasForRead } from "./service";
 import { mayCommentOnCanvas, mayEditCanvas, mayReadCanvas } from "./access";
 import { canvasCommentInputSchema, canvasLayoutOperationSchema } from "./spatial";
 
@@ -12,14 +12,27 @@ export async function editCanvasLayout(slug: string, canvasId: string, actorId: 
     if (!mayEditCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(403, "Canvas is not writable");
     const item = await tx.canvasItem.findFirst({ where: { id: itemId, canvasId, archivedAt: null } });
     if (!item) throw new CanvasError(404, "Active item not found");
-    const updated = await tx.projectCanvas.updateMany({ where: { id: canvasId, layoutVersion: expectedCanvasVersion }, data: { layoutVersion: { increment: 1 } } });
-    if (updated.count !== 1) throw new CanvasError(409, "Canvas changed; reload before editing");
-    if ("rect" in parsed.data) return {
-      item: await tx.canvasItem.update({ where: { id: item.id }, data: parsed.data.rect, include: { author: { select: { name: true } } } }),
-      layoutVersion: expectedCanvasVersion + 1,
+    if (canvas.layoutVersion !== expectedCanvasVersion) throw new CanvasError(409, "Canvas changed; reload before editing");
+    const incrementVersion = async () => {
+      const updated = await tx.projectCanvas.updateMany({ where: { id: canvasId, layoutVersion: expectedCanvasVersion }, data: { layoutVersion: { increment: 1 } } });
+      if (updated.count !== 1) throw new CanvasError(409, "Canvas changed; reload before editing");
     };
+    if ("rect" in parsed.data) {
+      const rect = parsed.data.rect;
+      if ((["x", "y", "width", "height", "zIndex"] as const).every((key) => item[key] === rect[key])) return {
+        item: await tx.canvasItem.findUniqueOrThrow({ where: { id: item.id }, include: { author: { select: { name: true } } } }),
+        layoutVersion: canvas.layoutVersion,
+      };
+      await incrementVersion();
+      return {
+        item: await tx.canvasItem.update({ where: { id: item.id }, data: rect, include: { author: { select: { name: true } } } }),
+        layoutVersion: expectedCanvasVersion + 1,
+      };
+    }
 
     const boardItems = await tx.canvasItem.findMany({ where: { canvasId }, orderBy: [{ zIndex: "asc" }, { id: "asc" }], include: { author: { select: { name: true } } } });
+    if ((parsed.data.action === "front" ? boardItems.at(-1) : boardItems[0])?.id === item.id) return { items: boardItems, layoutVersion: canvas.layoutVersion };
+    await incrementVersion();
     const rest = boardItems.filter((candidate) => candidate.id !== item.id);
     const ordered = parsed.data.action === "front" ? [...rest, ...boardItems.filter((candidate) => candidate.id === item.id)] : [...boardItems.filter((candidate) => candidate.id === item.id), ...rest];
     const changed = ordered.flatMap((candidate, zIndex) => candidate.zIndex === zIndex ? [] : [{ id: candidate.id, zIndex }]);
@@ -55,7 +68,7 @@ export async function readCanvasComments(slug: string, canvasId: string, itemId:
     } catch { throw new CanvasError(400, "Invalid feedback cursor"); }
   }
   return prisma.$transaction(async (tx) => {
-    const { project, canvas } = await lockCanvas(tx, slug, canvasId);
+    const { project, canvas } = await lockCanvasForRead(tx, slug, canvasId);
     if (!mayReadCanvas(actorId, canvasFacts(project, canvas))) throw new CanvasError(404, "Canvas not found");
     const item = await tx.canvasItem.findFirst({ where: { id: itemId, canvasId } });
     if (!item) throw new CanvasError(404, "Item not found");
