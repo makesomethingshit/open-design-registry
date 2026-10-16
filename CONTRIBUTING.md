@@ -61,6 +61,12 @@ scenarios it actually executed; see the operations guide for coverage and how to
 record a manually tested SHA. Fork PRs may require workflow approval; do not add
 production credentials to make tests run.
 
+Canvas membership browser coverage runs with the integration database and storage:
+it checks first-application privacy, moderation and reapplication, public read-only
+history, keyboard operation, and 320/390px layouts. A CI job that skips or does not
+include a requested browser scenario does not establish that scenario's acceptance;
+record any separate manual run against the exact PR SHA.
+
 Only include synthetic or redistributable sample designs, screenshots, and
 fixtures. Do not attach `.env`, production database exports, authentication
 state, or traces containing private data. Follow [Security](SECURITY.md) for

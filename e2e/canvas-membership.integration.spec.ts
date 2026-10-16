@@ -73,8 +73,14 @@ test("Canvas applications stay private until first approval and retained history
     const pendingList = await (await visitor.request.get(`/api${base}/canvases`)).json();
     expect(pendingList.some((canvas: { ownerName: string }) => canvas.ownerName === "Canvas applicant")).toBe(false);
 
-    await page.goto(`${base}/discussions#canvases`);
+    await page.reload();
     const ownerCanvasArea = page.locator("#canvases");
+    const ownerPendingResponse = await page.request.get(`/api${base}/canvases`);
+    expect(ownerPendingResponse.ok()).toBe(true);
+    const ownerPendingCanvases = await ownerPendingResponse.json();
+    expect(ownerPendingCanvases).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ownerName: "Canvas applicant", accessStatus: "PENDING", canManage: true }),
+    ]));
     const privateRow = ownerCanvasArea.getByRole("listitem").filter({ hasText: "Canvas applicant's Canvas" });
     await expect(privateRow).toContainText("Awaiting approval");
     await expect(privateRow.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
@@ -93,7 +99,13 @@ test("Canvas applications stay private until first approval and retained history
 
     await applicant.locator("#canvases").getByRole("button", { name: "Reapply", exact: true }).press("Enter");
     await expect(applicant.locator("#canvases").getByRole("listitem").filter({ hasText: "Your Canvas" })).toContainText("Awaiting approval");
-    await page.goto(`${base}/discussions#canvases`);
+    await page.reload();
+    const ownerReapplicationResponse = await page.request.get(`/api${base}/canvases`);
+    expect(ownerReapplicationResponse.ok()).toBe(true);
+    const ownerReapplications = await ownerReapplicationResponse.json();
+    expect(ownerReapplications).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ownerName: "Canvas applicant", accessStatus: "PENDING", canManage: true }),
+    ]));
     const reapplication = page.locator("#canvases").getByRole("listitem").filter({ hasText: "Canvas applicant's Canvas" });
     await reapplication.getByRole("button", { name: "Approve", exact: true }).press("Enter");
     await expect(reapplication).toContainText("Approved");
@@ -115,7 +127,7 @@ test("Canvas applications stay private until first approval and retained history
 
     await applicant.locator("#canvases").getByRole("button", { name: "Reapply", exact: true }).press("Enter");
     await expect(applicant.locator("#canvases").getByRole("listitem").filter({ hasText: "Your Canvas" })).toContainText("Reapplication pending");
-    await page.goto(`${base}/discussions#canvases`);
+    await page.reload();
     const pendingHistory = page.locator("#canvases").getByRole("listitem").filter({ hasText: "Canvas applicant's Canvas" });
     await expect(pendingHistory).toContainText("Reapplication pending");
     await pendingHistory.getByRole("button", { name: "Reject", exact: true }).press("Enter");
@@ -127,7 +139,7 @@ test("Canvas applications stay private until first approval and retained history
     await applicant.reload();
     await expect(applicant.locator("#canvases").getByRole("listitem").filter({ hasText: "Your Canvas" })).toContainText("Reapplication rejected");
     await applicant.locator("#canvases").getByRole("button", { name: "Reapply", exact: true }).press("Enter");
-    await page.goto(`${base}/discussions#canvases`);
+    await page.reload();
     const retryRow = page.locator("#canvases").getByRole("listitem").filter({ hasText: "Canvas applicant's Canvas" });
     await retryRow.getByRole("button", { name: "Approve", exact: true }).press("Enter");
     await expect(retryRow).toContainText("Approved");
