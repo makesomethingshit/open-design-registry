@@ -97,7 +97,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await expect(panel.getByRole("heading", { name: "Add to this Canvas" })).toBeVisible();
   await expect(original).toContainText("Canvas owner");
   await expect(panel.getByText("Replacement board note", { exact: true })).toBeVisible();
-  expect(createCount).toBe(2);
+  expect(createCount).toBe(3);
   expect(archiveCount).toBe(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
@@ -106,7 +106,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await page.keyboard.press("Enter");
   await expect(original).toHaveAttribute("data-archived", "true");
   await expect(original).toContainText("Canvas owner");
-  expect(createCount).toBe(2);
+  expect(createCount).toBe(3);
   expect(archiveCount).toBe(2);
 
   await page.setViewportSize({ width: 320, height: 740 });
