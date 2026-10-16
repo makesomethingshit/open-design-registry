@@ -65,6 +65,19 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     expect(mocks.remove).toHaveBeenCalledOnce();
     expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(0);
   });
+  it("places new items in distinct grid slots without changing existing custom geometry", async () => {
+    const existing = await prisma.canvasItem.create({ data: {
+      canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Customized legacy item",
+      x: 25, y: 35, width: 320, height: 240, zIndex: 0, sortOrder: 0,
+    } });
+    const first = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "New first" });
+    const second = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "New second" });
+    expect([first.x, first.y, second.x, second.y]).toEqual([680, 0, 1020, 0]);
+    expect(first.sortOrder).toBe(1);
+    expect(second.sortOrder).toBe(2);
+    expect(await prisma.canvasItem.findUnique({ where: { id: existing.id }, select: { x: true, y: true, width: true, height: true } }))
+      .toMatchObject({ x: 25, y: 35, width: 320, height: 240 });
+  });
   it("keeps committed bytes when the transaction commit response is lost", async () => {
     const transaction = prisma.$transaction.bind(prisma);
     let calls = 0;

@@ -34,6 +34,35 @@ export const canvasCommentInputSchema = z.object({
 
 export type CanvasRect = z.infer<typeof canvasRectSchema>;
 
+const initialItemCellWidth = 340;
+const initialItemCellHeight = 260;
+const initialItemWidth = 320;
+const initialItemHeight = 240;
+const initialItemColumns = 4;
+const maxInitialItemRows = Math.floor(1_000_000 / initialItemCellHeight) + 1;
+const maxInitialItemIndex = initialItemColumns * maxInitialItemRows - 1;
+
+/** Deterministic four-column slot used for legacy backfills and new items. */
+export function canvasInitialPosition(index: number) {
+  if (!Number.isSafeInteger(index) || index < 0 || index > maxInitialItemIndex) return null;
+  return {
+    x: (index % initialItemColumns) * initialItemCellWidth,
+    y: Math.floor(index / initialItemColumns) * initialItemCellHeight,
+    width: initialItemWidth,
+    height: initialItemHeight,
+    zIndex: index,
+    sortOrder: index,
+  };
+}
+
+export function moveCanvasRectByKeyboard(rect: CanvasRect, key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"): CanvasRect {
+  return {
+    ...rect,
+    x: Math.max(-1_000_000, Math.min(1_000_000, rect.x + (key === "ArrowLeft" ? -10 : key === "ArrowRight" ? 10 : 0))),
+    y: Math.max(-1_000_000, Math.min(1_000_000, rect.y + (key === "ArrowUp" ? -10 : key === "ArrowDown" ? 10 : 0))),
+  };
+}
+
 export function canvasExtent(rects: readonly CanvasRect[]) {
   if (!rects.length) return null;
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;

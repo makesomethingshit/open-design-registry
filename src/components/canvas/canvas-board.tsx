@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent } from "react";
-import { canvasExtent } from "@/src/lib/canvas/spatial";
+import { canvasExtent, moveCanvasRectByKeyboard } from "@/src/lib/canvas/spatial";
 import { Button } from "@/src/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/src/components/ui/field";
 import styles from "./canvas-board.module.css";
@@ -26,6 +26,17 @@ export type CanvasItem = {
 };
 
 type CanvasComment = { id: string; itemId: string; body: string; createdAt: string; author: { name: string } | null };
+type GeometryKey = "x" | "y" | "width" | "height";
+type GeometryDraft = Record<GeometryKey, string>;
+const geometryKeys: readonly GeometryKey[] = ["x", "y", "width", "height"];
+const geometryValue = (key: GeometryKey, raw: string, fallback: number) => {
+  if (!raw.trim()) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  const [min, max] = key === "width" || key === "height" ? [64, 8192] : [-1_000_000, 1_000_000];
+  return clamp(value, min, max);
+};
+const geometryDraft = (item: CanvasItem): GeometryDraft => ({ x: String(item.x), y: String(item.y), width: String(item.width), height: String(item.height) });
 type View = { x: number; y: number; zoom: number };
 type Interaction =
   | { kind: "pan"; pointerId: number; clientX: number; clientY: number; view: View }
@@ -56,6 +67,8 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   const [version, setVersion] = useState(0);
   const versionRef = useRef(0);
   const [view, setView] = useState<View>({ x: 24, y: 24, zoom: 1 });
+  const [numberDrafts, setNumberDrafts] = useState<GeometryDraft>({ x: "0", y: "0", width: "320", height: "240" });
+  const numberDraftsRef = useRef(numberDrafts);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -78,6 +91,12 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
   useEffect(() => { void reload().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load this Canvas.")); }, [reload]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
+  useEffect(() => {
+    if (!selected) return;
+    const next = geometryDraft(selected);
+    numberDraftsRef.current = next;
+    setNumberDrafts(next);
+  }, [selected?.id, selected?.x, selected?.y, selected?.width, selected?.height]);
   useEffect(() => {
     setComments([]);
     setDraft("");
@@ -117,6 +136,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
 
   const begin = (event: ReactPointerEvent<HTMLElement>, next: Interaction) => {
     if (busyRef.current || (next.kind !== "pan" && !canEdit)) return;
+    if (next.kind !== "pan") setSelectedId(next.itemId);
     event.preventDefault();
     event.stopPropagation();
     interaction.current = next;
@@ -157,14 +177,27 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", cancel); };
   }, [items, saveRect, reload, view.zoom]);
 
-  const setNumber = (key: "x" | "y" | "width" | "height", value: number) => {
-    if (!canEdit || busyRef.current || !selected || !Number.isFinite(value)) return;
-    const bounds = key === "width" || key === "height" ? [64, 8192] : [-1_000_000, 1_000_000];
-    setItems((current) => current.map((item) => item.id === selected.id ? { ...item, [key]: clamp(value, bounds[0], bounds[1]) } : item));
+  const updateNumberDraft = (key: GeometryKey, value: string) => {
+    const next = { ...numberDraftsRef.current, [key]: value };
+    numberDraftsRef.current = next;
+    setNumberDrafts(next);
+  };
+
+  const normalizeNumberDraft = (key: GeometryKey) => {
+    if (!selected) return;
+    const next = { ...numberDraftsRef.current, [key]: String(geometryValue(key, numberDraftsRef.current[key], selected[key])) };
+    numberDraftsRef.current = next;
+    setNumberDrafts(next);
   };
 
   const saveNumbers = () => {
-    if (canEdit && !busyRef.current && selected) void saveRect(selected.id, { x: selected.x, y: selected.y, width: selected.width, height: selected.height, zIndex: selected.zIndex });
+    if (!canEdit || busyRef.current || !selected) return;
+    const rect = Object.fromEntries(geometryKeys.map((key) => [key, geometryValue(key, numberDraftsRef.current[key], selected[key])])) as Pick<CanvasItem, GeometryKey>;
+    const nextDrafts = Object.fromEntries(geometryKeys.map((key) => [key, String(rect[key])])) as GeometryDraft;
+    numberDraftsRef.current = nextDrafts;
+    setNumberDrafts(nextDrafts);
+    setItems((current) => current.map((item) => item.id === selected.id ? { ...item, ...rect } : item));
+    void saveRect(selected.id, { ...rect, zIndex: selected.zIndex });
   };
 
   const changeZ = async (action: "front" | "back") => {
@@ -204,14 +237,15 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       const archived = await response.json() as CanvasItem;
       setItems((current) => current.map((item) => item.id === archived.id ? { ...item, ...archived, author: archived.author ?? item.author } : item));
       setShowArchived(true);
+      onArchive?.();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not archive this item."); }
     finally { busyRef.current = false; setBusy(false); }
   };
 
   const fit = () => {
-    const active = items.filter((item) => !item.archivedAt);
+    const visible = items.filter((item) => showArchived || !item.archivedAt);
     const box = viewport.current?.getBoundingClientRect();
-    const extent = canvasExtent(active);
+    const extent = canvasExtent(visible);
     if (!extent || !box) { setView({ x: 24, y: 24, zoom: 1 }); return; }
     const { left, top, right, bottom } = extent;
     const zoom = clamp(Math.min((box.width - 48) / (right - left), (box.height - 48) / (bottom - top)), 0.2, 1.5);
@@ -316,7 +350,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
               if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(item.id); }
               if (canEdit && !busyRef.current && !item.archivedAt && event.altKey && event.key.startsWith("Arrow")) {
                 event.preventDefault();
-                const next = { ...item, x: item.x + (event.key === "ArrowLeft" ? -10 : event.key === "ArrowRight" ? 10 : 0), y: item.y + (event.key === "ArrowUp" ? -10 : event.key === "ArrowDown" ? 10 : 0) };
+                const next = moveCanvasRectByKeyboard(item, event.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown");
                 setItems((current) => current.map((currentItem) => currentItem.id === item.id ? next : currentItem));
                 void saveRect(item.id, { x: next.x, y: next.y, width: next.width, height: next.height, zIndex: next.zIndex });
               }
@@ -351,7 +385,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
       <h2>Selected item layout</h2>
       <div className={styles.numericFields}>
         {(["x", "y", "width", "height"] as const).map((key) => <label key={key}>{key === "x" ? "X position" : key === "y" ? "Y position" : key === "width" ? "Width" : "Height"}
-          <Input type="number" min={key === "x" || key === "y" ? -1000000 : 64} max={key === "x" || key === "y" ? 1000000 : 8192} step="1" disabled={!canEdit || busy || Boolean(selected.archivedAt)} value={selected[key]} onChange={(event) => setNumber(key, Number(event.target.value))} />
+          <Input type="text" inputMode="decimal" disabled={!canEdit || busy || Boolean(selected.archivedAt)} value={numberDrafts[key]} onChange={(event) => updateNumberDraft(key, event.target.value)} onBlur={() => normalizeNumberDraft(key)} />
         </label>)}
         <Button variant="secondary" disabled={!canEdit || busy || Boolean(selected.archivedAt)} onClick={saveNumbers}>Save layout</Button>
         <Button variant="secondary" disabled={!canEdit || busy || Boolean(selected.archivedAt)} onClick={() => void changeZ("front")}>Bring to front</Button>

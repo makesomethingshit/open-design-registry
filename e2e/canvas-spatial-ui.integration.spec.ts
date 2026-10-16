@@ -45,7 +45,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       const [moveItem, resizeItem, archiveItem] = await Promise.all([
         prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "REFERENCE", body: "Move target", sourceUrl: "https://example.org/reference", rightsNote: "Used with permission", x: 40, y: 45, width: 240, height: 180, zIndex: 0 } }),
         prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Resize target", x: 360, y: 75, width: 220, height: 170, zIndex: 1 } }),
-        prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Archive target", x: 680, y: 105, width: 220, height: 170, zIndex: 2 } }),
+        prisma.canvasItem.create({ data: { canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Archive target", x: 3_000, y: 1_800, width: 220, height: 170, zIndex: 2 } }),
       ]);
       const detailPath = `/projects/${slug}/canvases/${canvasId}`;
       await page.goto(detailPath);
@@ -91,11 +91,19 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await expect.poll(async () => (await prisma.canvasItem.findUnique({ where: { id: moveItem.id }, select: { x: true } }))?.x ?? 0).toBeCloseTo(moved.x + 10, 4);
 
       await board.getByLabel("Select an item").selectOption(resizeItem.id);
-      await board.getByLabel("Width").fill("340");
+      const widthField = board.getByLabel("Width", { exact: true });
+      await expect(widthField).toHaveAttribute("type", "text");
+      await widthField.fill("-");
+      await expect(widthField).toHaveValue("-");
+      await widthField.fill("340");
+      const xField = board.getByLabel("X position", { exact: true });
+      await xField.fill("-");
+      await expect(xField).toHaveValue("-");
+      await xField.fill("-123");
       const numericSave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
       await board.getByRole("button", { name: "Save layout", exact: true }).click();
       expect((await numericSave).status()).toBe(200);
-      expect(await prisma.canvasItem.findUnique({ where: { id: resizeItem.id }, select: { width: true } })).toMatchObject({ width: 340 });
+      expect(await prisma.canvasItem.findUnique({ where: { id: resizeItem.id }, select: { x: true, width: true } })).toMatchObject({ x: -123, width: 340 });
 
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       const versionBeforeStack = (await prisma.projectCanvas.findUniqueOrThrow({ where: { id: canvasId }, select: { layoutVersion: true } })).layoutVersion;
@@ -118,6 +126,44 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await expect(board.locator(`[data-item-id="${moveItem.id}"]`)).toHaveCSS("z-index", "2");
       const viewport = board.getByRole("region", { name: /Spatial Canvas/ });
       const world = page.locator("[data-testid='canvas-world']");
+      await board.getByLabel("Select an item").selectOption(archiveItem.id);
+      const archiveSelected = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(`/items/${archiveItem.id}`) && response.request().method() === "DELETE");
+      await board.getByRole("button", { name: "Archive selected item", exact: true }).click();
+      expect((await archiveSelected).status()).toBe(200);
+      await expect(board.getByText("Archived item · comments stay with this item", { exact: true })).toBeVisible();
+      const archiveInPanel = page.getByRole("region", { name: "Canvas items" }).getByRole("article", { name: "Note, archived" }).filter({ hasText: "Archive target" });
+      await expect(archiveInPanel).toContainText("Archived. This item and its attribution remain in the Canvas history.");
+      await expect(viewport.locator(`[data-item-id="${archiveItem.id}"]`)).toBeVisible();
+      await board.getByRole("button", { name: "Hide archived items", exact: true }).click();
+      await board.getByRole("button", { name: "Fit", exact: true }).click();
+      const activeOnlyFit = await world.getAttribute("style");
+      await board.getByRole("button", { name: "Show archived items", exact: true }).click();
+      await board.getByRole("button", { name: "Fit", exact: true }).click();
+      expect(await world.getAttribute("style")).not.toBe(activeOnlyFit);
+      const fitBounds = await Promise.all([viewport.boundingBox(), viewport.locator(`[data-item-id="${archiveItem.id}"]`).boundingBox()]);
+      expect(fitBounds[0]).not.toBeNull();
+      expect(fitBounds[1]).not.toBeNull();
+      expect(fitBounds[1]!.x).toBeGreaterThanOrEqual(fitBounds[0]!.x - 1);
+      expect(fitBounds[1]!.y).toBeGreaterThanOrEqual(fitBounds[0]!.y - 1);
+      expect(fitBounds[1]!.x + fitBounds[1]!.width).toBeLessThanOrEqual(fitBounds[0]!.x + fitBounds[0]!.width + 1);
+      expect(fitBounds[1]!.y + fitBounds[1]!.height).toBeLessThanOrEqual(fitBounds[0]!.y + fitBounds[0]!.height + 1);
+      await board.getByRole("button", { name: "Hide archived items", exact: true }).click();
+      await board.getByLabel("Select an item").selectOption(moveItem.id);
+      const resizeHandleOnSelected = board.locator(`[data-item-id="${resizeItem.id}"] [data-resize-handle]`);
+      await dragBy(page, resizeHandleOnSelected, 18, 12, "bottomRight");
+      await expect(board.getByLabel("Select an item")).toHaveValue(resizeItem.id);
+      await expect.poll(async () => (await prisma.canvasItem.findUnique({ where: { id: resizeItem.id }, select: { width: true } }))?.width ?? 0).toBeGreaterThan(340);
+      const boundaryItem = await prisma.canvasItem.update({ where: { id: resizeItem.id }, data: { x: 1_000_000 } });
+      await page.reload();
+      const boundaryCard = board.locator(`[data-item-id="${boundaryItem.id}"]`);
+      await boundaryCard.focus();
+      const boundarySave = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/layout") && response.request().method() === "PATCH");
+      await boundaryCard.press("Alt+ArrowRight");
+      expect((await boundarySave).status()).toBe(200);
+      expect(await prisma.canvasItem.findUnique({ where: { id: boundaryItem.id }, select: { x: true } })).toMatchObject({ x: 1_000_000 });
+      await prisma.canvasItem.update({ where: { id: boundaryItem.id }, data: { x: 360 } });
+      await page.reload();
+      await board.getByLabel("Select an item").selectOption(moveItem.id);
       const worldBeforePan = await world.getAttribute("style");
       await viewport.focus();
       await viewport.press("ArrowRight");
