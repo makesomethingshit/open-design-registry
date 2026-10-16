@@ -110,7 +110,7 @@ test("Canvas applications stay private until first approval and retained history
     await reapplication.getByRole("button", { name: "Approve", exact: true }).press("Enter");
     await expect(reapplication).toContainText("Approved");
 
-    await applicant.goto(`${base}/discussions#canvases`);
+    await applicant.reload();
     const ownCanvas = applicant.locator("#canvases").getByRole("listitem").filter({ hasText: "Your Canvas" });
     await ownCanvas.getByRole("button", { name: "Withdraw access", exact: true }).press("Enter");
     await expect(ownCanvas).toContainText("Access revoked");
@@ -152,8 +152,8 @@ test("Canvas applications stay private until first approval and retained history
       expect(await visitor.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
   } finally {
-    await visitorContext?.close();
-    await applicantContext?.close();
+    await visitorContext?.close().catch(() => {});
+    await applicantContext?.close().catch(() => {});
     await prisma.project.deleteMany({ where: { slug } });
     await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, applicantEmail] } } });
     await prisma.$disconnect();
