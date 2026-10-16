@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../prisma";
 import { applyForCanvas, changeCanvasAccess } from "./service";
@@ -65,6 +66,23 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toMatchObject({ status: 409 });
     expect(mocks.remove).toHaveBeenCalledOnce();
     expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(0);
+  });
+  it("backfills only untouched layouts and preserves saved or customized boards", async () => {
+    const saved = await prisma.projectCanvas.create({ data: { projectId, layoutVersion: 1 } });
+    const customized = await prisma.projectCanvas.create({ data: { projectId } });
+    const add = (targetId: string, body: string, x = 0) => prisma.canvasItem.create({ data: { canvasId: targetId, kind: "TEXT", origin: "ORIGINAL", body, x } });
+    await add(canvasId, "Untouched first");
+    await add(canvasId, "Untouched second");
+    const savedItem = await add(saved.id, "Saved overlap");
+    const customizedItem = await add(customized.id, "Customized", 123);
+    await add(customized.id, "Keep sibling at origin");
+    const sql = readFileSync(new URL("../../../prisma/migrations/20261016000000_canvas_initial_item_layout/migration.sql", import.meta.url), "utf8");
+    await prisma.$executeRawUnsafe(sql);
+    const positions = await prisma.canvasItem.findMany({ where: { canvasId }, orderBy: { sortOrder: "asc" }, select: { x: true, y: true, zIndex: true } });
+    expect(positions).toEqual([{ x: 0, y: 0, zIndex: 0 }, { x: 340, y: 0, zIndex: 1 }]);
+    expect(await prisma.canvasItem.findUnique({ where: { id: savedItem.id }, select: { x: true, y: true } })).toEqual({ x: 0, y: 0 });
+    expect(await prisma.canvasItem.findUnique({ where: { id: customizedItem.id }, select: { x: true, y: true } })).toEqual({ x: 123, y: 0 });
+    expect(await prisma.canvasItem.findFirst({ where: { canvasId: customized.id, body: "Keep sibling at origin" }, select: { x: true, y: true } })).toEqual({ x: 0, y: 0 });
   });
   it("places new items in distinct grid slots without changing existing custom geometry", async () => {
     const existing = await prisma.canvasItem.create({ data: {

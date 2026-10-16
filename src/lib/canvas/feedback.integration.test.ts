@@ -79,7 +79,7 @@ db("Canvas layout and feedback PostgreSQL production paths", () => {
     expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
     expect(await prisma.projectCanvas.findUnique({ where: { id: canvasId } })).toMatchObject({ layoutVersion: 1 });
     const stackWon = results[0].status === 200;
-    expect(await prisma.canvasItem.findUnique({ where: { id: stacked.id }, select: { zIndex: true } })).toMatchObject({ zIndex: stackWon ? 1 : 0 });
+    expect(await prisma.canvasItem.findUnique({ where: { id: stacked.id }, select: { zIndex: true } })).toMatchObject({ zIndex: stackWon ? 1 : stacked.zIndex });
     expect(await prisma.canvasItem.findUnique({ where: { id: itemId }, select: { zIndex: true, x: true } })).toMatchObject(stackWon ? { zIndex: 0, x: 0 } : { zIndex: 3, x: rect.x });
 
     const retry = await stack(stacked.id, 1, "back");

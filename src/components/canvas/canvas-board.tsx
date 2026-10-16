@@ -351,7 +351,7 @@ export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel
               if (canEdit && !busyRef.current && !item.archivedAt && event.altKey && event.key.startsWith("Arrow")) {
                 event.preventDefault();
                 const next = moveCanvasRectByKeyboard(item, event.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown");
-                setItems((current) => current.map((currentItem) => currentItem.id === item.id ? next : currentItem));
+                setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, ...next } : currentItem));
                 void saveRect(item.id, { x: next.x, y: next.y, width: next.width, height: next.height, zIndex: next.zIndex });
               }
             }}>

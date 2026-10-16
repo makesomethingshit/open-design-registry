@@ -224,6 +224,7 @@ test.describe("Canvas spatial detail page in a real browser", () => {
       await ownerBoard.getByLabel("Select an item").selectOption(moveItem.id);
       await expect(ownerBoard.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
 
+      await board.getByLabel("Select an item").selectOption(resizeItem.id);
       await board.getByLabel("Select an item").selectOption(moveItem.id);
       await expect(board.getByText("Keep this with the moved note", { exact: true })).toBeVisible();
       await board.getByRole("button", { name: "Archive selected item", exact: true }).click();

@@ -25,3 +25,9 @@ The spatial workspace is integrated in the Canvas detail route, based on PR #167
 - Canvas, Item and Comment author references become NULL when contributor accounts are deleted; content, identity and feedback linkage remain. Project-owner account deletion is guarded by the ownership-transfer policy in A.
 - `canvasExtent` accumulates bounds in one iteration without argument spread; the large case contains 250,000 rectangles.
 - The focused Playwright run passed in Chromium against the integrated detail route: 1 test passed in 17.4 seconds. It checks 320px and 390px viewport widths and keyboard alternatives in a desktop browser; it does not emulate touch input or certify screen-reader announcements, focus behavior with assistive technology, or physical-device rendering. Run the stacked browser suite and obtain hardware/screen-reader evidence before treating the Draft as fully accepted.
+
+## Review follow-up
+- Archive from the board refreshes the item composer; Fit includes the same active/archived items currently rendered.
+- Pointer resize selects its target. Keyboard movement clamps at coordinate bounds. Numeric controls retain raw text until blur/save, including an unfinished minus sign.
+- New items occupy distinct four-column slots, skipping occupied rectangles. The additive migration backfills only entirely untouched default boards with layoutVersion 0; saved/customized boards retain their coordinates. Initial placement is limited to 15,388 slots within the coordinate bounds.
+- PostgreSQL regression executes the actual migration SQL and checks both backfilled and preserved layouts. Public comment lists expose display attribution without internal author IDs.
