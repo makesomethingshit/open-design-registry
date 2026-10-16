@@ -27,7 +27,22 @@ export async function applyForCanvas(slug: string, actorId: string) {
     await tx.$queryRaw`SELECT id FROM "Project" WHERE slug = ${slug} FOR UPDATE`;
     const project = await lockPublicProject(tx, (await tx.project.findUnique({ where: { slug }, select: { id: true } }))?.id ?? "");
     const existing = await tx.projectCanvas.findUnique({ where: { projectId_ownerId: { projectId: project.id, ownerId: actorId } } });
-    if (!existing) return tx.projectCanvas.create({ data: { projectId: project.id, ownerId: actorId } });
+    const isProjectOwner = project.ownerId === actorId;
+    if (!existing) {
+      const now = new Date();
+      return tx.projectCanvas.create({ data: {
+        projectId: project.id, ownerId: actorId,
+        ...(isProjectOwner ? { accessStatus: "APPROVED" as const, approvedById: actorId, approvedAt: now, firstApprovedAt: now } : {}),
+      } });
+    }
+    // The Project owner needs no separate approval for their own Canvas.
+    // Retain any original first approval timestamp when reactivating the same row.
+    if (isProjectOwner && existing.accessStatus !== "APPROVED") {
+      const now = new Date();
+      return tx.projectCanvas.update({ where: { id: existing.id }, data: {
+        accessStatus: "APPROVED", approvedById: actorId, approvedAt: now, firstApprovedAt: existing.firstApprovedAt ?? now,
+      } });
+    }
     if (existing.accessStatus === "PENDING" || existing.accessStatus === "APPROVED") return existing;
     return tx.projectCanvas.update({ where: { id: existing.id }, data: { accessStatus: "PENDING", approvedById: null, approvedAt: null } });
   });
