@@ -169,9 +169,9 @@ test.describe("Canvas spatial detail page in a real browser", () => {
 async function signUp(page: Page, name: string, email: string) {
   await page.goto("/login");
   await page.getByRole("button", { name: "New here? Create an account", exact: true }).click();
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill("canvas-spatial-browser-password-123");
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
+  await page.getByLabel("Password").fill("canvas-spatial-browser-password-123");
   await page.getByRole("button", { name: "Create account", exact: true }).click();
   await expect(page.getByRole("button", { name: /^Account/ })).toBeVisible();
 }

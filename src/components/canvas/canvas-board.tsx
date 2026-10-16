@@ -38,6 +38,7 @@ type Props = {
   canComment: boolean;
   readOnlyLabel?: string;
   renderItem?: (props: CanvasItemCardProps) => ReactNode;
+  onArchive?: () => void;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -45,7 +46,7 @@ const itemUrl = (slug: string, canvasId: string) => `/api/projects/${encodeURICo
 const feedbackUrl = (slug: string, canvasId: string) => `/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}/comments`;
 const layoutUrl = (slug: string, canvasId: string) => `/api/projects/${encodeURIComponent(slug)}/canvases/${encodeURIComponent(canvasId)}/layout`;
 
-export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel, renderItem }: Props) {
+export function CanvasBoard({ slug, canvasId, canEdit, canComment, readOnlyLabel, renderItem, onArchive }: Props) {
   const [items, setItems] = useState<CanvasItem[]>([]);
   const [comments, setComments] = useState<CanvasComment[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);

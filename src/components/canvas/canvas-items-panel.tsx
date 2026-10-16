@@ -9,7 +9,7 @@ import styles from "./canvas-items.module.css";
 type Kind = "TEXT" | "IMAGE";
 type Origin = "ORIGINAL" | "REFERENCE";
 
-export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; canvasId: string; canEdit: boolean }) {
+export function CanvasItemsPanel({ slug, canvasId, canEdit, onChange }: { slug: string; canvasId: string; canEdit: boolean; onChange?: () => void }) {
   const [items, setItems] = useState<CanvasItemCardItem[]>([]);
   const [kind, setKind] = useState<Kind>("TEXT");
   const [origin, setOrigin] = useState<Origin>("ORIGINAL");
@@ -72,6 +72,7 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; ca
         return;
       }
       setItems((current) => [...current, created]);
+      onChange?.();
       const previousItem = replaceItem;
       form.reset();
       setKind("TEXT");
@@ -90,6 +91,7 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; ca
       setMessage(archiveFailed
         ? "Replacement saved, but the previous item could not be archived. Both items remain visible; use Archive on the previous item to retry."
         : previousItem ? "Replacement saved as a new item; the previous item is archived." : `${created.kind === "IMAGE" ? "Image" : "Note"} added.`);
+      onChange?.();
       await refresh().catch(() => setMessage((current) => `${current} The list could not refresh; reload the Canvas to confirm its latest state.`));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Item could not be saved. Try again.");
@@ -105,6 +107,7 @@ export function CanvasItemsPanel({ slug, canvasId, canEdit }: { slug: string; ca
       if (!response.ok) throw new Error("Item could not be archived. Refresh and try again.");
       const result = await response.json() as { archivedAt: CanvasItemCardItem["archivedAt"] };
       setItems((current) => current.map((item) => item.id === itemId ? { ...item, archivedAt: result.archivedAt } : item));
+      onChange?.();
       await refresh(); setMessage("Item archived; its history and attribution remain.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Item could not be archived."); }
     finally { setArchiving((current) => current.filter((id) => id !== itemId)); }
