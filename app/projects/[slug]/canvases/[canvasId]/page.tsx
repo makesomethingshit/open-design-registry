@@ -25,4 +25,3 @@ export default async function CanvasDetailPage({ params }: Props) {
     <CanvasItemsPanel canvasId={canvasId} canEdit={view.canEdit} slug={slug} />
   </CanvasDetail>;
 }
-
