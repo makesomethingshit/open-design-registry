@@ -5,7 +5,7 @@ import { z } from "zod";
  * bytes, MIME, object ownership, project visibility and current DB approval.
  */
 const origin = z.enum(["ORIGINAL", "REFERENCE"]);
-const sourceUrl = z.string().trim().url().refine((url) => {
+const sourceUrl = z.string().trim().max(2048).url().refine((url) => {
   const scheme = new URL(url).protocol;
   return scheme === "http:" || scheme === "https:";
 }).optional();
@@ -33,4 +33,5 @@ export const canvasItemInput = z.discriminatedUnion("kind", [
 
 export const canvasImageMimeTypes = new Set(["image/png", "image/jpeg"]);
 export const maxCanvasImageBytes = 10 * 1024 * 1024;
+export const maxCanvasJsonRequestBytes = 64 * 1024;
 export const maxCanvasMultipartRequestBytes = maxCanvasImageBytes + 64 * 1024;

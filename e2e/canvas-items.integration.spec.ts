@@ -37,7 +37,7 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   let createCount = 0;
   let archiveCount = 0;
   let rejectNextCreate = false;
-  let loseNextCreateResponse = false;
+  let failNextCreateAfterCommit: "transport" | "500" | null = null;
   let releaseArchive!: () => void;
   let archiveStarted!: () => void;
   const archiveGate = new Promise<void>((resolve) => { releaseArchive = resolve; });
@@ -49,9 +49,11 @@ test("adds Canvas notes and images and safely completes a replacement when archi
         rejectNextCreate = false;
         return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Conflict" }) });
       }
-      if (loseNextCreateResponse) {
-        loseNextCreateResponse = false;
-        await route.fetch();
+      if (failNextCreateAfterCommit) {
+        const failureMode = failNextCreateAfterCommit;
+        failNextCreateAfterCommit = null;
+        const committed = await route.fetch();
+        if (failureMode === "500") return route.fulfill({ response: committed, status: 500, body: JSON.stringify({ error: "Response unavailable" }) });
         return route.abort("failed");
       }
     }
@@ -134,10 +136,10 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   await page.keyboard.press("Enter");
   await panel.getByLabel("Item type").selectOption("TEXT");
   await panel.getByRole("textbox", { name: "Note", exact: true }).fill("Response-lost replacement");
-  loseNextCreateResponse = true;
+  failNextCreateAfterCommit = "500";
   await panel.getByRole("button", { name: "Save replacement" }).focus();
   await page.keyboard.press("Enter");
-  await expect(panel.getByRole("status")).toContainText("may have been saved");
+  await expect(panel.getByRole("status")).toContainText("did not confirm whether the item was saved");
   await expect(panel.getByRole("heading", { name: "Add to this Canvas" })).toBeVisible();
   await expect(panel.getByRole("button", { name: "Add item", exact: true })).toBeDisabled();
   expect(createCount).toBe(5);
@@ -150,6 +152,19 @@ test("adds Canvas notes and images and safely completes a replacement when archi
   const reloadedPanel = page.getByRole("region", { name: "Canvas items" });
   await expect(reloadedPanel.getByText("Response-lost replacement", { exact: true })).toHaveCount(1);
   await expect(reloadedPanel.getByRole("button", { name: "Add item", exact: true })).toBeEnabled();
+
+  await reloadedPanel.getByRole("textbox", { name: "Note", exact: true }).fill("Transport-lost note");
+  failNextCreateAfterCommit = "transport";
+  await reloadedPanel.getByRole("button", { name: "Add item", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(reloadedPanel.getByRole("status")).toContainText("did not confirm whether the item was saved");
+  await expect(reloadedPanel.getByRole("button", { name: "Add item", exact: true })).toBeDisabled();
+  expect(createCount).toBe(6);
+  expect(await prisma.canvasItem.count({ where: { canvasId, body: "Transport-lost note" } })).toBe(1);
+  await page.reload();
+  const finalPanel = page.getByRole("region", { name: "Canvas items" });
+  await expect(finalPanel.getByText("Transport-lost note", { exact: true })).toHaveCount(1);
+  await expect(finalPanel.getByRole("button", { name: "Add item", exact: true })).toBeEnabled();
   } finally {
     const [project, items] = await Promise.all([
       projectId ? prisma.project.findUnique({ where: { id: projectId }, select: { coverUrl: true } }) : null,
