@@ -77,7 +77,7 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     const customizedItem = await add(customized.id, "Customized", 123);
     await add(customized.id, "Keep sibling at origin");
     const sql = readFileSync(new URL("../../../prisma/migrations/20261016000000_canvas_initial_item_layout/migration.sql", import.meta.url), "utf8");
-    await prisma.$executeRawUnsafe(sql);
+    await prisma.$executeRawUnsafe(sql.replace('WHERE canvas."layoutVersion" = 0', 'WHERE canvas."projectId" = $1 AND canvas."layoutVersion" = 0'), projectId);
     const positions = await prisma.canvasItem.findMany({ where: { canvasId }, orderBy: { sortOrder: "asc" }, select: { x: true, y: true, zIndex: true } });
     expect(positions).toEqual([{ x: 0, y: 0, zIndex: 0 }, { x: 340, y: 0, zIndex: 1 }]);
     expect(await prisma.canvasItem.findUnique({ where: { id: savedItem.id }, select: { x: true, y: true } })).toEqual({ x: 0, y: 0 });
