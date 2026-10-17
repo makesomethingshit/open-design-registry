@@ -18,6 +18,16 @@ export async function lockCanvas(tx: Prisma.TransactionClient, slug: string, can
   return { project, canvas };
 }
 
+export async function lockCanvasForRead(tx: Prisma.TransactionClient, slug: string, canvasId: string) {
+  const found = await tx.project.findUnique({ where: { slug }, select: { id: true } });
+  if (!found) throw new CanvasError(404, "Canvas not found");
+  const project = await lockPublicProject(tx, found.id);
+  await tx.$queryRaw`SELECT id FROM "ProjectCanvas" WHERE id = ${canvasId} AND "projectId" = ${project.id} FOR SHARE`;
+  const canvas = await tx.projectCanvas.findFirst({ where: { id: canvasId, projectId: project.id } });
+  if (!canvas) throw new CanvasError(404, "Canvas not found");
+  return { project, canvas };
+}
+
 export function canvasFacts(project: { isPublic: boolean; ownerId: string }, canvas: { ownerId: string | null; accessStatus: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED"; firstApprovedAt: Date | null }) {
   return { projectPublic: project.isPublic, projectOwnerId: project.ownerId, canvasOwnerId: canvas.ownerId, status: canvas.accessStatus, previouslyApproved: canvas.firstApprovedAt !== null };
 }

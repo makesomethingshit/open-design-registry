@@ -3,7 +3,7 @@ import { getSession } from "@/src/lib/session";
 import { prisma } from "@/src/lib/prisma";
 import { CanvasError, canvasView, readCanvases } from "@/src/lib/canvas/service";
 import { PrivateProjectWrite } from "@/src/lib/project-visibility-lock";
-import { CanvasItemsPanel } from "@/src/components/canvas/canvas-items-panel";
+import { CanvasWorkspace } from "@/src/components/canvas/canvas-workspace";
 import { CanvasDetail } from "../canvas-membership";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,6 @@ export default async function CanvasDetailPage({ params }: Props) {
   if (!canvas) notFound();
   const view = canvasView(canvas, session?.user.id ?? null);
   return <CanvasDetail canvas={view} canvasId={canvasId} slug={slug}>
-    <CanvasItemsPanel canvasId={canvasId} canEdit={view.canEdit} slug={slug} />
+    <CanvasWorkspace canvasId={canvasId} canEdit={view.canEdit} canComment={view.canComment} slug={slug} />
   </CanvasDetail>;
 }

@@ -40,6 +40,7 @@ model User {
   designRequestParticipations DesignRequestParticipation[]
   ownedCanvases ProjectCanvas[] @relation("CanvasOwner")
   canvasItems CanvasItem[]
+  canvasItemComments CanvasItemComment[]
   canvasApprovals ProjectCanvas[] @relation("CanvasApprover")
 }
 
@@ -727,6 +728,7 @@ model ProjectCanvas {
   approvedById    String?
   approvedAt      DateTime?
   firstApprovedAt DateTime?
+  layoutVersion   Int @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -764,14 +766,37 @@ model CanvasItem {
   sourceUrl   String?
   rightsNote  String?
   sortOrder   Int @default(0)
+  x           Float @default(0)
+  y           Float @default(0)
+  width       Float @default(320)
+  height      Float @default(240)
+  zIndex      Int @default(0)
   archivedAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   canvas      ProjectCanvas @relation(fields: [canvasId], references: [id], onDelete: Cascade)
   author      User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  comments    CanvasItemComment[]
 
   @@index([canvasId, archivedAt, sortOrder, id])
+  @@index([canvasId, archivedAt, zIndex, id])
   @@index([authorId])
   @@index([assetKey])
+}
+
+
+// Comments always reference immutable item identity, never x/y or an S3 key.
+model CanvasItemComment {
+  id         String @id @default(cuid())
+  itemId     String
+  authorId   String?
+  body       String
+  createdAt  DateTime @default(now())
+
+  item       CanvasItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  author     User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([itemId, createdAt, id])
+  @@index([authorId])
 }

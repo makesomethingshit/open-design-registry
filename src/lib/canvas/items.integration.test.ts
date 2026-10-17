@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../prisma";
 import { applyForCanvas, changeCanvasAccess } from "./service";
@@ -65,6 +66,44 @@ db("Canvas item PostgreSQL + injected storage failures", () => {
     await expect(createCanvasItem(slug, canvasId, authorId, metadata, image())).rejects.toMatchObject({ status: 409 });
     expect(mocks.remove).toHaveBeenCalledOnce();
     expect(await prisma.canvasItem.count({ where: { canvasId } })).toBe(0);
+  });
+  it("backfills only untouched layouts and preserves saved or customized boards", async () => {
+    const saved = await prisma.projectCanvas.create({ data: { projectId, layoutVersion: 1 } });
+    const customized = await prisma.projectCanvas.create({ data: { projectId } });
+    const add = (targetId: string, body: string, x = 0) => prisma.canvasItem.create({ data: { canvasId: targetId, kind: "TEXT", origin: "ORIGINAL", body, x } });
+    await add(canvasId, "Untouched first");
+    await add(canvasId, "Untouched second");
+    const savedItem = await add(saved.id, "Saved overlap");
+    const customizedItem = await add(customized.id, "Customized", 123);
+    await add(customized.id, "Keep sibling at origin");
+    const sql = readFileSync(new URL("../../../prisma/migrations/20261016000000_canvas_initial_item_layout/migration.sql", import.meta.url), "utf8");
+    await prisma.$executeRawUnsafe(sql.replace('WHERE canvas."layoutVersion" = 0', 'WHERE canvas."projectId" = $1 AND canvas."layoutVersion" = 0'), projectId);
+    const positions = await prisma.canvasItem.findMany({ where: { canvasId }, orderBy: { sortOrder: "asc" }, select: { x: true, y: true, zIndex: true } });
+    expect(positions).toEqual([{ x: 0, y: 0, zIndex: 0 }, { x: 340, y: 0, zIndex: 1 }]);
+    expect(await prisma.canvasItem.findUnique({ where: { id: savedItem.id }, select: { x: true, y: true } })).toEqual({ x: 0, y: 0 });
+    expect(await prisma.canvasItem.findUnique({ where: { id: customizedItem.id }, select: { x: true, y: true } })).toEqual({ x: 123, y: 0 });
+    expect(await prisma.canvasItem.findFirst({ where: { canvasId: customized.id, body: "Keep sibling at origin" }, select: { x: true, y: true } })).toEqual({ x: 0, y: 0 });
+  });
+  it("reuses an early empty slot when all later initial slots are blocked", async () => {
+    await prisma.canvasItem.create({ data: { canvasId, kind: "TEXT", origin: "ORIGINAL", body: "Block later slots", x: 0, y: 260, width: 8192, height: 1_000_000 } });
+    // Skip the four early slots via the item count, while keeping them geometrically empty.
+    await prisma.canvasItem.createMany({ data: Array.from({ length: 3 }, () => ({ canvasId, kind: "TEXT" as const, origin: "ORIGINAL" as const, body: "Off grid", x: -1000, y: -1000 })) });
+    const item = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "Fits early" });
+    expect(item).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("places new items in distinct grid slots without changing existing custom geometry", async () => {
+    const existing = await prisma.canvasItem.create({ data: {
+      canvasId, authorId, kind: "TEXT", origin: "ORIGINAL", body: "Customized legacy item",
+      x: 25, y: 35, width: 320, height: 240, zIndex: 0, sortOrder: 0,
+    } });
+    const first = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "New first" });
+    const second = await createCanvasItem(slug, canvasId, authorId, { kind: "TEXT", origin: "ORIGINAL", body: "New second" });
+    expect([first.x, first.y, second.x, second.y]).toEqual([680, 0, 1020, 0]);
+    expect(first.sortOrder).toBe(1);
+    expect(second.sortOrder).toBe(2);
+    expect(await prisma.canvasItem.findUnique({ where: { id: existing.id }, select: { x: true, y: true, width: true, height: true } }))
+      .toMatchObject({ x: 25, y: 35, width: 320, height: 240 });
   });
   it("keeps committed bytes when the transaction commit response is lost", async () => {
     const transaction = prisma.$transaction.bind(prisma);
