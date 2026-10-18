@@ -28,9 +28,10 @@ Use test accounts and synthetic images in an isolated PostgreSQL/MinIO instance;
 
 ## Interface and migration observations to record
 
-- In the admin report interface, distinguish **Hide Project** from **Suppress shared asset**, and record whether users can understand cross-Fork reach *before* confirming. Record actual affected Project/Fork count where the interface provides it; do not invent one.
-- Confirm separate restore controls and the retained-decisions view after report deletion, including the reason, actor and original target/key. Do not expose private keys or reporter identities in public screenshots.
-- Verify forbidden admin mutations are HTTP 403 and private assets remain inaccessible after changing legacy URL form or loading directly through the asset proxy.
+- In the admin report interface, distinguish **Hide Project** from **Suppress shared asset**, and record whether users can understand cross-Fork reach *before* confirming. The displayed count covers exact stored `coverUrl` matches only; differently formatted URLs and other asset references are excluded. Record that count with its limitation, not as the total number of affected references.
+- Confirm separate restore controls and the retained-decisions view after report deletion: the UI exposes the report ID, saved reason/details, blocked keys and restore controls. It does not display the decision actor, timestamp or hidden Project ID; verify those separately in isolated `ModerationEvent` / `ModerationProjectHold` / `ModerationAssetBlock` records, retaining IDs across report deletion. Do not expose private keys or reporter identities in public screenshots.
+- Verify unauthorized moderation `PATCH` is HTTP 403, and blocked/private asset `GET` is 404 through the key proxy, stored URL and legacy URL form. Successful restore `PATCH` returns 200; after an owner chooses private, anonymous Project `GET` must still return 404 until the owner republishes.
+- Probe duplicate decisions: a second report trying to hide an already-held Project returns 409 and remains `OPEN`; retrying the same report's existing block returns 200 without another block or audit event. Record before/after counts in the isolated database.
 - Legacy rows created before the moderation-scope migration are **review candidates, not confirmed hides**. Compare retained candidates with backup/operational evidence, including changed/deleted covers and deleted reports, before any release or publication decision. Never bulk-publish candidates.
 - Verify migrations are applied in isolation and run [moderation PostgreSQL/MinIO browser regression](../e2e/moderation.integration.spec.ts) with the same exact SHA. A passing fixture alone does not prove operator UX or live legacy-data correctness.
 
