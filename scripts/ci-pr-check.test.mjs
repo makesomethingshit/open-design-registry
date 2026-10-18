@@ -61,6 +61,11 @@ describe("checkDocs", () => {
         "- ```md",
         "  [listed](missing.md)",
         "  ```",
+        "",
+        "[ref]: b.md",
+        "",
+        "    ```md",
+        "    [indented](missing.md)",
       ].join("\n"),
     );
     expect(checkDocs(["docs/valid.md"], root)).toEqual({ checked: ["docs/valid.md"], errors: [] });
@@ -79,5 +84,16 @@ describe("checkDocs", () => {
 
   it("skips a documentation file deleted by the PR", () => {
     expect(checkDocs(["docs/deleted.md"], root)).toEqual({ checked: [], errors: [] });
+  });
+
+  it("checks reference-style link definitions", () => {
+    writeFileSync(join(root, "docs", "refs.md"), "[guide][g]\n\n[g]: nope.md\n");
+    const { errors } = checkDocs(["docs/refs.md"], root);
+    expect(errors.some((error) => error.includes("nope.md"))).toBe(true);
+  });
+
+  it("does not treat a four-space indented block as a fence", () => {
+    writeFileSync(join(root, "docs", "indented.md"), "    ```md\n    [code](missing.md)\n");
+    expect(checkDocs(["docs/indented.md"], root)).toEqual({ checked: ["docs/indented.md"], errors: [] });
   });
 });

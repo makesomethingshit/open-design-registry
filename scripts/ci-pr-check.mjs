@@ -49,18 +49,14 @@ function checkMarkdown(file, source, root) {
 
   lines.forEach((line, index) => {
     const number = index + 1;
-    // Container prefixes are part of Markdown structure, not part of the fence.
-    const content = line
-      .replace(/^(?:\s*>\s*)+/, "")
-      .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "");
-    const marker = content.match(/^(`{3,}|~{3,})(.*)$/);
+    const marker = fenceInfo(line, fence && fence.container ? fence.contentIndent + 3 : 3);
     if (marker) {
       if (!fence) {
-        fence = { char: marker[1][0], length: marker[1].length, line: number };
+        fence = { ...marker, line: number };
       } else if (
-        marker[1][0] === fence.char &&
-        marker[1].length >= fence.length &&
-        marker[2].trim() === ""
+        marker.char === fence.char &&
+        marker.length >= fence.length &&
+        marker.info === ""
       ) {
         fence = null;
       }
@@ -68,41 +64,81 @@ function checkMarkdown(file, source, root) {
     }
     if (fence) return;
 
+    // shortcut: 4+ space indented lines are code, so deeply indented list links are not checked.
+    if (/^(?: {4,}|\t)/.test(line.replace(/^(?:\s{0,3}>\s?)+/, ""))) return;
+
     // Fenced examples and inline code are not link targets.
     const prose = line.replace(/`+[^`\n]*`+/g, "");
-    for (const rawTarget of linkTargets(prose)) {
-      let target = rawTarget.trim().replace(/\\([()])/g, "$1");
-      if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
-      if (
-        target === "" ||
-        target.startsWith("#") ||
-        target.startsWith("/") ||
-        target.startsWith("//") ||
-        /^[a-z][a-z0-9+.-]*:/i.test(target)
-      ) {
-        continue;
-      }
-      const path = target.split(/[?#]/)[0];
-      if (path === "") continue;
-      let decoded;
-      try {
-        decoded = decodeURIComponent(path);
-      } catch {
-        errors.push(`${file}:${number}: invalid URL encoding in ${target}`);
-        continue;
-      }
-      const absolute = resolve(dirname(resolve(root, file)), decoded);
-      const inside = relative(root, absolute);
-      if (inside.startsWith("..") || isAbsolute(inside)) {
-        errors.push(`${file}:${number}: link escapes the repository: ${target}`);
-      } else if (!existsSync(absolute)) {
-        errors.push(`${file}:${number}: missing relative link target: ${target}`);
-      }
-    }
+    for (const target of linkTargets(prose)) checkTarget(target, file, number, root, errors);
+    const definition = line
+      .replace(/^(?:\s{0,3}>\s?)+/, "")
+      .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "")
+      .match(/^\s{0,3}\[[^\]]+\]:\s*(<[^>]*>|\S+)/);
+    if (definition) checkTarget(definition[1], file, number, root, errors);
   });
 
   if (fence) errors.push(`${file}:${fence.line}: unclosed code fence`);
   return errors;
+}
+
+function checkTarget(rawTarget, file, number, root, errors) {
+  let target = rawTarget.trim().replace(/\\([()])/g, "$1");
+  if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
+  if (
+    target === "" ||
+    target.startsWith("#") ||
+    target.startsWith("/") ||
+    target.startsWith("//") ||
+    /^[a-z][a-z0-9+.-]*:/i.test(target)
+  ) {
+    return;
+  }
+  const path = target.split(/[?#]/)[0];
+  if (path === "") return;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    errors.push(`${file}:${number}: invalid URL encoding in ${target}`);
+    return;
+  }
+  const absolute = resolve(dirname(resolve(root, file)), decoded);
+  const inside = relative(root, absolute);
+  if (inside.startsWith("..") || isAbsolute(inside)) {
+    errors.push(`${file}:${number}: link escapes the repository: ${target}`);
+  } else if (!existsSync(absolute)) {
+    errors.push(`${file}:${number}: missing relative link target: ${target}`);
+  }
+}
+
+function fenceInfo(line, allowIndent) {
+  let content = line;
+  let container = false;
+  while (true) {
+    const quote = content.match(/^\s{0,3}>\s?/);
+    if (!quote) break;
+    container = true;
+    content = content.slice(quote[0].length);
+  }
+  const list = content.match(/^(\s*)(?:[-*+]|\d+[.)])\s+/);
+  let contentIndent = 0;
+  if (list) {
+    container = true;
+    contentIndent = list[0].length;
+    content = content.slice(list[0].length);
+  }
+  const spaces = content.match(/^\s*/)[0].length;
+  if (spaces > (container ? contentIndent + 3 : allowIndent)) return null;
+  content = content.slice(spaces);
+  const marker = content.match(/^(`{3,}|~{3,})(.*)$/);
+  if (!marker) return null;
+  return {
+    char: marker[1][0],
+    length: marker[1].length,
+    info: marker[2].trim(),
+    container,
+    contentIndent,
+  };
 }
 
 function linkTargets(line) {
