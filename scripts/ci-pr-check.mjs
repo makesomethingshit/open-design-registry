@@ -56,7 +56,9 @@ function checkMarkdown(file, source, root) {
       } else if (
         marker.char === fence.char &&
         marker.length >= fence.length &&
-        marker.info === ""
+        marker.info === "" &&
+        !marker.listed &&
+        (!marker.quoted || fence.quoted)
       ) {
         fence = null;
       }
@@ -114,16 +116,20 @@ function checkTarget(rawTarget, file, number, root, errors) {
 function fenceInfo(line, allowIndent) {
   let content = line;
   let container = false;
+  let quoted = false;
+  let listed = false;
   while (true) {
     const quote = content.match(/^\s{0,3}>\s?/);
     if (!quote) break;
     container = true;
+    quoted = true;
     content = content.slice(quote[0].length);
   }
   const list = content.match(/^(\s*)(?:[-*+]|\d+[.)])\s+/);
   let contentIndent = 0;
   if (list) {
     container = true;
+    listed = true;
     contentIndent = list[0].length;
     content = content.slice(list[0].length);
   }
@@ -137,6 +143,8 @@ function fenceInfo(line, allowIndent) {
     length: marker[1].length,
     info: marker[2].trim(),
     container,
+    quoted,
+    listed,
     contentIndent,
   };
 }
