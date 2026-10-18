@@ -188,6 +188,10 @@ Release 발행 API는 선택적 UUID `requestId`를 받습니다. 같은 프로�
 
 관련 설정: [CI](../.github/workflows/ci.yml), [환경 예제](../.env.example), [Playwright](../playwright.config.ts), [Vitest](../vitest.config.ts), [테스트 스토리지 준비](../scripts/prepare-test-storage.mjs).
 
+### Moderation 운영 검증 (#136)
+
+내부 RC 준비 단계에서 공유 커버가 있는 Fork의 독립성, Project hide와 자산 key suppression의 분리, 신고 삭제 뒤 결정 보존 및 복원, 레거시 후보를 실제 관리자 화면에서 구분해 검증합니다. **결과는 아직 검증되지 않았으며**, 운영·테스트 데이터에 대한 확인은 [pre-RC Moderation 검증표](moderation-pre-rc-review.md)에 별도로 기록합니다. 사용자 테스트는 RC 시점에 통합하여 진행합니다.
+
 ### 신고 삭제 후 moderation 복원
 
 프로젝트 숨김과 공유 커버 차단은 별도 결정입니다. 동일 프로젝트에 다른 신고의 활성 숨김이 있으면 두 번째 숨김 요청은 409이며 해당 신고를 처리 완료로 바꾸지 않습니다. 관리자는 기존 숨김을 검토·복원한 뒤 두 번째 신고를 다시 판단합니다.
