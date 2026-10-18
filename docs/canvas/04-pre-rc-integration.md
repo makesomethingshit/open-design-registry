@@ -27,8 +27,21 @@ Record the exact application SHA, migration version, test DB/storage scope, test
 | 8 | Owner | Revoke A and verify read-only prior-public history; stale A tab cannot write or post new feedback |
 | 9 | Owner / anonymous | Make Project private; all Canvas list, item, comment and protected asset routes enforce current visibility |
 | 10 | A / owner | Reapply and reapprove; reuse the existing Canvas; verify existing archived feedback and attribution survive |
+| 11 | A / B / owner, then anonymous | On a still-public Project, record the approved Canvas ID, active and archived item IDs, comment IDs/bodies, image key/checksum, source URL and rights note. Include a comment authored by A as well as B. Delete contributor A through the account deletion flow (not the Project owner), then reread the same IDs via the actual list/detail/comment/asset routes and browser. Content, image bytes, provenance and comments remain readable; A's Canvas/item/comment author references are null and the UI shows anonymous attribution without A's name. B's attribution remains intact. A's stale session cannot create, move, archive or comment; verify rejected requests leave rows and objects unchanged. Record each observation separately; a null Canvas owner ID alone is not a PASS. |
 
 **Race and failure probes:** two writers with the same `layoutVersion` (one 409), simultaneous archive/comment and revoke/upload, a committed create/archive/comment with lost HTTP response, stale reload after replacement, pointer cancellation and a second pointer during a drag, >50 comments cursor pages, and PostgreSQL/MinIO object cleanup. A browser-only mock is not evidence for a database or S3 contention guarantee.
+
+### Commit succeeded, response lost
+
+Drop only the HTTP response after the production transaction commits; dropping a request before commit does not exercise this case. Before retrying, reread the database and protected storage through an independent session and record the operation outcome and IDs. A client/network error alone does not prove rollback.
+
+| Operation | Required observation before and after a retry |
+| --- | --- |
+| Create image/item or comment | Record row IDs/counts, image key/checksum and comment body after the lost response. Repeat the same request once and reread rows/objects. These POSTs have no idempotency key: a retry may create a distinct item/object or comment. Record any additional IDs and verify original content is unchanged; never mark duplicate-free replay as supported or retry blindly. |
+| Archive | Verify the intended item's archived state and retained image/comments after the lost response; replay and record the actual response and DB/storage state. The original item must remain archived with preserved history, without an extra item or content deletion. |
+| Layout | Use a real geometry/stack change (a no-op does not increment the version). Record geometry/stack and `layoutVersion` after commit. Replay the same expected version: expect 409 and no second version increment or geometry/stack change. Reload before deciding whether another edit is needed. |
+
+For every probe record **committed / not committed / unknown**, retry response and duplicate/state comparison. An unreadable DB/object result is **NOT TESTED / inconclusive**, never a PASS. Unexpected history loss or mutation is a failed acceptance observation to triage separately, not proof supplied by this document.
 
 ## Automation and manual boundary
 
@@ -39,7 +52,9 @@ Record the exact application SHA, migration version, test DB/storage scope, test
 ## Exit record (fill in after execution)
 
 - SHA / environment / migration status: **Not yet recorded**
-- Two-account integration result and protected image evidence: **Not yet recorded**
+- Two-account integration result and protected image evidence: **NOT TESTED**
+- Contributor deletion: stable IDs, images/provenance/comments, anonymous UI and stale-session write rejection: **NOT TESTED**
+- Lost-response commit/retry probes (create/comment/archive/layout, duplicate/state comparison): **NOT TESTED**
 - DB/storage contention and latest CI links: **Not yet recorded**
 - Outstanding P0/P1, regression issues and owners: **Not yet recorded**
-- Decision: **#129 remains open until internal verification is complete; do not label this draft as proof of RC readiness.**
+- Decision: **#129 remains open until internal verification is complete; do not label this document as proof of RC readiness.**
