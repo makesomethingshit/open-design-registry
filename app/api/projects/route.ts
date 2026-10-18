@@ -6,6 +6,7 @@ import { imageTypes, maxImageBytes, projectSchema, slugify } from "@/src/lib/pro
 import { deleteObject, publicAssetUrl, putCover } from "@/src/lib/storage";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import { recentProjectActivity } from "@/src/lib/recent-projects";
+import { maxImageFormBytes, readBoundedFormData } from "@/src/lib/request-body";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -59,7 +60,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
-  const form = await request.formData();
+  const body = await readBoundedFormData(request, maxImageFormBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large." }, { status: 413 });
+  const form = body.form;
+  if (!form) return NextResponse.json({ error: "Invalid project form." }, { status: 400 });
   const parsed = projectSchema.safeParse({
     title: form.get("title"), description: form.get("description") ?? "", license: form.get("license"), isPublic: form.get("isPublic") === "on" || form.get("isPublic") === "true",
   });

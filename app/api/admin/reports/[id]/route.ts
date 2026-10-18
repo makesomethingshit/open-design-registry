@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { getAdminSession } from "@/src/lib/moderation";
 import { assetKeyFromStoredUrl } from "@/src/lib/storage";
+import { maxSmallJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 type Action = "NONE" | "HIDE_PROJECT" | "BLOCK_COVER" | "RESTORE_PROJECT" | "UNBLOCK_COVER";
 const actions = new Set<Action>(["NONE", "HIDE_PROJECT", "BLOCK_COVER", "RESTORE_PROJECT", "UNBLOCK_COVER"]);
@@ -12,7 +13,9 @@ class ModerationError extends Error {
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-  const body = await request.json().catch(() => null) as { status?: unknown; resolutionNote?: unknown; hide?: unknown; action?: unknown } | null;
+  const bodyResult = await readBoundedJson(request, maxSmallJsonBytes);
+  if (bodyResult.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const body = bodyResult.value as { status?: unknown; resolutionNote?: unknown; hide?: unknown; action?: unknown } | null;
   if (!body || (body.action !== undefined && (typeof body.action !== "string" || !actions.has(body.action as Action)))) {
     return NextResponse.json({ error: "Invalid moderation action" }, { status: 400 });
   }

@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { getSession } from "@/src/lib/session";
 import { putObject } from "@/src/lib/storage";
 import { maxImageBytes } from "@/src/lib/project-validation";
+import { maxImageFormBytes, readBoundedFormData } from "@/src/lib/request-body";
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const session = await getSession();
@@ -14,7 +15,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (Number(request.headers.get("content-length")) > maxImageBytes + 65536) {
     return NextResponse.json({ error: "Choose a PNG or JPG image up to 10MB." }, { status: 400 });
   }
-  const form = await request.formData().catch(() => null);
+  const body = await readBoundedFormData(request, maxImageFormBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large." }, { status: 413 });
+  const form = body.form;
   const file = form?.get("image");
   if (!(file instanceof File) || !file.size || file.size > maxImageBytes || !["image/png", "image/jpeg"].includes(file.type)) {
     return NextResponse.json({ error: "Choose a PNG or JPG image up to 10MB." }, { status: 400 });

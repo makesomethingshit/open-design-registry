@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { auth } from "../auth";
 import { applyForCanvas, canvasFailure, canvasView, changeCanvasAccess, readCanvasPage, readCanvases } from "./service";
+import { maxSmallJsonBytes, readBoundedJson } from "../request-body";
 
 type Scope = { slug: string; canvasId?: string };
 const accessInput = z.object({ action: z.enum(["approve", "reject", "revoke", "withdraw"]) }).strict();
@@ -24,7 +25,9 @@ export async function canvasRequest(request: Request, { slug, canvasId }: Scope)
       const view = (await readCanvases(slug, session!.user.id, canvas.id)).map((row) => canvasView(row, session!.user.id))[0];
       return Response.json(view, { status: 200 });
     }
-    const parsed = accessInput.safeParse(await request.json().catch(() => null));
+    const body = await readBoundedJson(request, maxSmallJsonBytes);
+    if (body.tooLarge) return Response.json({ error: "Request body is too large" }, { status: 413 });
+    const parsed = accessInput.safeParse(body.value);
     if (!parsed.success) return Response.json({ error: "Invalid access action" }, { status: 400 });
     await changeCanvasAccess(slug, canvasId, session!.user.id, parsed.data.action);
     const view = (await readCanvases(slug, session!.user.id, canvasId)).map((row) => canvasView(row, session!.user.id))[0];

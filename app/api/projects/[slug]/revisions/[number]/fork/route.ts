@@ -3,12 +3,15 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { slugify } from "@/src/lib/project-validation";
 import { publicAssetUrl } from "@/src/lib/storage";
+import { maxSmallJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string; number: string }> }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
   const { slug: sourceSlug, number } = await params;
-  const body = await request.json().catch(() => null) as { title?: unknown; rightsConfirmed?: unknown } | null;
+  const bodyResult = await readBoundedJson(request, maxSmallJsonBytes);
+  if (bodyResult.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const body = bodyResult.value as { title?: unknown; rightsConfirmed?: unknown } | null;
   if (body?.rightsConfirmed !== true) return NextResponse.json({ error: "Confirm your rights to publish this fork" }, { status: 400 });
   const revisionNumber = Number(number);
   if (!Number.isInteger(revisionNumber) || revisionNumber < 1) return NextResponse.json({ error: "Revision not found" }, { status: 404 });

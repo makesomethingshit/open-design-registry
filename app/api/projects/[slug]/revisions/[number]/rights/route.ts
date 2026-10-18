@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { createRightsDeclaration, validateRightsAgainstRevision, validateRightsSourceFiles } from "@/src/lib/revision-rights";
 import { parseRightsDeclaration } from "@/src/lib/rights";
 import { ExpiredDocumentImageError, imageReferenceTransactionOptions } from "@/src/lib/project-document-save";
+import { maxRightsJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -40,7 +41,9 @@ async function save(request: Request, { params }: { params: Promise<{ slug: stri
   if ("response" in result) return result.response;
   if (!result.session) return error("Sign-in required", 401);
   const userId = result.session.user.id;
-  const parsed = parseRightsDeclaration(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxRightsJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = parseRightsDeclaration(body.value);
   if ("error" in parsed) return error("Rights declaration is invalid", 400);
   try {
     const revisionRightsError = validateRightsAgainstRevision(result.revision, parsed.data);
