@@ -12,6 +12,7 @@
 | Revision | 불변 기록의 발행·비교·복원, 발행자와 출처 연결 |
 | Release | 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호 있는 판본으로 묶어 발행·조회. 수정·삭제·초안은 미지원 |
 | Discussion·Issue·Design request | 프로젝트의 대화와 댓글, 구체적인 작업 항목과 외부 기여 요청. Discussion에서 작업 항목을 만들고 출처 연결 |
+| Contributor Canvas | 공개 프로젝트에서 신청·프로젝트 소유자 승인·철회로 운영하는 디자이너별 독립 논의 공간. 이미지·메모의 공간 배치, 항목별 피드백, 출처·아카이브 이력 보존. 논의용 가변 자료이며 Revision 또는 Proposal 승인이 아님 |
 | Fork | 선택한 Revision에서 새 Project와 첫 Revision을 만들고 원본·라이선스·출처 보존 |
 | Proposal·Review·선택 적용 | 작성자 소유 프로젝트의 수정 Revision을 제안하고, 변경별로 리뷰·승인한 뒤 일부 또는 전체를 적용해 새 Revision 발행 |
 | 기여 출처 | 채택된 Proposal·작성자·Reviewer와 적용 Revision, 관련 Issue·Discussion의 연결. 비공개 정보는 가시성 규칙을 따름 |
@@ -45,7 +46,9 @@
 | `/stars` | 로그인 사용자가 Star한 공개 프로젝트 |
 | `/notifications` | 로그인 사용자의 개인 알림 |
 
-프로젝트의 `/projects/{slug}`는 작품·About·프로젝트 가이드와 기여 요약을 읽는 Overview입니다. Revisions·Releases·Discussions·Issues·Proposals·Contributors·Forks는 각각 `/projects/{slug}/{탭 이름의 소문자}` 경로를 가지며 직접 열기·새로고침·브라우저 뒤로 가기를 지원합니다. Revision 발행은 Revisions, 소유자의 프로젝트 설정은 `/projects/{slug}/settings`에서 처리합니다. 기존 section hash와 기여 복귀 query는 해당 경로로 이동하며 관련 Issue·대상 프로젝트·기준 Revision을 보존합니다.
+프로젝트의 `/projects/{slug}`는 작품·About·프로젝트 가이드와 기여 요약을 읽는 Overview입니다. `/projects/{slug}/canvases`와 `/projects/{slug}/canvases/{canvasId}`에서는 공개된 Contributor Canvas 목록·개별 작업 공간을 볼 수 있으며 공개 상태·승인 이력에 따른 접근 제한이 적용됩니다. Revisions·Releases·Discussions·Issues·Proposals·Contributors·Forks는 각각 `/projects/{slug}/{탭 이름의 소문자}` 경로를 가지며 직접 열기·새로고침·브라우저 뒤로 가기를 지원합니다. Revision 발행은 Revisions, 소유자의 프로젝트 설정은 `/projects/{slug}/settings`에서 처리합니다. 기존 section hash와 기여 복귀 query는 해당 경로로 이동하며 관련 Issue·대상 프로젝트·기준 Revision을 보존합니다.
+
+Canvas는 서로 다른 소유자의 동시 실시간 공동 편집이나 정식 디자인 변경의 자동 채택을 제공하지 않습니다. 내부 통합 점검은 [Canvas pre-RC 검증](canvas/04-pre-rc-integration.md)에서 구분합니다.
 
 Feed는 사람 활동이나 개인 추천을 제공하지 않습니다. Watch의 알림 대상은 Revision·Release 발행이며 Proposal 알림은 직접 당사자에게 전달됩니다.
 
