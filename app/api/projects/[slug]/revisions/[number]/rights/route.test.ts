@@ -74,6 +74,26 @@ describe("revision rights API", () => {
     expect(mocks.createDeclaration).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceRightsMode: "SAME_AS_REVISION", version: 1, items: { create: expect.arrayContaining([expect.objectContaining({ sourceFileId: "file-1", redistribution: "UNKNOWN" }), expect.objectContaining({ name: "Neue Haas Grotesk", derivativeUse: "RESTRICTED" })]) } }) }));
   });
 
+  it("accepts a schema-valid rights declaration above 1 MiB", async () => {
+    const longUrl = "https://example.com/" + "a".repeat(2000);
+    const items = Array.from({ length: 100 }, () => ({
+      type: "IMAGE",
+      name: "가".repeat(200),
+      rightsHolder: "나".repeat(200),
+      licenseName: "다".repeat(200),
+      licenseUrl: longUrl,
+      sourceUrl: longUrl,
+      redistribution: "UNKNOWN",
+      derivativeUse: "UNKNOWN",
+      notes: "라".repeat(2000),
+    }));
+    const body = { sourceRightsMode: "UNKNOWN", items };
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeGreaterThan(1024 * 1024);
+    const response = (await POST(request(body), params))!;
+    expect(response.status).toBe(201);
+    expect(mocks.createDeclaration).toHaveBeenCalledOnce();
+  });
+
   it("rejects same-as-revision when the revision has no recorded license before opening a transaction", async () => {
     mocks.findRevision.mockResolvedValue({ id: "revision", sourceKey: "bundle", isPublished: true, license: null });
     const response = (await POST(request({ sourceRightsMode: "SAME_AS_REVISION", items: [] }), params))!;

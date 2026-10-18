@@ -3,9 +3,9 @@ export const maxSmallJsonBytes = 64 * 1024;
 // every non-ASCII code unit as a backslash-u sequence. Leave room for the
 // other project fields.
 export const maxDocumentJsonBytes = 512 * 1024;
-export const maxRightsJsonBytes = 1024 * 1024;
+export const maxRightsJsonBytes = 4 * 1024 * 1024;
 export const maxImageFormBytes = 10 * 1024 * 1024 + 64 * 1024;
-export const maxRevisionFormBytes = 100 * 1024 * 1024 + 50 * 1024 * 1024 + 1024 * 1024;
+export const maxRevisionFormBytes = 100 * 1024 * 1024 + 50 * 1024 * 1024 + maxRightsJsonBytes + 1024 * 1024;
 
 async function readBoundedBytes(request: Request, maxBytes: number): Promise<Uint8Array | null> {
   const declaredLength = request.headers.get("content-length");
@@ -50,8 +50,9 @@ export async function readBoundedFormData(request: Request, maxBytes: number): P
   const contentType = request.headers.get("content-type");
   if (!contentType) return { tooLarge: false, form: null };
   try {
-    const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    const form = await new Request(request.url, { method: "POST", headers: { "content-type": contentType }, body }).formData();
+    // Hand the single bounded buffer to the parser. Do not slice/copy a body
+    // that may be near the advertised 150 MiB revision limit.
+    const form = await new Request(request.url, { method: "POST", headers: { "content-type": contentType }, body: bytes as unknown as BodyInit }).formData();
     return { tooLarge: false, form };
   } catch {
     return { tooLarge: false, form: null };
