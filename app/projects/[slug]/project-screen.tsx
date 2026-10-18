@@ -149,9 +149,9 @@ export default async function ProjectScreen({ params, searchParams, view = "over
           <ProjectAbout activityStatus={project.activityStatus} description={project.description} isOwner={session?.user.id === project.ownerId} license={project.license} slug={project.slug} title={project.title} />
           <section className={styles.overviewEntry} aria-labelledby="overview-next-step-heading">
             <p className={styles.eyebrow}>Next step</p>
-            <h2 id="overview-next-step-heading">${session?.user.id === project.ownerId ? "Manage this project" : "Take part in this project"}</h2>
+            <h2 id="overview-next-step-heading">{session?.user.id === project.ownerId ? "Manage this project" : "Take part in this project"}</h2>
             <p className={styles.overviewEntrySummary}>
-              ${session?.user.id === project.ownerId
+              {session?.user.id === project.ownerId
                 ? !project.isPublic ? "Only you can see this workspace. Review its settings before sharing."
                   : latestRevision ? "Publish changes or open a focused design request for contributors." : "Publish a first revision to give contributors a starting point."
                 : openDesignRequests.length ? "An open design request is ready for review."
@@ -169,7 +169,7 @@ export default async function ProjectScreen({ params, searchParams, view = "over
                 : <Link className={styles.secondaryLink} href={`/projects/${slug}/discussions`}>Explore project discussions</Link>}
             {project.isPublic && openDesignRequests.length > 0 && session?.user.id !== project.ownerId && <Link href={`/projects/${slug}/issues`}>Browse open issues and requests</Link>}
           </nav>
-            ${project.isPublic && session?.user.id !== project.ownerId && openDesignRequests[0] &&
+            {project.isPublic && session?.user.id !== project.ownerId && openDesignRequests[0] &&
               <p className={styles.overviewRequest}><span>Open request</span> <Link href={`/projects/${slug}/issues/${openDesignRequests[0].id}`}>{openDesignRequests[0].title}</Link></p>}
           </section>
           <dl className={styles.infoList}>
