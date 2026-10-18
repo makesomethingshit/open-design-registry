@@ -1,0 +1,45 @@
+# Moderation — pre-RC scope and restoration review (#136)
+
+**Status: internal operator acceptance plan, not completed acceptance.** The Project hide / shared-asset suppression split was implemented in #145. This document does not change that policy, restart the decision, or imply that production/legacy records have been manually inspected.
+
+## Fixed policy
+
+1. Project hide applies to the reported Project; another owner's Fork remains independently public even when it shares the same cover.
+2. Asset suppression affects delivery of the blocked asset key everywhere it is referenced, regardless of Project/Fork visibility. It does **not** set every referencing Project to private.
+3. Hide and suppress are two separate administrative actions. Restore visibility and release an asset block separately.
+4. Retain moderation actors, timestamps, reason and decision/restoration history. A deleted Report does not silently lift the decision.
+5. A Project that was private before the action, or that its owner made private later, must not be automatically published by restoration.
+6. Distinct active suppression decisions for the same key remain effective when just one is released.
+
+## Isolated operator walkthrough
+
+Use test accounts and synthetic images in an isolated PostgreSQL/MinIO instance; never exercise hide or asset-block operations against production users to complete this checklist. Preserve exact candidate SHA, migration status and operation timestamps.
+
+| Setup/action | Expected Project visibility | Expected asset delivery |
+| --- | --- | --- |
+| Public A and independently owned public Fork B share cover K; public C uses cover L | A, B and C initially public | K and L readable under existing ACL |
+| Admin hides reported A | A hidden; B/C still public | B's reference to K remains available unless K has a separate block |
+| Admin suppresses K | B/C remain in their previous visibility states | K inaccessible through all supported asset URL forms, L unaffected |
+| Admin restores A only | A public only if its original/owner-controlled public state permits; B/C unaffected | K stays suppressed |
+| Admin releases one of two active blocks on K | Project visibility unchanged | K stays blocked until the last active decision is released |
+| Admin releases the final active block on K | Project visibility unchanged | K becomes accessible only where normal Project/asset ACL permits |
+| Delete Report, reporter or relevant Project during an active decision | Retained decisions remain available to admin | Existing blocks remain active until explicit permitted restoration |
+| Start with a truly private Project or legacy review candidate | Private remains private after hold release | No delivery without ordinary access rights |
+
+## Interface and migration observations to record
+
+- In the admin report interface, distinguish **Hide Project** from **Suppress shared asset**, and record whether users can understand cross-Fork reach *before* confirming. Record actual affected Project/Fork count where the interface provides it; do not invent one.
+- Confirm separate restore controls and the retained-decisions view after report deletion, including the reason, actor and original target/key. Do not expose private keys or reporter identities in public screenshots.
+- Verify forbidden admin mutations are HTTP 403 and private assets remain inaccessible after changing legacy URL form or loading directly through the asset proxy.
+- Legacy rows created before the moderation-scope migration are **review candidates, not confirmed hides**. Compare retained candidates with backup/operational evidence, including changed/deleted covers and deleted reports, before any release or publication decision. Never bulk-publish candidates.
+- Verify migrations are applied in isolation and run [moderation PostgreSQL/MinIO browser regression](../e2e/moderation.integration.spec.ts) with the same exact SHA. A passing fixture alone does not prove operator UX or live legacy-data correctness.
+
+## Evidence template
+
+- SHA, test DB / storage, migration status: **Not recorded**
+- Synthetic A/B/K/L scenario and asset URL variants: **Not recorded**
+- Admin UI before/after evidence (sanitized): **Not recorded**
+- Restore/deleted-Report/legacy candidate audit results: **Not recorded**
+- P0/P1 findings, owners, proposed follow-up issue URLs: **Not recorded**
+
+Do not close #136 based solely on this runbook. Manual operator acceptance is an **internal readiness** action before `0.1.0-rc.1`; a consolidated external usability study belongs to the RC phase.
