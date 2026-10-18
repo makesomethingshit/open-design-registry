@@ -35,6 +35,14 @@ function patchRequest(body: unknown) {
   });
 }
 
+function patchRaw(body: string) {
+  return new Request("http://localhost/api/projects/demo", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+}
+
 function storedProject(overrides = {}) {
   return {
     id: "project",
@@ -72,6 +80,25 @@ describe("project document save and read permissions", () => {
       expect.objectContaining({ data: expect.objectContaining({ document: "# Hello" }) }),
     );
     expect(await response.json()).toMatchObject({ document: "# Hello", description: "Short" });
+  });
+
+  it("accepts a 50,000-character UTF-8 document", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    const document = "한".repeat(50_000);
+    const response = await PATCH(patchRequest({ document }), { params: Promise.resolve(params) });
+    expect(response.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ document }) }));
+  });
+
+  it("accepts a 50,000-character document escaped as backslash-u sequences", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "owner" } });
+    const body = '{"document":"' + "\\ud55c".repeat(50_000) + '"}';
+    expect(body.length).toBeGreaterThan(256 * 1024);
+    const response = await PATCH(patchRaw(body), { params: Promise.resolve(params) });
+    expect(response.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ document: "한".repeat(50_000) }),
+    }));
   });
 
   it("rejects unauthenticated saves", async () => {

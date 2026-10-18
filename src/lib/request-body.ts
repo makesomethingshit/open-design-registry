@@ -1,5 +1,8 @@
 export const maxSmallJsonBytes = 64 * 1024;
-export const maxDocumentJsonBytes = 256 * 1024;
+// A 50,000-code-unit document can expand to about 300 KB when JSON escapes
+// every non-ASCII code unit as a backslash-u sequence. Leave room for the
+// other project fields.
+export const maxDocumentJsonBytes = 512 * 1024;
 export const maxRightsJsonBytes = 1024 * 1024;
 export const maxImageFormBytes = 10 * 1024 * 1024 + 64 * 1024;
 export const maxRevisionFormBytes = 100 * 1024 * 1024 + 50 * 1024 * 1024 + 1024 * 1024;
