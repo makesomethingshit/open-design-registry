@@ -385,6 +385,25 @@ describe("Project Discussions section", () => {
 });
 
 describe("Project Overview next actions", () => {
+  it("places a role-aware next step ahead of metadata with a bounded request deep link", async () => {
+    const value = project();
+    value.revisions = [revision(10)];
+    value.issues.push({ ...value.issues[0], id: "request-1", title: "Improve navigation", kind: "DESIGN_REQUEST" });
+    const visitor = await renderProjectPage(null, value);
+    expect(visitor).toContain('id="overview-next-step-heading"');
+    expect(visitor).toContain("Take part in this project");
+    expect(visitor).toContain('href="/projects/demo/issues/request-1"');
+    expect(visitor.indexOf('id="overview-next-step-heading"')).toBeLessThan(visitor.indexOf("<dt>License</dt>"));
+    const owner = await renderProjectPage({ user: { id: "owner" } }, value);
+    expect(owner).toContain("Manage this project");
+    expect(owner).not.toContain("Open request</span>");
+    const privateValue = project();
+    privateValue.isPublic = false;
+    const privateOwner = await renderProjectPage({ user: { id: "owner" } }, privateValue);
+    expect(privateOwner).toContain("Only you can see this workspace");
+    expect(privateOwner).not.toContain("Take part in this project");
+  });
+
   it("opens revision publishing only for the owner's explicit publishing route", async () => {
     const opened = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions", { publish: "1" });
     expect(opened).toMatch(/<details[^>]*id="owner-tools"[^>]*open=""/);
