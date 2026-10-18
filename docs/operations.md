@@ -119,7 +119,7 @@ node --env-file=.env scripts/run-playwright.mjs
 
 ### GitHub Actions 실행 전 실패 분석 (#144)
 
-Runner/step 실행 전 실패는 앱 코드와 구별하여 조사합니다. 동일 SHA의 실패와 성공을 비교할 때 runner 할당, job steps, 실제 UI 오류, event 및 사용량/정책 상태를 근거로 분류하고, 실패 원인이 확인되기 전에는 권한 확대·무작위 재시도·필수 체크 삭제를 하지 않습니다. [읽기 전용 진단 절차](ci-prestep-triage.md)에 실행 링크와 관찰을 기록합니다.
+기록된 2026-10-10 CI·라벨 sync 실패는 check-run annotation에서 계정 결제/지출 한도로 job 시작이 차단됐음을 확인했습니다. 결제 실패와 한도 부족 중 세부 사유 및 실제 복구 조치는 미확인입니다. Runner/step 실행 전 실패는 앱 코드와 구별하여 조사합니다. 동일 SHA의 실패와 성공을 비교할 때 runner 할당, job steps, 실제 UI 오류, event 및 사용량/정책 상태를 근거로 분류하고, 실패 원인이 확인되기 전에는 권한 확대·무작위 재시도·필수 체크 삭제를 하지 않습니다. [읽기 전용 진단 절차](ci-prestep-triage.md)에 실행 링크와 관찰을 기록합니다.
 
 ### CI 구성과 확인할 범위
 
