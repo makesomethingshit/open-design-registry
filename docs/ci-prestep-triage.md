@@ -14,19 +14,23 @@ Known starting references from #144:
 
 ## Read-only evidence capture
 
-Use an account authorized to read repository Actions data. `gh api` commands below do not mutate workflow state or trigger jobs.
+Use an account authorized to read repository Actions data. Run the complete block in **Bash**, not plain `sh` or PowerShell. `gh api` commands below do not mutate workflow state or trigger jobs. Authentication, permission, API and pagination errors must stop collection with a nonzero exit status.
 
-```sh
+```bash
+set -euo pipefail
+trap 'echo "Evidence capture failed; collection is incomplete." >&2' ERR
 REPO=makesomethingshit/open-design-registry
 for RUN in 38056129553 38056395434 38056038221 39009753122; do
   gh api "repos/$REPO/actions/runs/$RUN" --jq '{id,event,head_sha,status,conclusion,run_started_at,created_at,updated_at,html_url}'
   gh api --paginate "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" --jq '.jobs[] | {id,name,status,conclusion,runner_id,runner_name,started_at,completed_at,steps:[.steps[]? | {name,status,conclusion}]}'
   gh api --paginate "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" --jq '.jobs[] | select(.conclusion == "failure") | .check_run_url' |
   while IFS= read -r CHECK_URL; do
-    gh api --paginate "${CHECK_URL#https://api.github.com/}/annotations?per_page=100" --jq '.[] | {annotation_level,message}'
+    gh api --paginate "${CHECK_URL#https://api.github.com/}/annotations?per_page=100" --jq '{annotation_count: length, annotations: map({annotation_level,message})}'
   done
 done
 ```
+
+Successful annotation retrieval prints `annotation_count` and the records for each page; `annotation_count: 0` is a successful empty result, not an API failure or evidence of a particular root cause. A failed job-list or annotation request exits nonzero (including a failed later page); mark the collection incomplete even if earlier records were printed. Do not interpret the absence of annotations after a failed lookup as zero annotations.
 
 For each failed job, record the GitHub UI banner, exact job/run URL, event type, checkout SHA (if a runner actually started), `runner_id`, number of reported steps, the first actionable error message and any available quota/billing/permissions hint. If logs are unavailable (for example an object-store `BlobNotFound`), record that absence separately rather than inferring the cause.
 
