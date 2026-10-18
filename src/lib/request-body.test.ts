@@ -26,4 +26,20 @@ describe("bounded request bodies", () => {
     expect(result.tooLarge).toBe(false);
     expect(result.form?.get("title")).toBe("Example");
   });
+
+  it("rejects streamed multipart data above the limit", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(100));
+        controller.close();
+      }
+    });
+    const request = new Request("http://localhost/api/test", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=x" },
+      body: stream,
+      duplex: "half"
+    } as RequestInit);
+    expect(await readBoundedFormData(request, 64)).toEqual({ tooLarge: true, form: null });
+  });
 });

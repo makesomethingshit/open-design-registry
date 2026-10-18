@@ -8,7 +8,7 @@ import { deleteObject, publicAssetUrl } from "./storage";
 import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameDependencySet, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 import { changedUnitIds, conflictForChange, renamedUnitIds } from "./proposal-conflicts";
 import { notifyProjectWatchers } from "./project-watch-notifications";
-import { maxSmallJsonBytes, readBoundedJson } from "./request-body";
+import { maxProposalJsonBytes, maxSmallJsonBytes, readBoundedJson } from "./request-body";
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
@@ -347,7 +347,7 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   if (!session) return error("Sign-in required", 401);
   const project = await prisma.project.findUnique({ where: { slug: scope.slug }, select: { id: true, ownerId: true, isPublic: true } });
   if (!project || !canReadProject(project, session.user.id)) return error("Project not found", 404);
-  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  const body = await readBoundedJson(request, maxProposalJsonBytes);
   if (body.tooLarge) return error("Request body is too large", 413);
   const parsed = proposalCreateSchema.safeParse(body.value);
   if (!parsed.success) return error("Proposal title, description, or revisions are invalid");
