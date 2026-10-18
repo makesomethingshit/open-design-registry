@@ -12,7 +12,7 @@
 | Revision | 불변 기록의 발행·비교·복원, 발행자와 출처 연결 |
 | Release | 소유자가 같은 프로젝트의 발행된 Revision 1–50개를 번호 있는 판본으로 묶어 발행·조회. 수정·삭제·초안은 미지원 |
 | Discussion·Issue·Design request | 프로젝트의 대화와 댓글, 구체적인 작업 항목과 외부 기여 요청. Discussion에서 작업 항목을 만들고 출처 연결 |
-| Contributor Canvas | 공개 프로젝트에서 신청·관리자 승인·철회로 운영하는 디자이너별 독립 논의 공간. 이미지·메모의 공간 배치, 항목별 피드백, 출처·아카이브 이력 보존. 논의용 가변 자료이며 Revision 또는 Proposal 승인이 아님 |
+| Contributor Canvas | 공개 프로젝트에서 신청·프로젝트 소유자 승인·철회로 운영하는 디자이너별 독립 논의 공간. 이미지·메모의 공간 배치, 항목별 피드백, 출처·아카이브 이력 보존. 논의용 가변 자료이며 Revision 또는 Proposal 승인이 아님 |
 | Fork | 선택한 Revision에서 새 Project와 첫 Revision을 만들고 원본·라이선스·출처 보존 |
 | Proposal·Review·선택 적용 | 작성자 소유 프로젝트의 수정 Revision을 제안하고, 변경별로 리뷰·승인한 뒤 일부 또는 전체를 적용해 새 Revision 발행 |
 | 기여 출처 | 채택된 Proposal·작성자·Reviewer와 적용 Revision, 관련 Issue·Discussion의 연결. 비공개 정보는 가시성 규칙을 따름 |
