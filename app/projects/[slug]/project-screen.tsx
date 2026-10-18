@@ -147,11 +147,16 @@ export default async function ProjectScreen({ params, searchParams, view = "over
         </figure>
         <aside aria-label="Project information" className={styles.infoRail}>
           <ProjectAbout activityStatus={project.activityStatus} description={project.description} isOwner={session?.user.id === project.ownerId} license={project.license} slug={project.slug} title={project.title} />
-          <dl className={styles.infoList}>
-            <div><dt>License</dt><dd>{project.license}</dd></div>
-            <div><dt>Owner</dt><dd>{project.owner.name}</dd></div>
-            <div><dt>Contributions</dt><dd>{latestRevision ? <>Open from <Link href={`/projects/${project.slug}/revisions/${latestRevision.number}`}>Revision {latestRevision.number}</Link></> : "Publish a revision to open contributions."}</dd></div>
-          </dl>
+          <section className={styles.overviewEntry} aria-labelledby="overview-next-step-heading">
+            <p className={styles.eyebrow}>Next step</p>
+            <h2 id="overview-next-step-heading">${session?.user.id === project.ownerId ? "Manage this project" : "Take part in this project"}</h2>
+            <p className={styles.overviewEntrySummary}>
+              ${session?.user.id === project.ownerId
+                ? !project.isPublic ? "Only you can see this workspace. Review its settings before sharing."
+                  : latestRevision ? "Publish changes or open a focused design request for contributors." : "Publish a first revision to give contributors a starting point."
+                : openDesignRequests.length ? "An open design request is ready for review."
+                  : latestRevision ? "Start from the latest published revision or join the discussion." : "Explore the discussion while the first revision is being prepared."}
+            </p>
           <nav aria-label="Project next steps" className={styles.overviewNextActions}>
             {session?.user.id === project.ownerId
               ? !project.isPublic
@@ -164,6 +169,14 @@ export default async function ProjectScreen({ params, searchParams, view = "over
                 : <Link className={styles.secondaryLink} href={`/projects/${slug}/discussions`}>Explore project discussions</Link>}
             {project.isPublic && openDesignRequests.length > 0 && session?.user.id !== project.ownerId && <Link href={`/projects/${slug}/issues`}>Browse open issues and requests</Link>}
           </nav>
+            ${project.isPublic && session?.user.id !== project.ownerId && openDesignRequests[0] &&
+              <p className={styles.overviewRequest}><span>Open request</span> <Link href={`/projects/${slug}/issues/${openDesignRequests[0].id}`}>{openDesignRequests[0].title}</Link></p>}
+          </section>
+          <dl className={styles.infoList}>
+            <div><dt>License</dt><dd>{project.license}</dd></div>
+            <div><dt>Owner</dt><dd>{project.owner.name}</dd></div>
+            <div><dt>Contributions</dt><dd>{latestRevision ? <>Open from <Link href={`/projects/${project.slug}/revisions/${latestRevision.number}`}>Revision {latestRevision.number}</Link></> : "Publish a revision to open contributions."}</dd></div>
+          </dl>
           <dl className={styles.metrics}>
             <div><dt>Contributors</dt><dd>{contributors}</dd></div>
             <div><dt>Revisions</dt><dd>{revisionCount}</dd></div>
