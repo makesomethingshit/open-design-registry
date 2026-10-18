@@ -49,6 +49,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           EXPECTED_FILES: ${{ github.event.pull_request.changed_files }}
         shell: bash
         run: |
@@ -62,11 +63,22 @@ jobs:
           gh api --paginate --slurp \
             "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
             > "$RUNNER_TEMP/pr-files.json"
-          node scripts/ci-pr-check.mjs \
+          trusted="$RUNNER_TEMP/ci-pr-check.mjs"
+          if ! gh api \
+            "repos/$REPOSITORY/contents/scripts/ci-pr-check.mjs?ref=$BASE_SHA" \
+            -H "Accept: application/vnd.github.raw" \
+            > "$trusted"; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "docs_changed=false" >> "$GITHUB_OUTPUT"
+            echo "Trusted classifier is unavailable in the base revision; full CI is required." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node "$trusted" \
             --pages "$RUNNER_TEMP/pr-files.json" \
             --expected "$EXPECTED_FILES" \
             --github-output "$GITHUB_OUTPUT" \
-            --summary "$GITHUB_STEP_SUMMARY"
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --root "$GITHUB_WORKSPACE"
 
   secrets:
     runs-on: ubuntu-latest

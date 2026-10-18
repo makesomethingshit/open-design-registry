@@ -6,7 +6,9 @@ import { checkDocs, flattenPages, isDocsPath } from "./ci-pr-check.mjs";
 
 const root = mkdtempSync(join(tmpdir(), "odr-ci-docs-"));
 mkdirSync(join(root, "docs"), { recursive: true });
+mkdirSync(join(root, "app", "(internal)", "design-system"), { recursive: true });
 writeFileSync(join(root, "docs", "b.md"), "# B\n");
+writeFileSync(join(root, "app", "(internal)", "design-system", "page.tsx"), "export {};\n");
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -37,7 +39,7 @@ describe("flattenPages", () => {
 });
 
 describe("checkDocs", () => {
-  it("ignores external, root-absolute, anchor and inline-code links", () => {
+  it("accepts parentheses, container fences and non-relative links", () => {
     writeFileSync(
       join(root, "docs", "valid.md"),
       [
@@ -45,11 +47,20 @@ describe("checkDocs", () => {
         "[anchor](#section)",
         "[external](https://example.com/x)",
         "[root](/README.md)",
+        "[catalog](../app/(internal)/design-system/page.tsx)",
         "`[inline](missing.md)`",
         "",
         "```md",
         "[fenced](missing.md)",
         "```",
+        "",
+        "> ```md",
+        "> [quoted](missing.md)",
+        "> ```",
+        "",
+        "- ```md",
+        "  [listed](missing.md)",
+        "  ```",
       ].join("\n"),
     );
     expect(checkDocs(["docs/valid.md"], root)).toEqual({ checked: ["docs/valid.md"], errors: [] });

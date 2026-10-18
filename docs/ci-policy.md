@@ -44,7 +44,7 @@ Strict를 해제해도 각 PR HEAD의 필수 체크는 그대로 필요합니다
 
 Skip은 workflow 전체 `paths`가 아니라 job 단위 `if`로 처리합니다. 문서 전용 PR의 `changes` job summary에 `SKIPPED: docs-only`와 건너뛴 job을 기록합니다. 필수 job 이름은 그대로 유지합니다.
 
-문서 전용 PR에서는 변경된 Markdown의 상대 링크와 코드 펜스 균형을 `scripts/ci-pr-check.mjs`로 확인합니다. 문서와 코드가 섞인 PR도 변경된 문서를 같은 방식으로 확인한 뒤 전체 CI를 실행합니다.
+문서 전용 PR에서는 변경된 Markdown의 상대 링크와 코드 펜스 균형을 `scripts/ci-pr-check.mjs`로 확인합니다. 분류 스크립트는 PR 체크아웃의 사본이 아니라 PR base SHA의 신뢰된 사본을 API로 읽어 실행하고, PR 체크아웃은 `--root`로만 읽습니다. base에 스크립트가 없거나 읽을 수 없으면 전체 CI를 실행합니다. 문서와 코드가 섞인 PR도 변경된 문서를 같은 방식으로 확인한 뒤 전체 CI를 실행합니다.
 
 ## Actions 승인과 권한
 

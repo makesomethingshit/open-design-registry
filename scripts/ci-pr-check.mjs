@@ -49,7 +49,11 @@ function checkMarkdown(file, source, root) {
 
   lines.forEach((line, index) => {
     const number = index + 1;
-    const marker = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
+    // Container prefixes are part of Markdown structure, not part of the fence.
+    const content = line
+      .replace(/^(?:\s*>\s*)+/, "")
+      .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "");
+    const marker = content.match(/^(`{3,}|~{3,})(.*)$/);
     if (marker) {
       if (!fence) {
         fence = { char: marker[1][0], length: marker[1].length, line: number };
@@ -66,9 +70,8 @@ function checkMarkdown(file, source, root) {
 
     // Fenced examples and inline code are not link targets.
     const prose = line.replace(/`+[^`\n]*`+/g, "");
-    const link = /!?\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/g;
-    for (const match of prose.matchAll(link)) {
-      let target = match[1].trim();
+    for (const rawTarget of linkTargets(prose)) {
+      let target = rawTarget.trim().replace(/\\([()])/g, "$1");
       if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
       if (
         target === "" ||
@@ -100,6 +103,51 @@ function checkMarkdown(file, source, root) {
 
   if (fence) errors.push(`${file}:${fence.line}: unclosed code fence`);
   return errors;
+}
+
+function linkTargets(line) {
+  const targets = [];
+  let cursor = 0;
+  while (cursor < line.length) {
+    const open = line.indexOf("](", cursor);
+    if (open === -1) break;
+    let i = open + 2;
+    while (line[i] === " " || line[i] === "\t") i += 1;
+    if (line[i] === "<") {
+      const end = line.indexOf(">", i + 1);
+      if (end === -1) break;
+      targets.push(line.slice(i + 1, end));
+      cursor = end + 1;
+      continue;
+    }
+    const start = i;
+    let depth = 0;
+    let escaped = false;
+    for (; i < line.length; i += 1) {
+      const char = line[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === "(") {
+        depth += 1;
+        continue;
+      }
+      if (char === ")") {
+        if (depth === 0) break;
+        depth -= 1;
+        continue;
+      }
+      if (/\s/.test(char) && depth === 0) break;
+    }
+    targets.push(line.slice(start, i));
+    cursor = i + 1;
+  }
+  return targets;
 }
 
 export function checkDocs(files, root = repoRoot) {
@@ -139,6 +187,7 @@ function main() {
   const expected = Number(arg("--expected"));
   const outputPath = arg("--github-output");
   const summaryPath = arg("--summary");
+  const root = resolve(arg("--root") || repoRoot);
   if (!pagesPath || outputPath === undefined || !Number.isFinite(expected)) {
     console.error("usage: ci-pr-check.mjs --pages <json> --expected <count> --github-output <file> [--summary <file>]");
     process.exit(2);
@@ -155,7 +204,7 @@ function main() {
 
   const docsChanged = files.some(isDocsPath);
   let docsOnly = files.every(isDocsPath);
-  const docs = checkDocs(files);
+  const docs = checkDocs(files, root);
 
   console.log(`Changed files (${files.length}):`);
   for (const file of files.slice(0, 100)) console.log(`- ${file}`);
