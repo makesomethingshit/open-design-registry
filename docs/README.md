@@ -9,6 +9,7 @@
 | 문서 | 다루는 내용 |
 | --- | --- |
 | [현재 기능과 제품 경계](current-capabilities.md) | 구현된 기능, 공개 탐색과 개인 작업 공간, 지원하지 않는 범위 |
+| [Canvas 내부 통합 검증](canvas/04-pre-rc-integration.md) | 승인형 Canvas의 구현 범위, 두 계정·자산·권한 검증 및 RC 이후 사용성 평가 구분 |
 | [Proposal 협업 가이드](proposals.md) | 기여 준비·리뷰·선택 적용, 상태·충돌·승인 해제와 알림 |
 | [제품 방향](product-direction.md) | 프로젝트 중심 협업과 발견에 관한 제품 원칙 |
 | [로드맵](../ROADMAP.md) | 남은 개선 과제와 장기 검토 항목 |
