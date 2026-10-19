@@ -10,6 +10,17 @@ export function isDocsPath(file) {
   return /^docs\/.+\.md$/.test(file) || file === "README.md" || file === "ROADMAP.md";
 }
 
+export function classifyFiles(entries) {
+  const touched = new Set();
+  for (const entry of entries) {
+    touched.add(entry.filename);
+    if (entry.previous) touched.add(entry.previous);
+  }
+  return {
+    docsOnly: [...touched].every(isDocsPath),
+  };
+}
+
 export function flattenPages(pages, expected) {
   if (!Number.isInteger(expected) || expected < 1) {
     throw new Error(`invalid changed_files count: ${expected}`);
@@ -21,7 +32,7 @@ export function flattenPages(pages, expected) {
   if (!Array.isArray(pages) || pages.length === 0) {
     throw new Error("PR files API returned no pages");
   }
-  const files = [];
+  const entries = [];
   pages.forEach((page, index) => {
     if (!Array.isArray(page)) {
       throw new Error(`page ${index + 1} is not a JSON array`);
@@ -30,22 +41,27 @@ export function flattenPages(pages, expected) {
       if (!entry || typeof entry.filename !== "string" || entry.filename.length === 0) {
         throw new Error(`page ${index + 1} contains a file without a filename`);
       }
-      files.push(entry.filename);
+      entries.push({
+        filename: entry.filename,
+        previous:
+          typeof entry.previous_filename === "string" ? entry.previous_filename : null,
+      });
     }
   });
-  if (new Set(files).size !== files.length) {
+  if (new Set(entries.map((entry) => entry.filename)).size !== entries.length) {
     throw new Error("PR files API returned duplicate filenames");
   }
-  if (files.length !== expected) {
-    throw new Error(`expected ${expected} changed files but the API returned ${files.length}`);
+  if (entries.length !== expected) {
+    throw new Error(`expected ${expected} changed files but the API returned ${entries.length}`);
   }
-  return files;
+  return entries;
 }
 
 function checkMarkdown(file, source, root) {
   const errors = [];
   const lines = source.split(/\r?\n/);
   let fence = null;
+  let inComment = false;
 
   lines.forEach((line, index) => {
     const number = index + 1;
@@ -69,9 +85,36 @@ function checkMarkdown(file, source, root) {
     // shortcut: 4+ space indented lines are code, so deeply indented list links are not checked.
     if (/^(?: {4,}|\t)/.test(line.replace(/^(?:\s{0,3}>\s?)+/, ""))) return;
 
+    let visible = line;
+    if (inComment) {
+      const end = visible.indexOf("-->");
+      if (end === -1) return;
+      visible = visible.slice(end + 3);
+      inComment = false;
+    }
+    while (true) {
+      const start = visible.indexOf("<!--");
+      if (start === -1) break;
+      const end = visible.indexOf("-->", start + 4);
+      if (end === -1) {
+        visible = visible.slice(0, start);
+        inComment = true;
+        break;
+      }
+      visible = visible.slice(0, start) + visible.slice(end + 3);
+    }
+
     // Fenced examples and inline code are not link targets.
-    const prose = line.replace(/`+[^`\n]*`+/g, "");
-    for (const target of linkTargets(prose)) checkTarget(target, file, number, root, errors);
+    const prose = stripInlineCode(visible);
+    const next = lines[index + 1] || "";
+    const trimmed = visible.trimEnd();
+    const inline =
+      trimmed.endsWith("](") || (trimmed.endsWith("]") && next.trimStart().startsWith("("))
+        ? `${visible}${next}`
+        : visible;
+    for (const target of linkTargets(stripInlineCode(inline))) {
+      checkTarget(target, file, number, root, errors);
+    }
     const definition = line
       .replace(/^(?:\s{0,3}>\s?)+/, "")
       .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "")
@@ -149,6 +192,42 @@ function fenceInfo(line, allowIndent) {
   };
 }
 
+function stripInlineCode(line) {
+  let out = "";
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] !== "`") {
+      out += line[i];
+      i += 1;
+      continue;
+    }
+    let n = 1;
+    while (line[i + n] === "`") n += 1;
+    let j = i + n;
+    let closed = -1;
+    while (j < line.length) {
+      if (line[j] === "`") {
+        let m = 1;
+        while (line[j + m] === "`") m += 1;
+        if (m === n) {
+          closed = j + m;
+          break;
+        }
+        j += m;
+      } else {
+        j += 1;
+      }
+    }
+    if (closed === -1) {
+      out += line.slice(i, i + n);
+      i += n;
+    } else {
+      i = closed;
+    }
+  }
+  return out;
+}
+
 function linkTargets(line) {
   const targets = [];
   let cursor = 0;
@@ -222,7 +301,7 @@ function writeSummary(path, text) {
 }
 
 function fullCi(reason, outputPath, summaryPath) {
-  writeOutput(outputPath, { docs_only: "false", docs_changed: "false" });
+  writeOutput(outputPath, { docs_only: "false" });
   writeSummary(summaryPath, `### Full CI\n\n${reason}\n`);
 }
 
@@ -237,17 +316,18 @@ function main() {
     process.exit(2);
   }
 
-  let files;
+  let entries;
   try {
-    files = flattenPages(JSON.parse(readFileSync(pagesPath, "utf8")), expected);
+    entries = flattenPages(JSON.parse(readFileSync(pagesPath, "utf8")), expected);
   } catch (error) {
     fullCi(`Changed-file lookup is incomplete: ${error.message}. Run the full CI jobs.`, outputPath, summaryPath);
     console.error(`::error::${error.message}`);
     process.exit(1);
   }
 
-  const docsChanged = files.some(isDocsPath);
-  let docsOnly = files.every(isDocsPath);
+  const files = entries.map((entry) => entry.filename);
+  const { docsOnly: classifiedDocsOnly } = classifyFiles(entries);
+  let docsOnly = classifiedDocsOnly;
   const docs = checkDocs(files, root);
 
   console.log(`Changed files (${files.length}):`);
@@ -257,7 +337,7 @@ function main() {
   // A failed docs check must not leave a docs-only skip in place.
   if (docs.errors.length > 0) docsOnly = false;
 
-  writeOutput(outputPath, { docs_only: String(docsOnly), docs_changed: String(docsChanged) });
+  writeOutput(outputPath, { docs_only: String(docsOnly) });
 
   let summary = `### Changed files (${files.length})\n\n`;
   summary += files.slice(0, 100).map((file) => `- \`${file}\``).join("\n");

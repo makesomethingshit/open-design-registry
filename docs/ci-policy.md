@@ -26,7 +26,7 @@ Strict를 해제해도 각 PR HEAD의 필수 체크는 그대로 필요합니다
 - `README.md`
 - `ROADMAP.md`
 
-다음 중 하나라도 있으면 전체 CI입니다: 애플리케이션 소스, API, 테스트, Prisma, `package.json`, `package-lock.json`, `.github/workflows/**`, 배포·빌드·설정 파일, 문서 외 파일이 포함된 혼합 PR.
+다음 중 하나라도 있으면 전체 CI입니다: 애플리케이션 소스, API, 테스트, Prisma, `package.json`, `package-lock.json`, `.github/workflows/**`, 배포·빌드·설정 파일, 문서 외 파일이 포함된 혼합 PR. rename의 이전 경로도 변경 파일로 취급합니다.
 
 분류는 PR 제목, 작성자 설명, 커밋 메시지를 사용하지 않습니다. API 페이지 수와 `changed_files`가 다르거나, 중복 파일이 있거나, `changed_files`가 GitHub의 3000개 상한에 닿으면 문서 전용으로 판정하지 않습니다. 분류·조회·문서 검증이 실패하면 `docs_only=false`로 전체 job을 실행하고, 필수 `pr-title` job도 실패해 병합을 막습니다. `changes`를 새 필수 컨텍스트로 추가하지 않아도 이 경로가 fail-closed로 동작합니다.
 

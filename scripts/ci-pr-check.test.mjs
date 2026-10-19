@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { checkDocs, flattenPages, isDocsPath } from "./ci-pr-check.mjs";
+import { checkDocs, classifyFiles, flattenPages, isDocsPath } from "./ci-pr-check.mjs";
 
 const root = mkdtempSync(join(tmpdir(), "odr-ci-docs-"));
 mkdirSync(join(root, "docs"), { recursive: true });
@@ -28,13 +28,28 @@ describe("isDocsPath", () => {
 describe("flattenPages", () => {
   it("flattens every page and rejects an incomplete lookup", () => {
     const pages = [[{ filename: "docs/a.md" }], [{ filename: "README.md" }]];
-    expect(flattenPages(pages, 2)).toEqual(["docs/a.md", "README.md"]);
+    expect(flattenPages(pages, 2)).toEqual([
+      { filename: "docs/a.md", previous: null },
+      { filename: "README.md", previous: null },
+    ]);
     expect(() => flattenPages(pages, 3)).toThrow(/expected 3 changed files/);
     expect(() => flattenPages([], 1)).toThrow(/no pages/);
     expect(() => flattenPages([[{ filename: "docs/a.md" }, { filename: "docs/a.md" }]], 2)).toThrow(
       /duplicate/,
     );
     expect(() => flattenPages([[{ filename: "docs/a.md" }]], 3000)).toThrow(/truncated/);
+  });
+
+  it("classifies both sides of a rename", () => {
+    expect(flattenPages([[{ filename: "docs/a.md", previous_filename: "app/a.ts" }]], 1)).toEqual([
+      { filename: "docs/a.md", previous: "app/a.ts" },
+    ]);
+    expect(classifyFiles([{ filename: "docs/a.md", previous: "app/a.ts" }])).toEqual({
+      docsOnly: false,
+    });
+    expect(classifyFiles([{ filename: "docs/a.md", previous: "docs/b.md" }])).toEqual({
+      docsOnly: true,
+    });
   });
 });
 
@@ -49,6 +64,11 @@ describe("checkDocs", () => {
         "[root](/README.md)",
         "[catalog](../app/(internal)/design-system/page.tsx)",
         "`[inline](missing.md)`",
+        "``[inline tick](missing.md) ` ``",
+        "[multi](",
+        "b.md)",
+        "<!-- [hidden](missing.md)",
+        "[still hidden](missing.md) -->",
         "",
         "```md",
         "[fenced](missing.md)",
@@ -80,10 +100,11 @@ describe("checkDocs", () => {
   it("reports missing targets, escaping links and unclosed fences", () => {
     writeFileSync(
       join(root, "docs", "broken.md"),
-      "[missing](nope.md)\n[outside](../../outside.md)\n\n```md\n[x](b.md)\n",
+      "[missing](nope.md)\n[outside](../../outside.md)\n[multi](\nmissing.md)\n\n```md\n[x](b.md)\n",
     );
     const { errors } = checkDocs(["docs/broken.md"], root);
     expect(errors.some((error) => error.includes("missing relative link target"))).toBe(true);
+    expect(errors.some((error) => error.includes("missing.md"))).toBe(true);
     expect(errors.some((error) => error.includes("escapes the repository"))).toBe(true);
     expect(errors.some((error) => error.includes("unclosed code fence"))).toBe(true);
   });
