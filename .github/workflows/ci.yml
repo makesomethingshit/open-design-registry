@@ -109,7 +109,7 @@ jobs:
 
   pr-title:
     needs: changes
-    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    if: ${{ always() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - name: Require successful change classification

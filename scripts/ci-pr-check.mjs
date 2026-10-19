@@ -60,16 +60,16 @@ export function flattenPages(pages, expected) {
 function checkMarkdown(file, source, root) {
   const errors = [];
   const lines = source.split(/\r?\n/);
+  const stripInline = createInlineStripper();
   let fence = null;
-  let inComment = false;
+  const comment = { open: false };
 
   lines.forEach((line, index) => {
     const number = index + 1;
-    const marker = fenceInfo(line, fence && fence.container ? fence.contentIndent + 3 : 3);
-    if (marker) {
-      if (!fence) {
-        fence = { ...marker, line: number };
-      } else if (
+    if (fence) {
+      const marker = fenceInfo(line, fence.container ? fence.contentIndent + 3 : 3);
+      if (
+        marker &&
         marker.char === fence.char &&
         marker.length >= fence.length &&
         marker.info === "" &&
@@ -80,46 +80,35 @@ function checkMarkdown(file, source, root) {
       }
       return;
     }
-    if (fence) return;
+
+    const visible = stripHtmlComments(line, comment);
+    const marker = fenceInfo(visible, 3);
+    if (marker) {
+      fence = { ...marker, line: number };
+      return;
+    }
 
     // shortcut: 4+ space indented lines are code, so deeply indented list links are not checked.
-    if (/^(?: {4,}|\t)/.test(line.replace(/^(?:\s{0,3}>\s?)+/, ""))) return;
-
-    let visible = line;
-    if (inComment) {
-      const end = visible.indexOf("-->");
-      if (end === -1) return;
-      visible = visible.slice(end + 3);
-      inComment = false;
-    }
-    while (true) {
-      const start = visible.indexOf("<!--");
-      if (start === -1) break;
-      const end = visible.indexOf("-->", start + 4);
-      if (end === -1) {
-        visible = visible.slice(0, start);
-        inComment = true;
-        break;
-      }
-      visible = visible.slice(0, start) + visible.slice(end + 3);
-    }
+    if (/^(?: {4,}|\t)/.test(visible.replace(/^(?:\s{0,3}>\s?)+/, ""))) return;
 
     // Fenced examples and inline code are not link targets.
-    const prose = stripInlineCode(visible);
+    const prose = stripInline(visible);
     const next = lines[index + 1] || "";
-    const trimmed = visible.trimEnd();
-    const inline =
-      trimmed.endsWith("](") || (trimmed.endsWith("]") && next.trimStart().startsWith("("))
-        ? `${visible}${next}`
-        : visible;
-    for (const target of linkTargets(stripInlineCode(inline))) {
+    const inline = prose.trimEnd().endsWith("](") ? `${prose}${next}` : prose;
+    const inlineProse = inline === prose ? prose : createInlineStripper()(inline);
+    for (const target of linkTargets(inlineProse)) {
       checkTarget(target, file, number, root, errors);
     }
-    const definition = line
+
+    const definitionLine = visible
       .replace(/^(?:\s{0,3}>\s?)+/, "")
-      .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "")
-      .match(/^\s{0,3}\[[^\]]+\]:\s*(<[^>]*>|\S+)/);
-    if (definition) checkTarget(definition[1], file, number, root, errors);
+      .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "");
+    const definition = definitionLine.match(/^\s{0,3}\[[^\]]+\]:\s*(.*)$/);
+    if (definition) {
+      const rest = definition[1].trim();
+      const target = rest ? rest.split(/\s+/)[0] : next.trim().split(/\s+/)[0];
+      if (target) checkTarget(target, file, number, root, errors);
+    }
   });
 
   if (fence) errors.push(`${file}:${fence.line}: unclosed code fence`);
@@ -127,7 +116,7 @@ function checkMarkdown(file, source, root) {
 }
 
 function checkTarget(rawTarget, file, number, root, errors) {
-  let target = rawTarget.trim().replace(/\\([()])/g, "$1");
+  let target = rawTarget.trim().replace(/\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g, "$1");
   if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
   if (
     target === "" ||
@@ -192,40 +181,77 @@ function fenceInfo(line, allowIndent) {
   };
 }
 
-function stripInlineCode(line) {
+function stripHtmlComments(line, state) {
   let out = "";
   let i = 0;
   while (i < line.length) {
+    if (state.open) {
+      const end = line.indexOf("-->", i);
+      if (end === -1) return out;
+      state.open = false;
+      i = end + 3;
+      continue;
+    }
+    const start = line.indexOf("<!--", i);
+    if (start === -1) {
+      out += line.slice(i);
+      break;
+    }
+    out += line.slice(i, start);
+    const end = line.indexOf("-->", start + 4);
+    if (end === -1) {
+      state.open = true;
+      break;
+    }
+    i = end + 3;
+  }
+  return out;
+}
+
+function createInlineStripper() {
+  let open = 0;
+  return (line) => {
+    let out = "";
+    let i = 0;
+    while (i < line.length) {
+      if (open) {
+        const closed = findBackticks(line, i, open);
+        if (closed === -1) return out;
+        open = 0;
+        i = closed;
+        continue;
+      }
+      if (line[i] !== "`") {
+        out += line[i];
+        i += 1;
+        continue;
+      }
+      let n = 1;
+      while (line[i + n] === "`") n += 1;
+      const closed = findBackticks(line, i + n, n);
+      if (closed === -1) {
+        open = n;
+        return out;
+      }
+      i = closed;
+    }
+    return out;
+  };
+}
+
+function findBackticks(line, from, length) {
+  let i = from;
+  while (i < line.length) {
     if (line[i] !== "`") {
-      out += line[i];
       i += 1;
       continue;
     }
     let n = 1;
     while (line[i + n] === "`") n += 1;
-    let j = i + n;
-    let closed = -1;
-    while (j < line.length) {
-      if (line[j] === "`") {
-        let m = 1;
-        while (line[j + m] === "`") m += 1;
-        if (m === n) {
-          closed = j + m;
-          break;
-        }
-        j += m;
-      } else {
-        j += 1;
-      }
-    }
-    if (closed === -1) {
-      out += line.slice(i, i + n);
-      i += n;
-    } else {
-      i = closed;
-    }
+    if (n === length) return i + n;
+    i += n;
   }
-  return out;
+  return -1;
 }
 
 function linkTargets(line) {
@@ -234,6 +260,10 @@ function linkTargets(line) {
   while (cursor < line.length) {
     const open = line.indexOf("](", cursor);
     if (open === -1) break;
+    if (isEscaped(line, open) || !hasOpenBracket(line, open)) {
+      cursor = open + 2;
+      continue;
+    }
     let i = open + 2;
     while (line[i] === " " || line[i] === "\t") i += 1;
     if (line[i] === "<") {
@@ -271,6 +301,19 @@ function linkTargets(line) {
     cursor = i + 1;
   }
   return targets;
+}
+
+function isEscaped(text, index) {
+  let slashes = 0;
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) slashes += 1;
+  return slashes % 2 === 1;
+}
+
+function hasOpenBracket(text, closeIndex) {
+  for (let i = closeIndex - 1; i >= 0; i -= 1) {
+    if (text[i] === "[" && !isEscaped(text, i)) return true;
+  }
+  return false;
 }
 
 export function checkDocs(files, root = repoRoot) {

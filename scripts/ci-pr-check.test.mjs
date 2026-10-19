@@ -8,6 +8,7 @@ const root = mkdtempSync(join(tmpdir(), "odr-ci-docs-"));
 mkdirSync(join(root, "docs"), { recursive: true });
 mkdirSync(join(root, "app", "(internal)", "design-system"), { recursive: true });
 writeFileSync(join(root, "docs", "b.md"), "# B\n");
+writeFileSync(join(root, "docs", "foo_bar.md"), "# Foo\n");
 writeFileSync(join(root, "app", "(internal)", "design-system", "page.tsx"), "export {};\n");
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -67,6 +68,16 @@ describe("checkDocs", () => {
         "``[inline tick](missing.md) ` ``",
         "[multi](",
         "b.md)",
+        "[not a link]",
+        "(missing.md)",
+        "\\](missing.md)",
+        "`example",
+        "[inside](missing.md)",
+        "`",
+        "<!--",
+        "```md",
+        "-->",
+        "[escaped](foo\\_bar.md)",
         "<!-- [hidden](missing.md)",
         "[still hidden](missing.md) -->",
         "",
@@ -89,6 +100,8 @@ describe("checkDocs", () => {
         "```",
         "",
         "[ref]: b.md",
+        "[g]:",
+        "b.md",
         "",
         "    ```md",
         "    [indented](missing.md)",
@@ -100,7 +113,7 @@ describe("checkDocs", () => {
   it("reports missing targets, escaping links and unclosed fences", () => {
     writeFileSync(
       join(root, "docs", "broken.md"),
-      "[missing](nope.md)\n[outside](../../outside.md)\n[multi](\nmissing.md)\n\n```md\n[x](b.md)\n",
+      "[missing](nope.md)\n[outside](../../outside.md)\n[multi](\nmissing.md)\n[g]:\nmissing.md\n\n```md\n[x](b.md)\n",
     );
     const { errors } = checkDocs(["docs/broken.md"], root);
     expect(errors.some((error) => error.includes("missing relative link target"))).toBe(true);
