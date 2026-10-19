@@ -385,6 +385,42 @@ describe("Project Discussions section", () => {
 });
 
 describe("Project Overview next actions", () => {
+  it.each([null, { user: { id: "visitor" } }])("shows only an open request in the visitor entry for %j", async (session) => {
+    const value = project();
+    value.revisions = [revision(10)];
+    value.issues.push(
+      { ...value.issues[0], id: "request-1", title: "Improve navigation", kind: "DESIGN_REQUEST" },
+      { ...value.issues[0], id: "closed-request", title: "Already resolved", kind: "DESIGN_REQUEST", status: "CLOSED", createdAt: new Date("2026-10-01") },
+    );
+    const markup = await renderProjectPage(session, value);
+    const entry = markup.match(/<section[^>]*aria-labelledby="overview-next-step-heading"[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(entry).toContain("Take part in this project");
+    expect(entry).toContain("An open design request is ready for review.");
+    expect(entry).toContain('href="/projects/demo/issues/request-1"');
+    expect(entry).not.toContain("Already resolved");
+    expect(entry).not.toContain("Manage this project");
+    expect(markup.indexOf(entry)).toBeLessThan(markup.indexOf("<dt>License</dt>"));
+    expect(mocks.findIssues).toHaveBeenCalledWith(expect.objectContaining({
+      where: { projectId: "project", status: "OPEN", kind: "DESIGN_REQUEST" }, take: 3,
+      select: { id: true, title: true, author: { select: { name: true } } },
+    }));
+  });
+
+  it("keeps the participation prompt out of owner management, including private published work", async () => {
+    const value = project();
+    value.revisions = [revision(10)];
+    value.issues.push({ ...value.issues[0], id: "request-1", title: "Improve navigation", kind: "DESIGN_REQUEST" });
+    const owner = await renderProjectPage({ user: { id: "owner" } }, value);
+    expect(owner).toContain("Manage this project");
+    expect(owner).not.toContain("Open request</span>");
+    value.isPublic = false;
+    const privateOwner = await renderProjectPage({ user: { id: "owner" } }, value);
+    expect(privateOwner).toContain("Only you can see this workspace");
+    expect(privateOwner).not.toContain("Take part in this project");
+    expect(privateOwner).not.toContain("Open request</span>");
+    expect(privateOwner).not.toContain("Open an issue or design request</a>");
+  });
+
   it("opens revision publishing only for the owner's explicit publishing route", async () => {
     const opened = await renderProjectPage({ user: { id: "owner" } }, project(), 0, 0, "revisions", { publish: "1" });
     expect(opened).toMatch(/<details[^>]*id="owner-tools"[^>]*open=""/);
@@ -411,10 +447,13 @@ describe("Project Overview next actions", () => {
     const visitor = await renderProjectPage(null, project());
     expect(visitor).toContain('href="/projects/demo/discussions">Explore project discussions</a>');
     expect(visitor).not.toContain("Publish the first revision");
+    expect(visitor).toContain("Explore the discussion while the first revision is being prepared.");
+    expect(visitor).not.toContain("Open request</span>");
 
     const owner = await renderProjectPage({ user: { id: "owner" } }, project());
     expect(owner).toContain('href="/projects/demo/revisions?publish=1#owner-tools">Publish the first revision</a>');
     expect(owner).not.toContain("Contribute from the latest revision");
+    expect(owner).toContain("Publish a first revision to give contributors a starting point.");
   });
 
   it("shows owner-specific management paths without exposing private actions publicly", async () => {

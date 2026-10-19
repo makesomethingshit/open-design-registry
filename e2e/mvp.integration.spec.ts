@@ -139,12 +139,24 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
       await expect(document).toContainText("for the current design.");
       await expect(document).not.toContainText("A revision has not been published yet.");
 
+      const request = await page.request.post(`/api${projectPath}/issues`, { data: {
+        title: `Navigation request ${suffix}`, body: "Help improve the navigation", kind: "DESIGN_REQUEST",
+      } });
+      expect(request.status()).toBe(201);
+      const requestId = (await request.json()).id;
+
       const saved = await page.request.patch(`/api${projectPath}`, { data: { document: "# Design principles\n\nKeep the work open and explain how to contribute." } });
       expect(saved.status()).toBe(200);
       for (const width of [1440, 390, 320]) {
         await visitor.setViewportSize({ width, height: 900 });
         await visitor.goto(projectPath);
         await expect(document.getByRole("heading", { name: "Design principles" })).toBeVisible();
+        const entry = visitor.getByRole("region", { name: "Take part in this project", exact: true });
+        await expect(entry).toContainText("An open design request is ready for review.");
+        await expect(entry.getByRole("link", { name: `Navigation request ${suffix}`, exact: true })).toHaveAttribute("href", `${projectPath}/issues/${requestId}`);
+        const nextStep = await entry.boundingBox();
+        const metadata = await visitor.locator("#overview aside dt").first().boundingBox();
+        expect(nextStep!.y + nextStep!.height).toBeLessThanOrEqual(metadata!.y);
         const artwork = await visitor.locator("#preview").boundingBox();
         const about = await visitor.locator("#overview aside").boundingBox();
         const guide = await document.boundingBox();
@@ -156,6 +168,13 @@ test.describe("real PostgreSQL and S3 MVP flow", () => {
         expect(await visitor.evaluate(() => window.document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await visitor.screenshot({ path: testInfo.outputPath(`mobile-overview-published-${width}.png`), fullPage: true });
       }
+      const requestLink = visitor.getByRole("region", { name: "Take part in this project", exact: true }).getByRole("link", { name: `Navigation request ${suffix}`, exact: true });
+      await requestLink.focus();
+      await expect(requestLink).toBeFocused();
+      await visitor.keyboard.press("Enter");
+      await expect(visitor).toHaveURL(`${new URL(page.url()).origin}${projectPath}/issues/${requestId}`);
+      await visitor.goBack();
+      await expect(visitor.getByRole("heading", { name: "Take part in this project", exact: true })).toBeVisible();
       await page.goto(projectPath);
       await page.getByRole("navigation", { name: "Project next steps" }).getByRole("link", { name: "Open an issue or design request", exact: true }).press("Enter");
       await expect(page.getByLabel("Type", { exact: true })).toHaveValue("ISSUE");
