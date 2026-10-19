@@ -4,6 +4,8 @@
 
 명령은 저장소 루트에서 실행합니다. 환경 변수는 [.env.example](../.env.example), 실행 명령은 [package.json](../package.json), CI의 서비스·검증 구성은 [ci.yml](../.github/workflows/ci.yml)을 기준으로 확인합니다. 아래는 코드·설정에 따른 절차이며 서버 기동·DB 마이그레이션·배포를 수행한 결과가 아닙니다.
 
+PR의 필수 체크, 문서 전용 skip과 병합 정책은 [CI 비용과 병합 정책](ci-policy.md)을 따릅니다.
+
 ## 로컬 준비
 
 Node.js 20.9 이상, npm, PostgreSQL 16, S3 호환 저장소가 필요합니다. CI는 Node 20과 PostgreSQL 16, MinIO를 사용합니다.
