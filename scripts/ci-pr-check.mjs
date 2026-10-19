@@ -60,8 +60,9 @@ export function flattenPages(pages, expected) {
 function checkMarkdown(file, source, root) {
   const errors = [];
   const lines = source.split(/\r?\n/);
-  const stripInline = createInlineStripper();
+  const code = { open: 0 };
   let fence = null;
+  let htmlBlock = null;
   const comment = { open: false };
 
   lines.forEach((line, index) => {
@@ -82,6 +83,17 @@ function checkMarkdown(file, source, root) {
     }
 
     const visible = stripHtmlComments(line, comment);
+    if (htmlBlock) {
+      if (visible.toLowerCase().includes(`</${htmlBlock}>`)) htmlBlock = null;
+      return;
+    }
+    const raw = visible.match(/<(pre|script|style|textarea)\b[^>]*>/i);
+    if (raw) {
+      const tag = raw[1].toLowerCase();
+      const rest = visible.slice(raw.index + raw[0].length);
+      if (!rest.toLowerCase().includes(`</${tag}>`)) htmlBlock = tag;
+      return;
+    }
     const marker = fenceInfo(visible, 3);
     if (marker) {
       fence = { ...marker, line: number };
@@ -92,21 +104,24 @@ function checkMarkdown(file, source, root) {
     if (/^(?: {4,}|\t)/.test(visible.replace(/^(?:\s{0,3}>\s?)+/, ""))) return;
 
     // Fenced examples and inline code are not link targets.
-    const prose = stripInline(visible);
+    const prose = stripInlineCode(visible, code, lines.slice(index + 1).join("\n"));
     const next = lines[index + 1] || "";
     const inline = prose.trimEnd().endsWith("](") ? `${prose}${next}` : prose;
-    const inlineProse = inline === prose ? prose : createInlineStripper()(inline);
+    const inlineProse =
+      inline === prose
+        ? prose
+        : stripInlineCode(inline, { open: 0 }, lines.slice(index + 2).join("\n"));
     for (const target of linkTargets(inlineProse)) {
       checkTarget(target, file, number, root, errors);
     }
 
-    const definitionLine = visible
+    const definitionLine = prose
       .replace(/^(?:\s{0,3}>\s?)+/, "")
       .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?/, "");
     const definition = definitionLine.match(/^\s{0,3}\[[^\]]+\]:\s*(.*)$/);
     if (definition) {
       const rest = definition[1].trim();
-      const target = rest ? rest.split(/\s+/)[0] : next.trim().split(/\s+/)[0];
+      const target = rest ? firstDestination(rest) : firstDestination(next);
       if (target) checkTarget(target, file, number, root, errors);
     }
   });
@@ -170,6 +185,7 @@ function fenceInfo(line, allowIndent) {
   content = content.slice(spaces);
   const marker = content.match(/^(`{3,}|~{3,})(.*)$/);
   if (!marker) return null;
+  if (marker[1][0] === "`" && marker[2].includes("`")) return null;
   return {
     char: marker[1][0],
     length: marker[1].length,
@@ -208,35 +224,37 @@ function stripHtmlComments(line, state) {
   return out;
 }
 
-function createInlineStripper() {
-  let open = 0;
-  return (line) => {
-    let out = "";
-    let i = 0;
-    while (i < line.length) {
-      if (open) {
-        const closed = findBackticks(line, i, open);
-        if (closed === -1) return out;
-        open = 0;
-        i = closed;
-        continue;
-      }
-      if (line[i] !== "`") {
-        out += line[i];
-        i += 1;
-        continue;
-      }
-      let n = 1;
-      while (line[i + n] === "`") n += 1;
-      const closed = findBackticks(line, i + n, n);
-      if (closed === -1) {
-        open = n;
-        return out;
-      }
+function stripInlineCode(line, state, tail) {
+  let out = "";
+  let i = 0;
+  while (i < line.length) {
+    if (state.open) {
+      const closed = findBackticks(line, i, state.open);
+      if (closed === -1) return out;
+      state.open = 0;
       i = closed;
+      continue;
     }
-    return out;
-  };
+    if (line[i] !== "`") {
+      out += line[i];
+      i += 1;
+      continue;
+    }
+    let n = 1;
+    while (line[i + n] === "`") n += 1;
+    const closed = findBackticks(line, i + n, n);
+    if (closed === -1) {
+      if (findBackticks(tail, 0, n) === -1) {
+        out += line.slice(i, i + n);
+        i += n;
+        continue;
+      }
+      state.open = n;
+      return out;
+    }
+    i = closed;
+  }
+  return out;
 }
 
 function findBackticks(line, from, length) {
@@ -269,13 +287,14 @@ function linkTargets(line) {
     if (line[i] === "<") {
       const end = line.indexOf(">", i + 1);
       if (end === -1) break;
-      targets.push(line.slice(i + 1, end));
+      if (line.indexOf(")", end + 1) !== -1) targets.push(line.slice(i + 1, end));
       cursor = end + 1;
       continue;
     }
     const start = i;
     let depth = 0;
     let escaped = false;
+    let closed = false;
     for (; i < line.length; i += 1) {
       const char = line[i];
       if (escaped) {
@@ -291,16 +310,28 @@ function linkTargets(line) {
         continue;
       }
       if (char === ")") {
-        if (depth === 0) break;
+        if (depth === 0) {
+          closed = true;
+          break;
+        }
         depth -= 1;
         continue;
       }
       if (/\s/.test(char) && depth === 0) break;
     }
-    targets.push(line.slice(start, i));
+    if (closed) targets.push(line.slice(start, i));
     cursor = i + 1;
   }
   return targets;
+}
+
+function firstDestination(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("<")) {
+    const end = trimmed.indexOf(">");
+    return end === -1 ? trimmed : trimmed.slice(0, end + 1);
+  }
+  return trimmed.split(/\s+/)[0] || "";
 }
 
 function isEscaped(text, index) {

@@ -9,6 +9,7 @@ mkdirSync(join(root, "docs"), { recursive: true });
 mkdirSync(join(root, "app", "(internal)", "design-system"), { recursive: true });
 writeFileSync(join(root, "docs", "b.md"), "# B\n");
 writeFileSync(join(root, "docs", "foo_bar.md"), "# Foo\n");
+writeFileSync(join(root, "docs", "has space.md"), "# Space\n");
 writeFileSync(join(root, "app", "(internal)", "design-system", "page.tsx"), "export {};\n");
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -78,6 +79,11 @@ describe("checkDocs", () => {
         "```md",
         "-->",
         "[escaped](foo\\_bar.md)",
+        "[draft](missing.md",
+        "<pre>",
+        "[raw](missing.md)",
+        "</pre>",
+        "[guide]: <has space.md>",
         "<!-- [hidden](missing.md)",
         "[still hidden](missing.md) -->",
         "",
@@ -135,5 +141,12 @@ describe("checkDocs", () => {
   it("does not treat a four-space indented block as a fence", () => {
     writeFileSync(join(root, "docs", "indented.md"), "    ```md\n    [code](missing.md)\n");
     expect(checkDocs(["docs/indented.md"], root)).toEqual({ checked: ["docs/indented.md"], errors: [] });
+  });
+
+  it("rejects a backtick fence info string containing a backtick", () => {
+    writeFileSync(join(root, "docs", "fence-info.md"), "``` foo`bar\n[after](missing.md)\n");
+    const { errors } = checkDocs(["docs/fence-info.md"], root);
+    expect(errors.some((error) => error.includes("missing relative link target"))).toBe(true);
+    expect(errors.some((error) => error.includes("unclosed code fence"))).toBe(false);
   });
 });
