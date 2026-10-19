@@ -4,6 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
 import { issueSchema } from "@/src/lib/project-validation";
 import { lockPublicProject, PrivateProjectWrite } from "@/src/lib/project-visibility-lock";
+import { maxSmallJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 const notFound = () => NextResponse.json({ error: "Project not found" }, { status: 404 });
 
@@ -40,7 +41,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const { slug } = await params;
   const project = await prisma.project.findUnique({ where: { slug }, select: { id: true, ownerId: true, isPublic: true } });
   if (!project?.isPublic) return notFound();
-  const parsed = issueSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const parsed = issueSchema.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: "Title and body are invalid" }, { status: 400 });
   if (parsed.data.kind === "DESIGN_REQUEST" && project.ownerId !== session.user.id) return NextResponse.json({ error: "Only the project owner can create design requests" }, { status: 403 });
   const revisionId = parsed.data.revisionId || undefined;

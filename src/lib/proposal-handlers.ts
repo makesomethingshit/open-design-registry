@@ -8,6 +8,7 @@ import { deleteObject, publicAssetUrl } from "./storage";
 import { normalizeUnitName, putRevisionBundle, readRevisionBundle, sameDependencySet, sameRevisionBundleContents, type RevisionBundle, type RevisionBundleFile } from "./revision-bundle";
 import { changedUnitIds, conflictForChange, renamedUnitIds } from "./proposal-conflicts";
 import { notifyProjectWatchers } from "./project-watch-notifications";
+import { maxProposalJsonBytes, maxSmallJsonBytes, readBoundedJson } from "./request-body";
 
 const proposalDetails = {
   project: { select: { id: true, slug: true, title: true, ownerId: true, isPublic: true } },
@@ -346,7 +347,9 @@ export async function createProjectProposal(request: Request, scope: { slug: str
   if (!session) return error("Sign-in required", 401);
   const project = await prisma.project.findUnique({ where: { slug: scope.slug }, select: { id: true, ownerId: true, isPublic: true } });
   if (!project || !canReadProject(project, session.user.id)) return error("Project not found", 404);
-  const parsed = proposalCreateSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxProposalJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = proposalCreateSchema.safeParse(body.value);
   if (!parsed.success) return error("Proposal title, description, or revisions are invalid");
   const input = parsed.data;
   const [baseRevision, sourceRevision] = await Promise.all([
@@ -466,7 +469,9 @@ export async function getProposal(request: Request, scope: { id: string }) {
 export async function closeProposal(request: Request, scope: { id: string }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return error("Sign-in required", 401);
-  const parsed = proposalCloseSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = proposalCloseSchema.safeParse(body.value);
   if (!parsed.success) return error("Status must be CLOSED");
   const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true } });
   if (!initial) return error("Proposal not found", 404);
@@ -494,7 +499,9 @@ export async function postProposalComment(request: Request, scope: { id: string 
   const proposal = await findVisibleProposal(scope.id, session.user.id);
   if (!proposal) return error("Proposal not found", 404);
   if (proposal.status === "CLOSED") return error("Proposal is closed", 409);
-  const parsed = issueCommentSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = issueCommentSchema.safeParse(body.value);
   if (!parsed.success) return error("Comment body is required");
   // Re-check eligibility inside the same Project-row lock/transaction boundary
   // used by closeProposal, so a close that committed first rejects.
@@ -519,7 +526,9 @@ export async function postProposalComment(request: Request, scope: { id: string 
 export async function reviewProposalChange(request: Request, scope: { id: string; changeId: string }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return error("Sign-in required", 401);
-  const parsed = proposalReviewSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = proposalReviewSchema.safeParse(body.value);
   if (!parsed.success) return error("A review status is required; change requests need a comment");
   const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true } });
   if (!initial) return error("Proposal not found", 404);
@@ -664,7 +673,9 @@ async function invalidateUpstreamApprovals(tx: Prisma.TransactionClient, project
 export async function applyProposal(request: Request, scope: { id: string }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return error("Sign-in required", 401);
-  const parsed = proposalApplySchema.safeParse(await request.json().catch(() => ({})));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = proposalApplySchema.safeParse(body.value ?? {});
   if (!parsed.success) return error("Latest revision confirmation is invalid");
   const initial = await prisma.proposal.findUnique({ where: { id: scope.id }, select: { projectId: true, sourceRevision: { select: { projectId: true } } } });
   if (!initial) return error("Proposal not found", 404);

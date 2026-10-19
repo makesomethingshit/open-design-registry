@@ -4,6 +4,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { releaseCreateSchema } from "@/src/lib/release-validation";
 import { notifyProjectWatchers } from "@/src/lib/project-watch-notifications";
+import { maxSmallJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 type ProjectScope = { slug: string };
 
@@ -30,7 +31,9 @@ export async function createProjectRelease(request: Request, { slug }: ProjectSc
   if (!session) return error("Sign-in required", 401);
   if (project.ownerId !== session.user.id) return error("Only the project owner can publish releases", project.isPublic ? 403 : 404);
 
-  const parsed = releaseCreateSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const parsed = releaseCreateSchema.safeParse(body.value);
   if (!parsed.success) return error("Release details are invalid", 400);
 
   const revisions = await prisma.revision.findMany({

@@ -3,6 +3,7 @@ import { auth } from "./auth";
 import { prisma } from "./prisma";
 import { discussionCommentSchema, discussionSchema } from "./discussion-validation";
 import { lockPublicProject, PrivateProjectWrite } from "./project-visibility-lock";
+import { maxSmallJsonBytes, readBoundedJson } from "./request-body";
 
 type ProjectScope = { slug: string };
 type DiscussionScope = ProjectScope & { id: string };
@@ -29,7 +30,9 @@ export async function postProjectDiscussion(request: Request, { slug }: ProjectS
 
   const project = await prisma.project.findUnique({ where: { slug }, select: { id: true, ownerId: true, isPublic: true } });
   if (!project?.isPublic) return notFound();
-  const parsed = discussionSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const parsed = discussionSchema.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: "Title and body are invalid" }, { status: 400 });
 
   let discussion;
@@ -79,7 +82,9 @@ export async function postProjectDiscussionComment(request: Request, { slug, id 
 
   const discussion = await prisma.discussion.findFirst({ where: { id, project: { slug, isPublic: true } }, select: { id: true, projectId: true } });
   if (!discussion) return notFound();
-  const parsed = discussionCommentSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const parsed = discussionCommentSchema.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: "Comment body is invalid" }, { status: 400 });
 
   try {

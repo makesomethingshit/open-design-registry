@@ -8,6 +8,7 @@ import { deleteObject, putObject } from "@/src/lib/storage";
 import { suggestFile } from "@/src/lib/adapters";
 import { capabilityForBundle, normalizeUnitKind, normalizeUnitName, putRevisionBundle, readRevisionBundle, type RevisionBundle } from "@/src/lib/revision-bundle";
 import { pageCursor, paginationRequested, parsePageSize } from "@/src/lib/pagination";
+import { maxRevisionFormBytes, readBoundedFormData } from "@/src/lib/request-body";
 import { validateRightsAgainstRevision, validateRightsImageReferences, validateRightsSourceFilesInBundle } from "@/src/lib/revision-rights";
 import { ExpiredDocumentImageError, imageReferenceTransactionOptions, validateDocumentImageReferences } from "@/src/lib/project-document-save";
 import { parseRightsDeclaration, type RightsDeclarationInput } from "@/src/lib/rights";
@@ -83,7 +84,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!project) return error("Project not found", 404);
   if (project.ownerId !== session.user.id) return error("Only the project owner can publish revisions", 403);
 
-  const form = await request.formData();
+  const body = await readBoundedFormData(request, maxRevisionFormBytes);
+  if (body.tooLarge) return error("Request body is too large", 413);
+  const form = body.form;
+  if (!form) return error("Invalid revision form submission");
   const titleResult = revisionTitle.safeParse(form.get("title"));
   if (!titleResult.success) return error("Revision title is required and must be 120 characters or fewer");
   const title = titleResult.data;

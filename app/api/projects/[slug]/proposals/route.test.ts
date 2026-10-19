@@ -30,6 +30,10 @@ function request(body: Record<string, unknown>) {
   return new Request("http://localhost/api/projects/target/proposals", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
 
+function rawRequest(body: string) {
+  return new Request("http://localhost/api/projects/target/proposals", { method: "POST", headers: { "content-type": "application/json" }, body });
+}
+
 function createBody(files: unknown[] = [{ sourceFileId: "source-file", targetFileId: "target-file" }]) {
   return { baseRevisionId: "base", sourceRevisionId: "source", title: "Improve header", body: "Explain the improvement", files };
 }
@@ -102,6 +106,30 @@ describe("proposal creation route", () => {
     expect(rawCalls[issueLockIndex]).toContain("FOR UPDATE");
     expect(mocks.lockProject.mock.calls[issueLockIndex].slice(1)).toEqual(["related-work", "target"]);
     expect(mocks.createProposal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ relatedIssueId: "related-work" }) }));
+  });
+
+  it("accepts an escaped proposal body above the old 64 KiB limit", async () => {
+    const files = Array.from({ length: 10 }, (_, index) => ({
+      id: "unit-" + index,
+      name: "Unit " + index,
+      kind: "component",
+      mimeType: "image/png",
+      size: 20,
+      assetKey: "key-" + index,
+      previewKeys: [],
+    }));
+    const base = { version: 2, files };
+    const source = { version: 2, files: files.map((file) => ({ ...file, assetKey: "source-" + file.id })) };
+    mocks.readBundle.mockImplementation((key: string) => Promise.resolve(key === "base-bundle" ? base : source));
+    const changes = files.map((file) => ({ action: "RENAME_UNIT", targetFileId: file.id, newName: "가".repeat(200) }));
+    const payload = { baseRevisionId: "base", sourceRevisionId: "source", title: "Escaped proposal", body: "나".repeat(10_000), changes };
+    const raw = JSON.stringify(payload).replace(/[^\x20-\x7E]/g, (character) =>
+      "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0")
+    );
+    expect(Buffer.byteLength(raw)).toBeGreaterThan(64 * 1024);
+    const response = await POST(rawRequest(raw), { params: Promise.resolve({ slug: "target" }) });
+    expect(response.status).toBe(201);
+    expect(mocks.createProposal).toHaveBeenCalledOnce();
   });
 
   it("rejects a related issue that closed after the contribution page loaded (stale open page)", async () => {

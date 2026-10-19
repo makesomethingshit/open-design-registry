@@ -4,6 +4,7 @@ import { getSession } from "@/src/lib/session";
 import { projectUpdateSchema } from "@/src/lib/project-validation";
 import { publicAssetUrl } from "@/src/lib/storage";
 import { imageReferenceTransactionOptions, validateDocumentImages } from "@/src/lib/project-document-save";
+import { maxDocumentJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -21,7 +22,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
   if (session.user.id !== project.ownerId) return NextResponse.json({ error: "Project not found." }, { status: project.isPublic ? 403 : 404 });
-  const parsed = projectUpdateSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxDocumentJsonBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large." }, { status: 413 });
+  const parsed = projectUpdateSchema.safeParse(body.value);
   if (!parsed.success || !Object.keys(parsed.data).length) return NextResponse.json({ error: "Check the values you provided." }, { status: 400 });
   const { rightsConfirmed, ...data } = parsed.data;
   if (data.isPublic === true && !project.isPublic && !rightsConfirmed) return NextResponse.json({ error: "Confirm the license and your right to share the source publicly." }, { status: 400 });

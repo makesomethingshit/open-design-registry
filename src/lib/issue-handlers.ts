@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { prisma } from "./prisma";
 import { issueCommentSchema, issueQuestionSchema, issueStatusSchema } from "./project-validation";
 import { lockPublicProject, PrivateProjectWrite } from "./project-visibility-lock";
+import { maxSmallJsonBytes, readBoundedJson } from "./request-body";
 
 type IssueScope = { id: string; slug?: string };
 
@@ -52,7 +53,9 @@ export async function patchIssue(request: Request, scope: IssueScope): Promise<N
     : await prisma.issue.findUnique({ where: { id: scope.id }, select: issueAccess });
   if (!issue) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
   if (session.user.id !== issue.project.ownerId) return NextResponse.json({ error: "Only the project owner can change issue status" }, { status: issue.project.isPublic ? 403 : 404 });
-  const payload = await request.json().catch(() => null);
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const payload = body.value;
   if (payload && typeof payload === "object" && "isOpenQuestion" in payload) {
     const parsedQuestion = issueQuestionSchema.safeParse(payload);
     if (!parsedQuestion.success) return NextResponse.json({ error: "isOpenQuestion must be a boolean" }, { status: 400 });
@@ -97,7 +100,9 @@ export async function postIssueComment(request: Request, scope: IssueScope): Pro
     : await prisma.issue.findUnique({ where: { id: scope.id }, select: commentAccess });
   if (!issue || !issue.project.isPublic) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
   if (issue.status === "CLOSED") return NextResponse.json({ error: "Issue is closed" }, { status: 409 });
-  const parsed = issueCommentSchema.safeParse(await request.json().catch(() => null));
+  const body = await readBoundedJson(request, maxSmallJsonBytes);
+  if (body.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const parsed = issueCommentSchema.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: "Comment body is required" }, { status: 400 });
   // Re-check eligibility inside the same Issue-row lock/transaction boundary
   // used by the close transition, so a close that committed first rejects.

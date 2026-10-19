@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
 import { reportSchema } from "@/src/lib/project-validation";
+import { maxSmallJsonBytes, readBoundedJson } from "@/src/lib/request-body";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { projectSlug?: unknown; revisionId?: unknown; reason?: unknown; details?: unknown } | null;
+  const bodyResult = await readBoundedJson(request, maxSmallJsonBytes);
+  if (bodyResult.tooLarge) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  const body = bodyResult.value as { projectSlug?: unknown; revisionId?: unknown; reason?: unknown; details?: unknown } | null;
   const parsed = reportSchema.safeParse({ reason: body?.reason, details: body?.details ?? "" });
   const projectSlug = typeof body?.projectSlug === "string" ? body.projectSlug : undefined;
   const revisionId = typeof body?.revisionId === "string" ? body.revisionId : undefined;
