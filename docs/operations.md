@@ -117,6 +117,10 @@ node --env-file=.env scripts/run-playwright.mjs
 
 `E2E_INTEGRATION=1`은 [인증](../e2e/auth.spec.ts), [Landing·Explore](../e2e/landing-explore.integration.spec.ts), [MVP 협업](../e2e/mvp.integration.spec.ts), [Canvas 멤버십](../e2e/canvas-membership.integration.spec.ts)의 실제 DB·스토리지 시나리오를 활성화합니다. Canvas 시나리오는 첫 신청 비공개, 승인·거부·재신청, 과거 승인 콘텐츠의 공개 읽기 전용 보존, 키보드 조작과 320/390px 폭을 확인합니다. 다른 UI 회귀 파일은 fixture·요청 mock·정적 화면 등을 사용합니다. 같은 Playwright 명령으로 실행하더라도 fixture 통과와 실제 서비스 통합 검증을 구별합니다.
 
+### GitHub Actions 실행 전 실패 분석 (#144)
+
+기록된 2026-10-10 CI·라벨 sync 실패는 check-run annotation에서 계정 결제/지출 한도로 job 시작이 차단됐음을 확인했습니다. 결제 실패와 한도 부족 중 세부 사유 및 실제 복구 조치는 미확인입니다. Runner/step 실행 전 실패는 앱 코드와 구별하여 조사합니다. 동일 SHA의 실패와 성공을 비교할 때 runner 할당, job steps, 실제 UI 오류, event 및 사용량/정책 상태를 근거로 분류하고, 실패 원인이 확인되기 전에는 권한 확대·무작위 재시도·필수 체크 삭제를 하지 않습니다. [읽기 전용 진단 절차](ci-prestep-triage.md)에 실행 링크와 관찰을 기록합니다.
+
 ### CI 구성과 확인할 범위
 
 일반 PR의 opened·reopened·synchronize 이벤트와 Draft를 ready for review로 바꾸는 이벤트는 PR 제목 형식, test·typecheck·build·e2e를 검사합니다. PR 제목·본문 등 메타데이터 수정은 CI를 다시 실행하지 않습니다. 제목 검사는 다음 PR 실행 시 새 제목을 검사합니다. test 작업에는 PostgreSQL과 `TEST_DATABASE_URL`이 있어 Revision DB 테스트가 활성화되며, `RUN_PROPOSAL_CONCURRENCY_TEST: "1"`로 Proposal·Canvas 트랜잭션 테스트도 실행합니다.
