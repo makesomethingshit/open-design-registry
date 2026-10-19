@@ -21,10 +21,13 @@ Use test accounts and synthetic images in an isolated PostgreSQL/MinIO instance;
 | Admin hides reported A | A hidden; B/C still public | B's reference to K remains available unless K has a separate block |
 | Admin suppresses K | B/C remain in their previous visibility states | K inaccessible through all supported asset URL forms, L unaffected |
 | Admin restores A only | A public only if its original/owner-controlled public state permits; B/C unaffected | K stays suppressed |
-| Admin releases one of two active blocks on K | Project visibility unchanged | K stays blocked until the last active decision is released |
-| Admin releases the final active block on K | Project visibility unchanged | K becomes accessible only where normal Project/asset ACL permits |
-| Delete Report, reporter or relevant Project during an active decision | Retained decisions remain available to admin | Existing blocks remain active until explicit permitted restoration |
-| Start with a truly private Project or legacy review candidate | Private remains private after hold release | No delivery without ordinary access rights |
+| **Create a second independent Report** against B (which also references K) and suppress K under that Report, without hiding B | B/C remain public; database confirms two distinct active suppression decisions for K | K remains blocked; L unaffected |
+| Admin releases **only the first Report's** block on K; inspect both decision records | Project visibility unchanged; second block still active | K stays blocked because the second decision is still active |
+| Admin releases the **second Report's** remaining block on K | Project visibility unchanged; zero active K blocks | K becomes accessible only where normal Project/asset ACL permits |
+| **Separate fresh fixture:** create a new active asset block, then delete its Report, reporter or relevant Project **before releasing the block** | Retained decisions remain available to admin; verify each deletion path independently | The remaining active block still prevents delivery until explicit permitted restoration |
+| **Separate private/legacy fixture:** start with a truly private Project or legacy review candidate and remove a hold only after inspecting original visibility evidence | Private remains private after hold release | No delivery without ordinary access rights |
+
+Record the two distinct Report IDs and suppression decision IDs before the partial-release test. A retry of the **same** Report's suppression is not a second active decision. Treat the deletion and private/legacy rows as independent fixtures; they cannot follow the final-block-release row in the same linear dataset.
 
 ## Interface and migration observations to record
 
